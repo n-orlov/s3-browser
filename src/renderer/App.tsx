@@ -7,6 +7,7 @@ import NavigationBar from './components/NavigationBar';
 import RenameDialog from './components/RenameDialog';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import OperationStatus from './components/OperationStatus';
+import TextEditor from './components/TextEditor';
 import { useAwsProfiles } from './hooks/useAwsProfiles';
 import { useFileOperations } from './hooks/useFileOperations';
 
@@ -30,6 +31,7 @@ function App(): React.ReactElement {
   // Dialog state
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
@@ -100,6 +102,20 @@ function App(): React.ReactElement {
     if (!selectedFile || selectedFile.isPrefix) return;
     setIsRenameOpen(true);
   }, [selectedFile]);
+
+  const handleEdit = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsEditorOpen(true);
+  }, [selectedFile]);
+
+  const handleEditorClose = useCallback(() => {
+    setIsEditorOpen(false);
+  }, []);
+
+  const handleEditorSaved = useCallback(() => {
+    // Optionally refresh file list to show updated modification time
+    window.dispatchEvent(new Event('s3-refresh-files'));
+  }, []);
 
   const handleConfirmRename = useCallback(
     async (newName: string) => {
@@ -188,6 +204,7 @@ function App(): React.ReactElement {
             onDownload={handleDownload}
             onDelete={handleDelete}
             onRename={handleRename}
+            onEdit={handleEdit}
             onRefresh={handleRefresh}
             disabled={isLoading}
           />
@@ -223,6 +240,17 @@ function App(): React.ReactElement {
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
       />
+
+      {/* Text Editor */}
+      {isEditorOpen && selectedBucket && selectedFile && (
+        <TextEditor
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          onClose={handleEditorClose}
+          onSaved={handleEditorSaved}
+        />
+      )}
     </div>
   );
 }

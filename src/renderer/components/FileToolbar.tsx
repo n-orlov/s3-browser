@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 export interface FileToolbarProps {
   selectedBucket: string | null;
@@ -11,8 +11,30 @@ export interface FileToolbarProps {
   onDownload: () => void;
   onDelete: () => void;
   onRename: () => void;
+  onEdit: () => void;
   onRefresh: () => void;
   disabled?: boolean;
+}
+
+/**
+ * Determine if a file can be edited in the text editor
+ */
+function isEditableFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const editableExtensions = [
+    // Text
+    'txt', 'log', 'csv', 'tsv',
+    // Data
+    'json', 'yaml', 'yml', 'xml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env',
+    // Code
+    'js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'go', 'rs', 'rb', 'php',
+    'sh', 'bash', 'zsh', 'ps1', 'sql',
+    // Markup
+    'md', 'markdown', 'html', 'htm', 'css', 'scss', 'less', 'svg',
+    // Other
+    'dockerfile', 'makefile', 'gitignore', 'editorconfig', 'graphql', 'gql',
+  ];
+  return editableExtensions.includes(ext) || key.endsWith('file'); // e.g., Dockerfile, Makefile
 }
 
 function FileToolbar({
@@ -23,10 +45,12 @@ function FileToolbar({
   onDownload,
   onDelete,
   onRename,
+  onEdit,
   onRefresh,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
+  const canEdit = hasSelection && isEditableFile(selectedFile!.key);
 
   return (
     <div className="file-toolbar">
@@ -47,6 +71,15 @@ function FileToolbar({
       >
         <span className="toolbar-icon">D</span>
         <span className="toolbar-label">Download</span>
+      </button>
+      <button
+        className="toolbar-btn"
+        onClick={onEdit}
+        disabled={disabled || !canEdit}
+        title={canEdit ? 'Edit selected file' : 'Select a text file to edit'}
+      >
+        <span className="toolbar-icon">E</span>
+        <span className="toolbar-label">Edit</span>
       </button>
       <button
         className="toolbar-btn"
