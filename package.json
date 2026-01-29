@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "package": "npm run build && electron-builder --win",
+    "package": "npm run build && electron-builder --linux",
+    "package:win": "npm run build && electron-builder --win",
     "package:all": "npm run build && electron-builder --win --mac --linux"
   },
   "build": {
@@ -31,21 +32,19 @@
     ],
     "win": {
       "target": [
-        "nsis"
-      ],
-      "icon": "assets/icon.ico"
+        "nsis",
+        "portable"
+      ]
     },
     "mac": {
       "target": [
         "dmg"
-      ],
-      "icon": "assets/icon.icns"
+      ]
     },
     "linux": {
       "target": [
         "AppImage"
-      ],
-      "icon": "assets/icon.png"
+      ]
     }
   },
   "dependencies": {
