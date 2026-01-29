@@ -1,4 +1,11 @@
-import React, { useEffect, useCallback, useRef, useState, DragEvent } from 'react';
+import React, { useEffect, useCallback, useRef, useState, useMemo, DragEvent } from 'react';
+import FileListControls, {
+  SortConfig,
+  SortField,
+  sortItems,
+  filterByType,
+  filterBySearch,
+} from './FileListControls';
 
 export interface S3Object {
   key: string;
@@ -101,6 +108,14 @@ function FileList({
   const [loadingMore, setLoadingMore] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Sorting and filtering state
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: 'name',
+    direction: 'asc',
+  });
+  const [filterType, setFilterType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const continuationTokenRef = useRef<string | undefined>(undefined);
   const listContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
@@ -175,6 +190,20 @@ function FileList({
     }
   }, [pendingFileSelection, items, loading, onSelectFile, onPendingFileSelectionHandled]);
 
+  // Compute filtered and sorted items
+  const displayedItems = useMemo(() => {
+    let result = items;
+    result = filterByType(result, filterType);
+    result = filterBySearch(result, searchQuery, currentPrefix);
+    result = sortItems(result, sortConfig);
+    return result;
+  }, [items, filterType, searchQuery, currentPrefix, sortConfig]);
+
+  // Reset filters when navigating to new location
+  useEffect(() => {
+    setSearchQuery('');
+  }, [selectedBucket, currentPrefix]);
+
   const handleScroll = useCallback(() => {
     if (!listContainerRef.current || loadingMore || !hasMore) return;
 
@@ -184,6 +213,22 @@ function FileList({
       loadObjects(false);
     }
   }, [loadingMore, hasMore, loadObjects]);
+
+  // Column header sorting handler
+  const handleSort = useCallback((field: SortField) => {
+    setSortConfig((prev) => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }, []);
+
+  const getSortIndicator = useCallback(
+    (field: SortField) => {
+      if (sortConfig.field !== field) return null;
+      return sortConfig.direction === 'asc' ? ' \u25B2' : ' \u25BC';
+    },
+    [sortConfig]
+  );
 
   const handleItemClick = (item: S3Object) => {
     if (item.isPrefix) {
@@ -360,6 +405,19 @@ function FileList({
         )}
       </div>
 
+      {/* Filter and search controls */}
+      <FileListControls
+        sortConfig={sortConfig}
+        onSortChange={setSortConfig}
+        filterType={filterType}
+        onFilterTypeChange={setFilterType}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        totalCount={items.length}
+        filteredCount={displayedItems.length}
+        disabled={loading}
+      />
+
       {/* File list table */}
       <div
         className="file-list-table-wrapper"
@@ -368,17 +426,37 @@ function FileList({
       >
         {items.length === 0 ? (
           <p className="file-list-empty">This folder is empty</p>
+        ) : displayedItems.length === 0 ? (
+          <p className="file-list-empty">No files match your filter</p>
         ) : (
           <table className="file-list-table">
             <thead>
               <tr>
-                <th className="col-name">Name</th>
-                <th className="col-size">Size</th>
-                <th className="col-modified">Last Modified</th>
+                <th
+                  className="col-name sortable-header"
+                  onClick={() => handleSort('name')}
+                  title="Sort by name"
+                >
+                  Name{getSortIndicator('name')}
+                </th>
+                <th
+                  className="col-size sortable-header"
+                  onClick={() => handleSort('size')}
+                  title="Sort by size"
+                >
+                  Size{getSortIndicator('size')}
+                </th>
+                <th
+                  className="col-modified sortable-header"
+                  onClick={() => handleSort('lastModified')}
+                  title="Sort by date"
+                >
+                  Last Modified{getSortIndicator('lastModified')}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {displayedItems.map((item) => {
                 const name = getFileName(item.key, currentPrefix);
                 const isSelected = selectedFile?.key === item.key;
                 return (
