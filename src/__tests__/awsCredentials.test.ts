@@ -185,6 +185,7 @@ region = us-east-1`;
         accessKeyId: 'KEY',
         secretAccessKey: 'SECRET',
         hasCredentials: true,
+        profileType: 'static',
       };
 
       const result = validateProfile(profile);
@@ -197,6 +198,7 @@ region = us-east-1`;
       const profile: AwsProfile = {
         name: 'test',
         hasCredentials: false,
+        profileType: 'config-only',
       };
 
       const result = validateProfile(profile);
@@ -210,12 +212,13 @@ region = us-east-1`;
         name: 'test',
         roleArn: 'arn:aws:iam::123456789012:role/MyRole',
         hasCredentials: false,
+        profileType: 'role',
       };
 
       const result = validateProfile(profile);
 
       expect(result.valid).toBe(false);
-      expect(result.reason).toBe('Profile requires source_profile for role assumption');
+      expect(result.reason).toBe('Role profile requires source_profile or credential_source');
     });
 
     it('should return valid for profile with session token', () => {
@@ -225,6 +228,7 @@ region = us-east-1`;
         secretAccessKey: 'SECRET',
         sessionToken: 'TOKEN',
         hasCredentials: true,
+        profileType: 'static',
       };
 
       const result = validateProfile(profile);
@@ -238,6 +242,50 @@ region = us-east-1`;
         roleArn: 'arn:aws:iam::123456789012:role/MyRole',
         sourceProfile: 'base',
         hasCredentials: true,
+        profileType: 'role',
+      };
+
+      const result = validateProfile(profile);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should return invalid for SSO profile missing required fields', () => {
+      const profile: AwsProfile = {
+        name: 'sso-partial',
+        ssoStartUrl: 'https://my-sso.awsapps.com/start',
+        hasCredentials: false,
+        profileType: 'sso',
+      };
+
+      const result = validateProfile(profile);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('SSO profile requires sso_account_id and sso_role_name');
+    });
+
+    it('should return valid for SSO profile with required fields', () => {
+      const profile: AwsProfile = {
+        name: 'sso-complete',
+        ssoStartUrl: 'https://my-sso.awsapps.com/start',
+        ssoAccountId: '123456789012',
+        ssoRoleName: 'AdminRole',
+        hasCredentials: true,
+        profileType: 'sso',
+      };
+
+      const result = validateProfile(profile);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should return valid for role with credential_source', () => {
+      const profile: AwsProfile = {
+        name: 'ec2-role',
+        roleArn: 'arn:aws:iam::123456789012:role/MyRole',
+        credentialSource: 'Ec2InstanceMetadata',
+        hasCredentials: true,
+        profileType: 'role',
       };
 
       const result = validateProfile(profile);

@@ -35,11 +35,13 @@ function ProfileSelector(): React.ReactElement {
             key={profile.name}
             value={profile.name}
             disabled={!profile.isValid}
-            title={profile.validationMessage}
+            title={profile.isValid
+              ? `${profile.profileTypeDescription}${profile.region ? ` - ${profile.region}` : ''}`
+              : profile.validationMessage}
           >
             {profile.name}
             {profile.region ? ` (${profile.region})` : ''}
-            {!profile.isValid ? ' [invalid]' : ''}
+            {profile.isValid ? ` [${profile.profileTypeDescription}]` : ' [invalid]'}
           </option>
         ))}
       </select>

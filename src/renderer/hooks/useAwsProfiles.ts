@@ -1,11 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 
+export type ProfileType =
+  | 'static'       // Direct access_key_id + secret_access_key
+  | 'role'         // Assumes a role (role_arn with source_profile or credential_source)
+  | 'sso'          // SSO-based authentication
+  | 'process'      // External credential process
+  | 'web-identity' // Web identity token (EKS, etc.)
+  | 'config-only'; // Has region/output but no credentials
+
 export interface ProfileInfo {
   name: string;
   region?: string;
   hasCredentials: boolean;
   isValid: boolean;
   validationMessage?: string;
+  profileType: ProfileType;
+  profileTypeDescription: string;
 }
 
 export interface UseAwsProfilesResult {
