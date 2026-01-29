@@ -2,6 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Profile type detection for UI display
+export type ProfileType =
+  | 'static'       // Direct access_key_id + secret_access_key
+  | 'role'         // Assumes a role (role_arn with source_profile or credential_source)
+  | 'sso'          // SSO-based authentication
+  | 'process'      // External credential process
+  | 'web-identity' // Web identity token (EKS, etc.)
+  | 'config-only'; // Has region/output but no credentials
+
 export interface AwsProfile {
   name: string;
   accessKeyId?: string;
@@ -11,7 +20,21 @@ export interface AwsProfile {
   output?: string;
   sourceProfile?: string;
   roleArn?: string;
-  // Indicates if this profile has credentials or is config-only
+  // SSO fields
+  ssoStartUrl?: string;
+  ssoRegion?: string;
+  ssoAccountId?: string;
+  ssoRoleName?: string;
+  ssoSession?: string;
+  // Process credentials
+  credentialProcess?: string;
+  // Web identity
+  webIdentityTokenFile?: string;
+  // Credential source (for role assumption in EC2/ECS)
+  credentialSource?: string;
+  // Detected profile type for UI
+  profileType: ProfileType;
+  // Whether this profile can potentially provide credentials (via SDK)
   hasCredentials: boolean;
 }
 
@@ -127,6 +150,98 @@ export function readConfigFile(filePath?: string): Map<string, Map<string, strin
 }
 
 /**
+ * Detects the profile type based on configuration
+ */
+function detectProfileType(
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined
+): ProfileType {
+  // Check for static credentials first
+  if (credData?.get('aws_access_key_id') && credData?.get('aws_secret_access_key')) {
+    return 'static';
+  }
+
+  if (configData) {
+    // SSO profile detection
+    if (configData.get('sso_start_url') || configData.get('sso_session') ||
+        configData.get('sso_account_id') || configData.get('sso_role_name')) {
+      return 'sso';
+    }
+
+    // Web identity
+    if (configData.get('web_identity_token_file')) {
+      return 'web-identity';
+    }
+
+    // Process credentials
+    if (configData.get('credential_process')) {
+      return 'process';
+    }
+
+    // Role assumption (with various credential sources)
+    if (configData.get('role_arn')) {
+      return 'role';
+    }
+  }
+
+  return 'config-only';
+}
+
+/**
+ * Determines if a profile can potentially provide credentials
+ * This uses heuristics - actual validation happens when credentials are used
+ */
+function canProvideCredentials(
+  profileType: ProfileType,
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined,
+  credentials: Map<string, Map<string, string>>
+): boolean {
+  switch (profileType) {
+    case 'static':
+      return true;
+
+    case 'sso':
+      // SSO profiles are valid if they have the required SSO fields
+      // AWS SDK will handle the SSO login flow
+      return !!(
+        configData?.get('sso_start_url') || configData?.get('sso_session')
+      ) && !!(
+        configData?.get('sso_account_id') && configData?.get('sso_role_name')
+      );
+
+    case 'web-identity':
+      // Web identity needs token file and role
+      return !!(configData?.get('web_identity_token_file') && configData?.get('role_arn'));
+
+    case 'process':
+      // Process credentials just need the command
+      return !!configData?.get('credential_process');
+
+    case 'role':
+      // Role assumption needs either source_profile with creds, or credential_source for EC2/ECS
+      const sourceProfile = configData?.get('source_profile');
+      const credentialSource = configData?.get('credential_source');
+
+      if (credentialSource) {
+        // EC2InstanceMetadata, Environment, EcsContainer are valid sources
+        return ['Environment', 'Ec2InstanceMetadata', 'EcsContainer'].includes(credentialSource);
+      }
+
+      if (sourceProfile) {
+        // Check if source profile has credentials
+        const sourceCreds = credentials.get(sourceProfile);
+        return !!(sourceCreds?.get('aws_access_key_id') && sourceCreds?.get('aws_secret_access_key'));
+      }
+
+      return false;
+
+    case 'config-only':
+      return false;
+  }
+}
+
+/**
  * Merges credentials and config to build a complete list of profiles
  */
 export function loadAwsProfiles(
@@ -151,12 +266,16 @@ export function loadAwsProfiles(
     const credData = credentials.get(name);
     const configData = config.get(name);
 
+    // Detect profile type
+    const profileType = detectProfileType(credData, configData);
+
     const profile: AwsProfile = {
       name,
-      hasCredentials: false,
+      profileType,
+      hasCredentials: canProvideCredentials(profileType, credData, configData, credentials),
     };
 
-    // Get credentials
+    // Get credentials (for static profiles)
     if (credData) {
       const accessKeyId = credData.get('aws_access_key_id');
       const secretAccessKey = credData.get('aws_secret_access_key');
@@ -165,7 +284,6 @@ export function loadAwsProfiles(
         profile.accessKeyId = accessKeyId;
         profile.secretAccessKey = secretAccessKey;
         profile.sessionToken = credData.get('aws_session_token');
-        profile.hasCredentials = true;
       }
     }
 
@@ -175,15 +293,20 @@ export function loadAwsProfiles(
       profile.output = configData.get('output');
       profile.sourceProfile = configData.get('source_profile');
       profile.roleArn = configData.get('role_arn');
+      profile.credentialSource = configData.get('credential_source');
 
-      // If this profile assumes a role from another profile, it can have credentials
-      // if the source profile has them
-      if (profile.sourceProfile && !profile.hasCredentials) {
-        const sourceCredData = credentials.get(profile.sourceProfile);
-        if (sourceCredData?.get('aws_access_key_id') && sourceCredData?.get('aws_secret_access_key')) {
-          profile.hasCredentials = true;
-        }
-      }
+      // SSO fields
+      profile.ssoStartUrl = configData.get('sso_start_url');
+      profile.ssoRegion = configData.get('sso_region');
+      profile.ssoAccountId = configData.get('sso_account_id');
+      profile.ssoRoleName = configData.get('sso_role_name');
+      profile.ssoSession = configData.get('sso_session');
+
+      // Process credentials
+      profile.credentialProcess = configData.get('credential_process');
+
+      // Web identity
+      profile.webIdentityTokenFile = configData.get('web_identity_token_file');
     }
 
     profiles.push(profile);
@@ -228,11 +351,54 @@ export function getProfile(
  * Validates that a profile has usable credentials
  */
 export function validateProfile(profile: AwsProfile): { valid: boolean; reason?: string } {
-  if (!profile.hasCredentials) {
-    if (profile.roleArn && !profile.sourceProfile) {
-      return { valid: false, reason: 'Profile requires source_profile for role assumption' };
-    }
-    return { valid: false, reason: 'Profile has no credentials configured' };
+  if (profile.hasCredentials) {
+    return { valid: true };
   }
-  return { valid: true };
+
+  // Provide specific reasons for invalid profiles
+  switch (profile.profileType) {
+    case 'config-only':
+      return { valid: false, reason: 'Profile has no credentials configured' };
+
+    case 'role':
+      if (!profile.sourceProfile && !profile.credentialSource) {
+        return { valid: false, reason: 'Role profile requires source_profile or credential_source' };
+      }
+      return { valid: false, reason: 'Source profile has no valid credentials' };
+
+    case 'sso':
+      if (!profile.ssoAccountId || !profile.ssoRoleName) {
+        return { valid: false, reason: 'SSO profile requires sso_account_id and sso_role_name' };
+      }
+      return { valid: false, reason: 'SSO profile missing required configuration' };
+
+    case 'process':
+      return { valid: false, reason: 'Process credentials command not configured' };
+
+    case 'web-identity':
+      return { valid: false, reason: 'Web identity profile missing token file or role ARN' };
+
+    default:
+      return { valid: false, reason: 'Profile has no credentials configured' };
+  }
+}
+
+/**
+ * Gets a human-readable description of the profile type
+ */
+export function getProfileTypeDescription(profileType: ProfileType): string {
+  switch (profileType) {
+    case 'static':
+      return 'Access Key';
+    case 'role':
+      return 'IAM Role';
+    case 'sso':
+      return 'AWS SSO';
+    case 'process':
+      return 'External Process';
+    case 'web-identity':
+      return 'Web Identity';
+    case 'config-only':
+      return 'Config Only';
+  }
 }

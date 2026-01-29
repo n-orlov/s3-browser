@@ -13,6 +13,7 @@ import {
   type _Object,
   type CommonPrefix,
 } from '@aws-sdk/client-s3';
+import { fromIni } from '@aws-sdk/credential-providers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Readable } from 'stream';
@@ -65,6 +66,14 @@ let currentClientProfile: string | null = null;
 
 /**
  * Creates or returns cached S3 client for the given profile
+ * Uses the AWS SDK's credential provider chain which supports:
+ * - Static credentials (access_key_id + secret_access_key)
+ * - Role assumption (role_arn with source_profile or credential_source)
+ * - SSO (sso_start_url, sso_account_id, sso_role_name)
+ * - Process credentials (credential_process)
+ * - Web identity (web_identity_token_file)
+ * - EC2/ECS instance roles (credential_source)
+ *
  * @param profileName - The AWS profile name to use
  * @param forceNew - Force creation of a new client even if one exists
  */
@@ -85,16 +94,10 @@ export function getS3Client(profileName: string, forceNew = false): S3Client {
 
   const config: S3ClientConfig = {
     region: profile.region || 'us-east-1',
+    // Use the fromIni credential provider which handles all profile types
+    // including static credentials, role assumption, SSO, process credentials, etc.
+    credentials: fromIni({ profile: profileName }),
   };
-
-  // Only set credentials if we have direct credentials (not role assumption)
-  if (profile.accessKeyId && profile.secretAccessKey) {
-    config.credentials = {
-      accessKeyId: profile.accessKeyId,
-      secretAccessKey: profile.secretAccessKey,
-      sessionToken: profile.sessionToken,
-    };
-  }
 
   s3Client = new S3Client(config);
   currentClientProfile = profileName;
