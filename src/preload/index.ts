@@ -78,6 +78,22 @@ export interface S3ParseUrlResult {
   error?: string;
 }
 
+export interface FileOperationResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface UploadResult {
+  path: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface UploadFilesResult {
+  success: boolean;
+  results: UploadResult[];
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -116,6 +132,55 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getKeyName: (keyOrPrefix: string): Promise<string> =>
       ipcRenderer.invoke('s3:get-key-name', keyOrPrefix),
     clearClient: (): Promise<void> => ipcRenderer.invoke('s3:clear-client'),
+
+    // File operations
+    downloadFile: (
+      bucket: string,
+      key: string,
+      operationId: string
+    ): Promise<FileOperationResult & { localPath?: string }> =>
+      ipcRenderer.invoke('s3:download-file', bucket, key, operationId),
+    uploadFile: (
+      bucket: string,
+      prefix: string,
+      filePath: string,
+      operationId: string
+    ): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:upload-file', bucket, prefix, filePath, operationId),
+    uploadFiles: (
+      bucket: string,
+      prefix: string,
+      filePaths: string[],
+      operationId: string
+    ): Promise<UploadFilesResult> =>
+      ipcRenderer.invoke('s3:upload-files', bucket, prefix, filePaths, operationId),
+    deleteFile: (bucket: string, key: string): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:delete-file', bucket, key),
+    renameFile: (bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:rename-file', bucket, sourceKey, newName),
+    copyFile: (
+      sourceBucket: string,
+      sourceKey: string,
+      destinationBucket: string,
+      destinationKey: string
+    ): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:copy-file', sourceBucket, sourceKey, destinationBucket, destinationKey),
+    uploadContent: (bucket: string, key: string, content: string): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:upload-content', bucket, key, content),
+    downloadContent: (
+      bucket: string,
+      key: string
+    ): Promise<{ success: boolean; content?: string; error?: string }> =>
+      ipcRenderer.invoke('s3:download-content', bucket, key),
+    getFileSize: (
+      bucket: string,
+      key: string
+    ): Promise<{ success: boolean; size?: number; error?: string }> =>
+      ipcRenderer.invoke('s3:get-file-size', bucket, key),
+    showOpenDialog: (): Promise<string[] | null> => ipcRenderer.invoke('s3:show-open-dialog'),
+    openDownloadsFolder: (): Promise<void> => ipcRenderer.invoke('s3:open-downloads-folder'),
+    showFileInFolder: (filePath: string): Promise<void> =>
+      ipcRenderer.invoke('s3:show-file-in-folder', filePath),
   },
 });
 
@@ -144,6 +209,44 @@ declare global {
         getParentPrefix: (keyOrPrefix: string) => Promise<string>;
         getKeyName: (keyOrPrefix: string) => Promise<string>;
         clearClient: () => Promise<void>;
+        // File operations
+        downloadFile: (
+          bucket: string,
+          key: string,
+          operationId: string
+        ) => Promise<FileOperationResult & { localPath?: string }>;
+        uploadFile: (
+          bucket: string,
+          prefix: string,
+          filePath: string,
+          operationId: string
+        ) => Promise<FileOperationResult>;
+        uploadFiles: (
+          bucket: string,
+          prefix: string,
+          filePaths: string[],
+          operationId: string
+        ) => Promise<UploadFilesResult>;
+        deleteFile: (bucket: string, key: string) => Promise<FileOperationResult>;
+        renameFile: (bucket: string, sourceKey: string, newName: string) => Promise<FileOperationResult>;
+        copyFile: (
+          sourceBucket: string,
+          sourceKey: string,
+          destinationBucket: string,
+          destinationKey: string
+        ) => Promise<FileOperationResult>;
+        uploadContent: (bucket: string, key: string, content: string) => Promise<FileOperationResult>;
+        downloadContent: (
+          bucket: string,
+          key: string
+        ) => Promise<{ success: boolean; content?: string; error?: string }>;
+        getFileSize: (
+          bucket: string,
+          key: string
+        ) => Promise<{ success: boolean; size?: number; error?: string }>;
+        showOpenDialog: () => Promise<string[] | null>;
+        openDownloadsFolder: () => Promise<void>;
+        showFileInFolder: (filePath: string) => Promise<void>;
       };
     };
   }
