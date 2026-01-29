@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAwsProfiles, type ProfileInfo } from '../hooks/useAwsProfiles';
+import { useAwsProfiles, type ProfileInfo } from '../context/AwsProfileContext';
 
 function ProfileSelector(): React.ReactElement {
   const { profiles, currentProfile, loading, error, selectProfile, refreshProfiles } = useAwsProfiles();

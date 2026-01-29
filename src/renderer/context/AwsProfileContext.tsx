@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 
 export type ProfileType =
   | 'static'       // Direct access_key_id + secret_access_key
@@ -18,7 +18,7 @@ export interface ProfileInfo {
   profileTypeDescription: string;
 }
 
-export interface UseAwsProfilesResult {
+export interface AwsProfileContextValue {
   profiles: ProfileInfo[];
   currentProfile: string | null;
   defaultRegion?: string;
@@ -28,7 +28,9 @@ export interface UseAwsProfilesResult {
   refreshProfiles: () => Promise<void>;
 }
 
-export function useAwsProfiles(): UseAwsProfilesResult {
+const AwsProfileContext = createContext<AwsProfileContextValue | null>(null);
+
+export function AwsProfileProvider({ children }: { children: ReactNode }): React.ReactElement {
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [currentProfile, setCurrentProfile] = useState<string | null>(null);
   const [defaultRegion, setDefaultRegion] = useState<string | undefined>();
@@ -53,6 +55,9 @@ export function useAwsProfiles(): UseAwsProfilesResult {
   const selectProfile = useCallback(async (profileName: string) => {
     try {
       setError(null);
+      // Clear the S3 client cache when switching profiles
+      await window.electronAPI.s3.clearClient();
+
       const result = await window.electronAPI.aws.setProfile(profileName);
       if (!result.success) {
         setError(result.error ?? 'Failed to select profile');
@@ -83,7 +88,7 @@ export function useAwsProfiles(): UseAwsProfilesResult {
     loadProfiles();
   }, [loadProfiles]);
 
-  return {
+  const value: AwsProfileContextValue = {
     profiles,
     currentProfile,
     defaultRegion,
@@ -92,4 +97,18 @@ export function useAwsProfiles(): UseAwsProfilesResult {
     selectProfile,
     refreshProfiles,
   };
+
+  return (
+    <AwsProfileContext.Provider value={value}>
+      {children}
+    </AwsProfileContext.Provider>
+  );
+}
+
+export function useAwsProfiles(): AwsProfileContextValue {
+  const context = useContext(AwsProfileContext);
+  if (!context) {
+    throw new Error('useAwsProfiles must be used within an AwsProfileProvider');
+  }
+  return context;
 }

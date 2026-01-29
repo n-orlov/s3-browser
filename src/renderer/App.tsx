@@ -12,7 +12,7 @@ import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
 import ImagePreview from './components/ImagePreview';
-import { useAwsProfiles } from './hooks/useAwsProfiles';
+import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
 
 function App(): React.ReactElement {
