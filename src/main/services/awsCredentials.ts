@@ -150,7 +150,21 @@ export function readConfigFile(filePath?: string): Map<string, Map<string, strin
 }
 
 /**
+ * Helper to get a value from either credentials or config data
+ * AWS CLI allows many settings in either file, so we check both
+ */
+function getFromEither(
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined,
+  key: string
+): string | undefined {
+  // Config takes precedence over credentials for non-credential settings
+  return configData?.get(key) ?? credData?.get(key);
+}
+
+/**
  * Detects the profile type based on configuration
+ * Note: AWS CLI allows role_arn, source_profile, etc. in either credentials or config file
  */
 function detectProfileType(
   credData: Map<string, string> | undefined,
@@ -161,27 +175,28 @@ function detectProfileType(
     return 'static';
   }
 
-  if (configData) {
-    // SSO profile detection
-    if (configData.get('sso_start_url') || configData.get('sso_session') ||
-        configData.get('sso_account_id') || configData.get('sso_role_name')) {
-      return 'sso';
-    }
+  // SSO profile detection (check both files)
+  const ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
+  const ssoSession = getFromEither(credData, configData, 'sso_session');
+  const ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
+  const ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
+  if (ssoStartUrl || ssoSession || ssoAccountId || ssoRoleName) {
+    return 'sso';
+  }
 
-    // Web identity
-    if (configData.get('web_identity_token_file')) {
-      return 'web-identity';
-    }
+  // Web identity (check both files)
+  if (getFromEither(credData, configData, 'web_identity_token_file')) {
+    return 'web-identity';
+  }
 
-    // Process credentials
-    if (configData.get('credential_process')) {
-      return 'process';
-    }
+  // Process credentials (check both files)
+  if (getFromEither(credData, configData, 'credential_process')) {
+    return 'process';
+  }
 
-    // Role assumption (with various credential sources)
-    if (configData.get('role_arn')) {
-      return 'role';
-    }
+  // Role assumption (check both files - AWS CLI allows role_arn in credentials file)
+  if (getFromEither(credData, configData, 'role_arn')) {
+    return 'role';
   }
 
   return 'config-only';
@@ -190,6 +205,7 @@ function detectProfileType(
 /**
  * Determines if a profile can potentially provide credentials
  * This uses heuristics - actual validation happens when credentials are used
+ * Note: AWS CLI allows many settings in either credentials or config file
  */
 function canProvideCredentials(
   profileType: ProfileType,
@@ -204,24 +220,27 @@ function canProvideCredentials(
     case 'sso':
       // SSO profiles are valid if they have the required SSO fields
       // AWS SDK will handle the SSO login flow
-      return !!(
-        configData?.get('sso_start_url') || configData?.get('sso_session')
-      ) && !!(
-        configData?.get('sso_account_id') && configData?.get('sso_role_name')
-      );
+      const ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
+      const ssoSession = getFromEither(credData, configData, 'sso_session');
+      const ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
+      const ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
+      return !!(ssoStartUrl || ssoSession) && !!(ssoAccountId && ssoRoleName);
 
     case 'web-identity':
-      // Web identity needs token file and role
-      return !!(configData?.get('web_identity_token_file') && configData?.get('role_arn'));
+      // Web identity needs token file and role (check both files)
+      const tokenFile = getFromEither(credData, configData, 'web_identity_token_file');
+      const roleArnWeb = getFromEither(credData, configData, 'role_arn');
+      return !!(tokenFile && roleArnWeb);
 
     case 'process':
-      // Process credentials just need the command
-      return !!configData?.get('credential_process');
+      // Process credentials just need the command (check both files)
+      return !!getFromEither(credData, configData, 'credential_process');
 
     case 'role':
       // Role assumption needs either source_profile with creds, or credential_source for EC2/ECS
-      const sourceProfile = configData?.get('source_profile');
-      const credentialSource = configData?.get('credential_source');
+      // AWS CLI allows these settings in either credentials or config file
+      const sourceProfile = getFromEither(credData, configData, 'source_profile');
+      const credentialSource = getFromEither(credData, configData, 'credential_source');
 
       if (credentialSource) {
         // EC2InstanceMetadata, Environment, EcsContainer are valid sources
@@ -287,27 +306,26 @@ export function loadAwsProfiles(
       }
     }
 
-    // Get config settings
-    if (configData) {
-      profile.region = configData.get('region');
-      profile.output = configData.get('output');
-      profile.sourceProfile = configData.get('source_profile');
-      profile.roleArn = configData.get('role_arn');
-      profile.credentialSource = configData.get('credential_source');
+    // Get config settings (check both files - AWS CLI allows many settings in either)
+    // Config file takes precedence for non-credential settings
+    profile.region = getFromEither(credData, configData, 'region');
+    profile.output = getFromEither(credData, configData, 'output');
+    profile.sourceProfile = getFromEither(credData, configData, 'source_profile');
+    profile.roleArn = getFromEither(credData, configData, 'role_arn');
+    profile.credentialSource = getFromEither(credData, configData, 'credential_source');
 
-      // SSO fields
-      profile.ssoStartUrl = configData.get('sso_start_url');
-      profile.ssoRegion = configData.get('sso_region');
-      profile.ssoAccountId = configData.get('sso_account_id');
-      profile.ssoRoleName = configData.get('sso_role_name');
-      profile.ssoSession = configData.get('sso_session');
+    // SSO fields (check both files)
+    profile.ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
+    profile.ssoRegion = getFromEither(credData, configData, 'sso_region');
+    profile.ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
+    profile.ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
+    profile.ssoSession = getFromEither(credData, configData, 'sso_session');
 
-      // Process credentials
-      profile.credentialProcess = configData.get('credential_process');
+    // Process credentials (check both files)
+    profile.credentialProcess = getFromEither(credData, configData, 'credential_process');
 
-      // Web identity
-      profile.webIdentityTokenFile = configData.get('web_identity_token_file');
-    }
+    // Web identity (check both files)
+    profile.webIdentityTokenFile = getFromEither(credData, configData, 'web_identity_token_file');
 
     profiles.push(profile);
   }

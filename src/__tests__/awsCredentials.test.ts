@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import {
   parseIniFile,
   validateProfile,
+  loadAwsProfiles,
   getCredentialsPath,
   getConfigPath,
   type AwsProfile,
@@ -291,6 +294,138 @@ region = us-east-1`;
       const result = validateProfile(profile);
 
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('loadAwsProfiles - credentials file role profiles', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = '/tmp/aws-test-' + Date.now();
+      fs.mkdirSync(tmpDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should detect role profile with source_profile in credentials file', () => {
+      // User scenario: role_arn and source_profile in credentials file
+      const credentials = `[dev-usr]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+[dev]
+source_profile = dev-usr
+role_arn = arn:aws:iam::123456789012:role/MyRole
+`;
+      fs.writeFileSync(path.join(tmpDir, 'credentials'), credentials);
+      fs.writeFileSync(path.join(tmpDir, 'config'), '');
+
+      const result = loadAwsProfiles(
+        path.join(tmpDir, 'credentials'),
+        path.join(tmpDir, 'config')
+      );
+
+      const devProfile = result.profiles.find(p => p.name === 'dev');
+      expect(devProfile).toBeDefined();
+      expect(devProfile?.profileType).toBe('role');
+      expect(devProfile?.hasCredentials).toBe(true);
+      expect(devProfile?.sourceProfile).toBe('dev-usr');
+      expect(devProfile?.roleArn).toBe('arn:aws:iam::123456789012:role/MyRole');
+
+      const validation = validateProfile(devProfile!);
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should merge role_arn from credentials file with region from config file', () => {
+      const credentials = `[dev-usr]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+[dev]
+source_profile = dev-usr
+role_arn = arn:aws:iam::123456789012:role/MyRole
+`;
+      const config = `[profile dev]
+region = eu-west-1
+`;
+      fs.writeFileSync(path.join(tmpDir, 'credentials'), credentials);
+      fs.writeFileSync(path.join(tmpDir, 'config'), config);
+
+      const result = loadAwsProfiles(
+        path.join(tmpDir, 'credentials'),
+        path.join(tmpDir, 'config')
+      );
+
+      const devProfile = result.profiles.find(p => p.name === 'dev');
+      expect(devProfile?.profileType).toBe('role');
+      expect(devProfile?.hasCredentials).toBe(true);
+      expect(devProfile?.region).toBe('eu-west-1');
+      expect(devProfile?.roleArn).toBe('arn:aws:iam::123456789012:role/MyRole');
+    });
+
+    it('should mark role profile as invalid when source_profile has no credentials', () => {
+      const credentials = `[dev]
+source_profile = nonexistent
+role_arn = arn:aws:iam::123456789012:role/MyRole
+`;
+      fs.writeFileSync(path.join(tmpDir, 'credentials'), credentials);
+      fs.writeFileSync(path.join(tmpDir, 'config'), '');
+
+      const result = loadAwsProfiles(
+        path.join(tmpDir, 'credentials'),
+        path.join(tmpDir, 'config')
+      );
+
+      const devProfile = result.profiles.find(p => p.name === 'dev');
+      expect(devProfile?.profileType).toBe('role');
+      expect(devProfile?.hasCredentials).toBe(false);
+
+      const validation = validateProfile(devProfile!);
+      expect(validation.valid).toBe(false);
+    });
+
+    it('should detect role profile with credential_source in credentials file', () => {
+      const credentials = `[ec2-role]
+role_arn = arn:aws:iam::123456789012:role/MyRole
+credential_source = Ec2InstanceMetadata
+`;
+      fs.writeFileSync(path.join(tmpDir, 'credentials'), credentials);
+      fs.writeFileSync(path.join(tmpDir, 'config'), '');
+
+      const result = loadAwsProfiles(
+        path.join(tmpDir, 'credentials'),
+        path.join(tmpDir, 'config')
+      );
+
+      const ec2Profile = result.profiles.find(p => p.name === 'ec2-role');
+      expect(ec2Profile?.profileType).toBe('role');
+      expect(ec2Profile?.hasCredentials).toBe(true);
+      expect(ec2Profile?.credentialSource).toBe('Ec2InstanceMetadata');
+    });
+
+    it('should prefer config file values over credentials file for same key', () => {
+      const credentials = `[dev]
+role_arn = arn:aws:iam::123456789012:role/OldRole
+source_profile = old-source
+`;
+      const config = `[profile dev]
+role_arn = arn:aws:iam::123456789012:role/NewRole
+source_profile = new-source
+`;
+      fs.writeFileSync(path.join(tmpDir, 'credentials'), credentials);
+      fs.writeFileSync(path.join(tmpDir, 'config'), config);
+
+      const result = loadAwsProfiles(
+        path.join(tmpDir, 'credentials'),
+        path.join(tmpDir, 'config')
+      );
+
+      const devProfile = result.profiles.find(p => p.name === 'dev');
+      // Config file takes precedence
+      expect(devProfile?.roleArn).toBe('arn:aws:iam::123456789012:role/NewRole');
+      expect(devProfile?.sourceProfile).toBe('new-source');
     });
   });
 });
