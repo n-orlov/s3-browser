@@ -720,3 +720,45 @@ export async function getFileSize(
     return { success: false, error: message };
   }
 }
+
+/**
+ * Downloads file content as raw binary buffer (for parquet/binary files)
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ */
+export async function downloadBinaryContent(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<{ success: boolean; data?: Buffer; error?: string }> {
+  const client = getS3Client(profileName);
+
+  try {
+    const getCommand = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    const response = await client.send(getCommand);
+
+    if (!response.Body) {
+      throw new Error('Empty response body');
+    }
+
+    // Convert stream to buffer
+    const chunks: Buffer[] = [];
+    const bodyStream = response.Body as Readable;
+
+    for await (const chunk of bodyStream) {
+      chunks.push(Buffer.from(chunk));
+    }
+
+    const buffer = Buffer.concat(chunks);
+
+    return { success: true, data: buffer };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}

@@ -12,6 +12,7 @@ describe('FileToolbar', () => {
     onDelete: vi.fn(),
     onRename: vi.fn(),
     onEdit: vi.fn(),
+    onViewParquet: vi.fn(),
     onRefresh: vi.fn(),
     disabled: false,
   };
@@ -222,6 +223,78 @@ describe('FileToolbar', () => {
 
       fireEvent.click(screen.getByText('Refresh'));
       expect(onRefresh).toHaveBeenCalled();
+    });
+  });
+
+  describe('Parquet button', () => {
+    it('disables Parquet button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      expect(parquetButton).toBeDisabled();
+    });
+
+    it('disables Parquet button when a folder is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'folder/', isPrefix: true }}
+        />
+      );
+
+      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      expect(parquetButton).toBeDisabled();
+    });
+
+    it('disables Parquet button for non-parquet files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.json', isPrefix: false }}
+        />
+      );
+
+      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      expect(parquetButton).toBeDisabled();
+    });
+
+    it('enables Parquet button for parquet files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.parquet', isPrefix: false }}
+        />
+      );
+
+      const parquetButton = screen.getByTitle('View parquet file');
+      expect(parquetButton).not.toBeDisabled();
+    });
+
+    it('calls onViewParquet when Parquet button is clicked', () => {
+      const onViewParquet = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.parquet', isPrefix: false }}
+          onViewParquet={onViewParquet}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Parquet'));
+      expect(onViewParquet).toHaveBeenCalled();
+    });
+
+    it('disables Parquet button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.parquet', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const parquetButton = screen.getByText('Parquet').closest('button');
+      expect(parquetButton).toBeDisabled();
     });
   });
 });

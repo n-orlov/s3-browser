@@ -177,6 +177,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       key: string
     ): Promise<{ success: boolean; size?: number; error?: string }> =>
       ipcRenderer.invoke('s3:get-file-size', bucket, key),
+    downloadBinaryContent: (
+      bucket: string,
+      key: string
+    ): Promise<{ success: boolean; data?: Uint8Array; error?: string }> =>
+      ipcRenderer.invoke('s3:download-binary-content', bucket, key),
     showOpenDialog: (): Promise<string[] | null> => ipcRenderer.invoke('s3:show-open-dialog'),
     openDownloadsFolder: (): Promise<void> => ipcRenderer.invoke('s3:open-downloads-folder'),
     showFileInFolder: (filePath: string): Promise<void> =>
@@ -244,6 +249,10 @@ declare global {
           bucket: string,
           key: string
         ) => Promise<{ success: boolean; size?: number; error?: string }>;
+        downloadBinaryContent: (
+          bucket: string,
+          key: string
+        ) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
         showOpenDialog: () => Promise<string[] | null>;
         openDownloadsFolder: () => Promise<void>;
         showFileInFolder: (filePath: string) => Promise<void>;
