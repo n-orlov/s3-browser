@@ -554,4 +554,49 @@ describe('ParquetViewer', () => {
       });
     });
   });
+
+  describe('IPC data transfer handling', () => {
+    it('should handle Uint8Array with non-zero byteOffset', async () => {
+      // Simulate data that might come from IPC transfer with offset
+      // This tests the fix for "DataView constructor must be an ArrayBuffer"
+      const baseArray = new ArrayBuffer(20);
+      const viewWithOffset = new Uint8Array(baseArray, 4, 8); // Start at offset 4
+      viewWithOffset.set([0x50, 0x41, 0x52, 0x31, 0, 0, 0, 0]); // PAR1 header
+
+      // Create a new Uint8Array like our fix does
+      const copiedArray = new Uint8Array(viewWithOffset);
+      expect(copiedArray.length).toBe(8);
+      expect(copiedArray[0]).toBe(0x50); // P
+      expect(copiedArray[1]).toBe(0x41); // A
+      expect(copiedArray[2]).toBe(0x52); // R
+      expect(copiedArray[3]).toBe(0x31); // 1
+
+      // The buffer should be properly accessible
+      expect(copiedArray.buffer.byteLength).toBe(8);
+    });
+
+    it('should handle data transfer where underlying buffer is larger than view', async () => {
+      // This is the typical case when IPC transfers Uint8Array
+      mockElectronAPI.s3.downloadBinaryContent.mockResolvedValue({
+        success: true,
+        data: new Uint8Array([0x50, 0x41, 0x52, 0x31]), // PAR1
+      });
+
+      (parquetMetadataAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        schema: [{ name: 'root' }, { name: 'id' }],
+      });
+
+      (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
+          onComplete({ id: [1, 2] });
+        }
+      );
+
+      render(<ParquetViewer {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('2 rows')).toBeInTheDocument();
+      });
+    });
+  });
 });

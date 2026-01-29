@@ -145,7 +145,7 @@ describe('s3Service', () => {
       expect(client).toBeInstanceOf(S3Client);
     });
 
-    it('should use default region if profile has no region', () => {
+    it('should use default region (eu-west-1) if profile has no region', () => {
       (getProfile as Mock).mockReturnValue({
         name: 'default',
         accessKeyId: 'AKIATEST',
@@ -156,6 +156,22 @@ describe('s3Service', () => {
       const client = getS3Client('default');
       // Since we're mocking S3Client, we can check the config was set
       expect(client).toBeDefined();
+      // The client config should include default region and followRegionRedirects
+      expect((client as any).config.region).toBe('eu-west-1');
+    });
+
+    it('should configure S3 client with followRegionRedirects for cross-region bucket access', () => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+
+      const client = getS3Client('default');
+      expect(client).toBeDefined();
+      // The client should be configured to follow region redirects
+      expect((client as any).config.followRegionRedirects).toBe(true);
     });
 
     it('should include session token if present', () => {
