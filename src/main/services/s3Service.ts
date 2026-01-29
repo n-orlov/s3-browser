@@ -93,10 +93,14 @@ export function getS3Client(profileName: string, forceNew = false): S3Client {
   }
 
   const config: S3ClientConfig = {
-    region: profile.region || 'us-east-1',
+    region: profile.region || 'eu-west-1',
     // Use the fromIni credential provider which handles all profile types
     // including static credentials, role assumption, SSO, process credentials, etc.
     credentials: fromIni({ profile: profileName }),
+    // Enable following region redirects for cross-region bucket access
+    // This allows the SDK to automatically retry requests to the correct region
+    // when accessing buckets in a different region than the client was configured for
+    followRegionRedirects: true,
   };
 
   s3Client = new S3Client(config);
