@@ -3,11 +3,20 @@ import {
   ListBucketsCommand,
   ListObjectsV2Command,
   ListObjectsV2CommandOutput,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
   type S3ClientConfig,
   type Bucket,
   type _Object,
   type CommonPrefix,
 } from '@aws-sdk/client-s3';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { getProfile, type AwsProfile } from './awsCredentials';
 
 // Default page size for object listing
@@ -311,4 +320,403 @@ export function getKeyName(keyOrPrefix: string): string {
   }
 
   return normalized.substring(lastSlashIndex + 1);
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
+export interface DownloadProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
+export interface FileOperationResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Downloads a file from S3 to local filesystem
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ * @param destinationPath - Local path to save the file
+ * @param onProgress - Optional callback for download progress
+ * @param abortSignal - Optional signal to abort the operation
+ */
+export async function downloadFile(
+  profileName: string,
+  bucket: string,
+  key: string,
+  destinationPath: string,
+  onProgress?: (progress: DownloadProgress) => void,
+  abortSignal?: AbortSignal
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    // First, get the object metadata to know the total size
+    const headCommand = new HeadObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+    const headResponse = await client.send(headCommand);
+    const totalSize = headResponse.ContentLength || 0;
+
+    // Download the object
+    const getCommand = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    const response = await client.send(getCommand, {
+      abortSignal,
+    });
+
+    if (!response.Body) {
+      throw new Error('Empty response body');
+    }
+
+    // Ensure the destination directory exists
+    const destDir = path.dirname(destinationPath);
+    await fs.promises.mkdir(destDir, { recursive: true });
+
+    // Create write stream
+    const writeStream = fs.createWriteStream(destinationPath);
+
+    // Track progress
+    let loaded = 0;
+    const bodyStream = response.Body as Readable;
+
+    bodyStream.on('data', (chunk: Buffer) => {
+      loaded += chunk.length;
+      if (onProgress && totalSize > 0) {
+        onProgress({
+          loaded,
+          total: totalSize,
+          percentage: Math.round((loaded / totalSize) * 100),
+        });
+      }
+    });
+
+    // Use pipeline to properly handle streams
+    await pipeline(bodyStream, writeStream);
+
+    return { success: true };
+  } catch (error) {
+    // Clean up partial file on error
+    try {
+      await fs.promises.unlink(destinationPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Uploads a file from local filesystem to S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ * @param sourcePath - Local path of the file to upload
+ * @param onProgress - Optional callback for upload progress
+ * @param abortSignal - Optional signal to abort the operation
+ */
+export async function uploadFile(
+  profileName: string,
+  bucket: string,
+  key: string,
+  sourcePath: string,
+  onProgress?: (progress: UploadProgress) => void,
+  abortSignal?: AbortSignal
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    // Check if the source file exists
+    const stats = await fs.promises.stat(sourcePath);
+    const totalSize = stats.size;
+
+    // Read file content
+    const fileContent = await fs.promises.readFile(sourcePath);
+
+    // Determine content type based on extension
+    const contentType = getContentType(key);
+
+    // Simple upload for files
+    const putCommand = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: fileContent,
+      ContentType: contentType,
+    });
+
+    await client.send(putCommand, {
+      abortSignal,
+    });
+
+    // Report 100% progress
+    if (onProgress) {
+      onProgress({
+        loaded: totalSize,
+        total: totalSize,
+        percentage: 100,
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Uploads content directly to S3 (for editor save)
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ * @param content - The content to upload
+ */
+export async function uploadContent(
+  profileName: string,
+  bucket: string,
+  key: string,
+  content: string | Buffer
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    const contentType = getContentType(key);
+
+    const putCommand = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: typeof content === 'string' ? Buffer.from(content, 'utf-8') : content,
+      ContentType: contentType,
+    });
+
+    await client.send(putCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Downloads file content directly (for editor load)
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ */
+export async function downloadContent(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<{ success: boolean; content?: string; error?: string }> {
+  const client = getS3Client(profileName);
+
+  try {
+    const getCommand = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    const response = await client.send(getCommand);
+
+    if (!response.Body) {
+      throw new Error('Empty response body');
+    }
+
+    // Convert stream to string
+    const chunks: Buffer[] = [];
+    const bodyStream = response.Body as Readable;
+
+    for await (const chunk of bodyStream) {
+      chunks.push(Buffer.from(chunk));
+    }
+
+    const content = Buffer.concat(chunks).toString('utf-8');
+
+    return { success: true, content };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Deletes a file from S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ */
+export async function deleteFile(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    await client.send(deleteCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Renames (copies then deletes) a file in S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param sourceKey - The current S3 object key
+ * @param destinationKey - The new S3 object key
+ */
+export async function renameFile(
+  profileName: string,
+  bucket: string,
+  sourceKey: string,
+  destinationKey: string
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    // Copy to new location
+    const copyCommand = new CopyObjectCommand({
+      Bucket: bucket,
+      Key: destinationKey,
+      CopySource: encodeURIComponent(`${bucket}/${sourceKey}`),
+    });
+
+    await client.send(copyCommand);
+
+    // Delete original
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: sourceKey,
+    });
+
+    await client.send(deleteCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Copies a file within S3
+ * @param profileName - The AWS profile name to use
+ * @param sourceBucket - The source S3 bucket name
+ * @param sourceKey - The source S3 object key
+ * @param destinationBucket - The destination S3 bucket name
+ * @param destinationKey - The destination S3 object key
+ */
+export async function copyFile(
+  profileName: string,
+  sourceBucket: string,
+  sourceKey: string,
+  destinationBucket: string,
+  destinationKey: string
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    const copyCommand = new CopyObjectCommand({
+      Bucket: destinationBucket,
+      Key: destinationKey,
+      CopySource: encodeURIComponent(`${sourceBucket}/${sourceKey}`),
+    });
+
+    await client.send(copyCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Gets the content type based on file extension
+ */
+function getContentType(key: string): string {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const contentTypes: Record<string, string> = {
+    // Text
+    txt: 'text/plain',
+    html: 'text/html',
+    css: 'text/css',
+    csv: 'text/csv',
+    // Code
+    js: 'application/javascript',
+    json: 'application/json',
+    xml: 'application/xml',
+    yaml: 'text/yaml',
+    yml: 'text/yaml',
+    ts: 'text/typescript',
+    tsx: 'text/typescript',
+    py: 'text/x-python',
+    java: 'text/x-java',
+    md: 'text/markdown',
+    // Images
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    ico: 'image/x-icon',
+    // Binary
+    pdf: 'application/pdf',
+    zip: 'application/zip',
+    gz: 'application/gzip',
+    tar: 'application/x-tar',
+    parquet: 'application/x-parquet',
+  };
+
+  return contentTypes[ext] || 'application/octet-stream';
+}
+
+/**
+ * Gets the file size from S3 without downloading
+ */
+export async function getFileSize(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<{ success: boolean; size?: number; error?: string }> {
+  const client = getS3Client(profileName);
+
+  try {
+    const headCommand = new HeadObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    const response = await client.send(headCommand);
+
+    return { success: true, size: response.ContentLength || 0 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
 }

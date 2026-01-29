@@ -599,3 +599,327 @@ body {
   overflow: hidden;
   padding: 0 16px 16px;
 }
+
+/* File Toolbar */
+.file-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background-color: var(--border);
+  border-color: var(--accent);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-btn-danger:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.toolbar-icon {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.toolbar-label {
+  font-size: 12px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* Drag and Drop */
+.file-list-container {
+  position: relative;
+}
+
+.file-list-container.drag-over {
+  border: 2px dashed var(--accent);
+  border-radius: 4px;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(137, 180, 250, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.drop-message {
+  padding: 24px 48px;
+  background-color: var(--bg-secondary);
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Dialogs */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 320px;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.dialog-danger .dialog-header {
+  border-bottom-color: var(--error);
+}
+
+.dialog-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dialog-content {
+  padding: 20px;
+}
+
+.dialog-content p {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+}
+
+.dialog-content label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dialog-input {
+  width: 100%;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.dialog-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.dialog-filename {
+  font-family: monospace;
+  background-color: var(--bg-tertiary);
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--text-primary);
+  word-break: break-all;
+  margin: 8px 0;
+}
+
+.dialog-warning {
+  color: var(--warning) !important;
+  font-size: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dialog-btn:hover:not(:disabled) {
+  background-color: var(--border);
+}
+
+.dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn-confirm {
+  background-color: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.dialog-btn-confirm:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.dialog-btn-danger {
+  background-color: var(--error);
+  color: var(--bg-primary);
+  border-color: var(--error);
+}
+
+.dialog-btn-danger:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* Operation Status */
+.operation-status-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+  max-width: 320px;
+}
+
+.operation-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.operation-status-item.status-progress {
+  border-color: var(--accent);
+}
+
+.operation-status-item.status-completed {
+  border-color: var(--success);
+}
+
+.operation-status-item.status-error {
+  border-color: var(--error);
+}
+
+.operation-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.status-pending .operation-icon {
+  background-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.status-progress .operation-icon {
+  background-color: var(--accent);
+  color: var(--bg-primary);
+  animation: pulse 1s infinite;
+}
+
+.status-completed .operation-icon {
+  background-color: var(--success);
+  color: var(--bg-primary);
+}
+
+.status-error .operation-icon {
+  background-color: var(--error);
+  color: var(--bg-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.operation-type {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.operation-filename {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.operation-error {
+  color: var(--error);
+  font-size: 11px;
+}
+
+.operation-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.operation-dismiss:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}

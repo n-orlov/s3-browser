@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron';
+import { ipcMain, app, dialog, shell } from 'electron';
+import * as path from 'path';
 import {
   listBuckets,
   listObjects,
@@ -7,10 +8,19 @@ import {
   getParentPrefix,
   getKeyName,
   clearS3Client,
+  downloadFile,
+  uploadFile,
+  uploadContent,
+  downloadContent,
+  deleteFile,
+  renameFile,
+  copyFile,
+  getFileSize,
   type S3Bucket,
   type S3Object,
   type ListObjectsResult,
   type ListObjectsOptions,
+  type FileOperationResult,
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
 
@@ -159,4 +169,265 @@ export function registerS3Ipc(): void {
   ipcMain.handle('s3:clear-client', async (): Promise<void> => {
     clearS3Client();
   });
+
+  // Download a file from S3 to the downloads folder
+  ipcMain.handle(
+    's3:download-file',
+    async (
+      _event,
+      bucket: string,
+      key: string,
+      operationId: string
+    ): Promise<FileOperationResult & { localPath?: string }> => {
+      try {
+        const profileName = getCurrentProfile();
+
+        // Get the downloads folder path
+        const downloadsPath = app.getPath('downloads');
+        const fileName = getKeyName(key);
+        let destinationPath = path.join(downloadsPath, fileName);
+
+        // If file exists, add a number suffix
+        let counter = 1;
+        const ext = path.extname(fileName);
+        const baseName = path.basename(fileName, ext);
+        while (await fileExists(destinationPath)) {
+          destinationPath = path.join(downloadsPath, `${baseName} (${counter})${ext}`);
+          counter++;
+        }
+
+        // Create abort controller for this operation
+        const abortController = new AbortController();
+        abortControllers.set(operationId, abortController);
+
+        try {
+          const result = await downloadFile(
+            profileName,
+            bucket,
+            key,
+            destinationPath,
+            undefined, // Progress callback could be added with IPC events
+            abortController.signal
+          );
+
+          if (result.success) {
+            return { ...result, localPath: destinationPath };
+          }
+          return result;
+        } finally {
+          abortControllers.delete(operationId);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Upload a file to S3
+  ipcMain.handle(
+    's3:upload-file',
+    async (
+      _event,
+      bucket: string,
+      prefix: string,
+      filePath: string,
+      operationId: string
+    ): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+
+        // Build the S3 key from prefix + filename
+        const fileName = path.basename(filePath);
+        const key = prefix ? `${prefix}${fileName}` : fileName;
+
+        // Create abort controller for this operation
+        const abortController = new AbortController();
+        abortControllers.set(operationId, abortController);
+
+        try {
+          return await uploadFile(profileName, bucket, key, filePath, undefined, abortController.signal);
+        } finally {
+          abortControllers.delete(operationId);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Upload multiple files
+  ipcMain.handle(
+    's3:upload-files',
+    async (
+      _event,
+      bucket: string,
+      prefix: string,
+      filePaths: string[],
+      operationId: string
+    ): Promise<{ success: boolean; results: Array<{ path: string; success: boolean; error?: string }> }> => {
+      try {
+        const profileName = getCurrentProfile();
+        const results: Array<{ path: string; success: boolean; error?: string }> = [];
+
+        // Create abort controller for this operation
+        const abortController = new AbortController();
+        abortControllers.set(operationId, abortController);
+
+        try {
+          for (const filePath of filePaths) {
+            if (abortController.signal.aborted) {
+              results.push({ path: filePath, success: false, error: 'Operation cancelled' });
+              continue;
+            }
+
+            const fileName = path.basename(filePath);
+            const key = prefix ? `${prefix}${fileName}` : fileName;
+            const result = await uploadFile(profileName, bucket, key, filePath, undefined, abortController.signal);
+            results.push({ path: filePath, ...result });
+          }
+
+          return { success: results.every(r => r.success), results };
+        } finally {
+          abortControllers.delete(operationId);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, results: [] };
+      }
+    }
+  );
+
+  // Delete a file from S3
+  ipcMain.handle(
+    's3:delete-file',
+    async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await deleteFile(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Rename a file in S3
+  ipcMain.handle(
+    's3:rename-file',
+    async (_event, bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+
+        // Build the new key with the same prefix but different name
+        const parentPrefix = getParentPrefix(sourceKey);
+        const destinationKey = parentPrefix + newName;
+
+        return await renameFile(profileName, bucket, sourceKey, destinationKey);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Copy a file in S3
+  ipcMain.handle(
+    's3:copy-file',
+    async (
+      _event,
+      sourceBucket: string,
+      sourceKey: string,
+      destinationBucket: string,
+      destinationKey: string
+    ): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await copyFile(profileName, sourceBucket, sourceKey, destinationBucket, destinationKey);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Upload content directly (for editor save)
+  ipcMain.handle(
+    's3:upload-content',
+    async (_event, bucket: string, key: string, content: string): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await uploadContent(profileName, bucket, key, content);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Download content directly (for editor load)
+  ipcMain.handle(
+    's3:download-content',
+    async (_event, bucket: string, key: string): Promise<{ success: boolean; content?: string; error?: string }> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await downloadContent(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Get file size
+  ipcMain.handle(
+    's3:get-file-size',
+    async (_event, bucket: string, key: string): Promise<{ success: boolean; size?: number; error?: string }> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await getFileSize(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Open file dialog for selecting files to upload
+  ipcMain.handle('s3:show-open-dialog', async (): Promise<string[] | null> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      title: 'Select files to upload',
+    });
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths;
+  });
+
+  // Open the downloads folder in system explorer
+  ipcMain.handle('s3:open-downloads-folder', async (): Promise<void> => {
+    const downloadsPath = app.getPath('downloads');
+    await shell.openPath(downloadsPath);
+  });
+
+  // Show file in folder
+  ipcMain.handle('s3:show-file-in-folder', async (_event, filePath: string): Promise<void> => {
+    shell.showItemInFolder(filePath);
+  });
+}
+
+/**
+ * Helper to check if a file exists
+ */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await require('fs').promises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
