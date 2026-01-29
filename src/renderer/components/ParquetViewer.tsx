@@ -125,17 +125,20 @@ function ParquetViewer({
           throw new Error('Empty file content');
         }
 
-        // Create an AsyncBuffer-compatible object for hyparquet
-        const arrayBuffer = result.data.buffer.slice(
-          result.data.byteOffset,
-          result.data.byteOffset + result.data.byteLength
-        );
+        // Create a fresh ArrayBuffer from the data for hyparquet
+        // IMPORTANT: Electron IPC transfers Uint8Array data but the underlying buffer
+        // may not be directly usable for DataView operations. We explicitly create
+        // a new ArrayBuffer and copy the data to ensure it works correctly with hyparquet.
+        const dataLength = result.data.length;
+        const arrayBuffer = new ArrayBuffer(dataLength);
+        const uint8Data = new Uint8Array(arrayBuffer);
+        uint8Data.set(result.data);
 
         // Get metadata first to understand schema
         const metadata = await parquetMetadataAsync({
           byteLength: arrayBuffer.byteLength,
           slice: (start: number, end?: number) => {
-            const slice = new Uint8Array(arrayBuffer, start, end ? end - start : undefined);
+            const slice = uint8Data.slice(start, end);
             return Promise.resolve(slice);
           },
         });
