@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "EST-5962",
@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",
+    "@aws-sdk/credential-providers": "^3.978.0",
     "@monaco-editor/react": "^4.7.0",
     "hyparquet": "^1.24.1",
     "monaco-editor": "^0.55.1",

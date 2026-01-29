@@ -1,5 +1,12 @@
 import { ipcMain } from 'electron';
-import { loadAwsProfiles, getProfile, validateProfile, type AwsProfile } from '../services/awsCredentials';
+import {
+  loadAwsProfiles,
+  getProfile,
+  validateProfile,
+  getProfileTypeDescription,
+  type AwsProfile,
+  type ProfileType,
+} from '../services/awsCredentials';
 
 // Store the currently selected profile
 let currentProfile: string | null = null;
@@ -10,6 +17,8 @@ export interface ProfileInfo {
   hasCredentials: boolean;
   isValid: boolean;
   validationMessage?: string;
+  profileType: ProfileType;
+  profileTypeDescription: string;
 }
 
 export interface CredentialsState {
@@ -34,6 +43,8 @@ export function registerCredentialsIpc(): void {
         hasCredentials: profile.hasCredentials,
         isValid: validation.valid,
         validationMessage: validation.reason,
+        profileType: profile.profileType,
+        profileTypeDescription: getProfileTypeDescription(profile.profileType),
       };
     });
 
@@ -83,6 +94,15 @@ export function registerCredentialsIpc(): void {
       output: profile.output,
       sourceProfile: profile.sourceProfile,
       roleArn: profile.roleArn,
+      credentialSource: profile.credentialSource,
+      ssoStartUrl: profile.ssoStartUrl,
+      ssoRegion: profile.ssoRegion,
+      ssoAccountId: profile.ssoAccountId,
+      ssoRoleName: profile.ssoRoleName,
+      ssoSession: profile.ssoSession,
+      credentialProcess: profile.credentialProcess ? '(configured)' : undefined,
+      webIdentityTokenFile: profile.webIdentityTokenFile,
+      profileType: profile.profileType,
       hasCredentials: profile.hasCredentials,
     };
   });
@@ -100,6 +120,8 @@ export function registerCredentialsIpc(): void {
         hasCredentials: profile.hasCredentials,
         isValid: validation.valid,
         validationMessage: validation.reason,
+        profileType: profile.profileType,
+        profileTypeDescription: getProfileTypeDescription(profile.profileType),
       };
     });
 
