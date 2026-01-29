@@ -266,6 +266,12 @@ function TextEditor({
               theme="vs-dark"
               onMount={handleEditorMount}
               onChange={handleEditorChange}
+              loading={
+                <div className="text-editor-loading">
+                  <span className="loading-spinner"></span>
+                  <span>Loading editor...</span>
+                </div>
+              }
               options={{
                 minimap: { enabled: true },
                 fontSize: 13,
