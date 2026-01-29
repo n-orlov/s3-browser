@@ -18,6 +18,10 @@ export interface FileListProps {
   selectedFile: S3Object | null;
   onFilesDropped?: (filePaths: string[]) => void;
   onRefreshRequest?: () => void;
+  /** Key to auto-select after files are loaded (for URL navigation) */
+  pendingFileSelection?: string | null;
+  /** Callback when pending file selection is processed */
+  onPendingFileSelectionHandled?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -87,6 +91,8 @@ function FileList({
   selectedFile,
   onFilesDropped,
   onRefreshRequest,
+  pendingFileSelection,
+  onPendingFileSelectionHandled,
 }: FileListProps): React.ReactElement {
   const [items, setItems] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
@@ -156,6 +162,18 @@ function FileList({
     loadObjects(true);
     onSelectFile(null); // Clear selection on navigation
   }, [selectedBucket, currentPrefix, loadObjects, onSelectFile]);
+
+  // Handle pending file selection after items are loaded
+  useEffect(() => {
+    if (pendingFileSelection && items.length > 0 && !loading) {
+      const fileToSelect = items.find((item) => item.key === pendingFileSelection);
+      if (fileToSelect) {
+        onSelectFile(fileToSelect);
+      }
+      // Clear the pending selection regardless of whether we found the file
+      onPendingFileSelectionHandled?.();
+    }
+  }, [pendingFileSelection, items, loading, onSelectFile, onPendingFileSelectionHandled]);
 
   const handleScroll = useCallback(() => {
     if (!listContainerRef.current || loadingMore || !hasMore) return;
