@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
+import { registerCredentialsIpc } from './ipc/credentials';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -59,7 +60,11 @@ if (!gotTheLock) {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Register IPC handlers before creating window
+  registerCredentialsIpc();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
