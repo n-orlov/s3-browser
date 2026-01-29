@@ -1,7 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import App from '../renderer/App';
+import { AwsProfileProvider } from '../renderer/context/AwsProfileContext';
 import { mockElectronAPI } from './setup';
+
+// Helper to render App with the required context provider
+function renderApp() {
+  return render(
+    <AwsProfileProvider>
+      <App />
+    </AwsProfileProvider>
+  );
+}
 
 describe('App', () => {
   beforeEach(() => {
@@ -14,22 +24,22 @@ describe('App', () => {
   });
 
   it('renders the app header with title', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('S3 Browser');
   });
 
   it('renders the sidebar with Buckets section', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Buckets')).toBeInTheDocument();
   });
 
   it('renders the main content area with Files section', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Files')).toBeInTheDocument();
   });
 
   it('shows placeholder text when no profile is selected', () => {
-    render(<App />);
+    renderApp();
     // When no profile is selected, show profile selection prompt
     expect(screen.getByText('Select a profile to browse files')).toBeInTheDocument();
   });
@@ -41,7 +51,7 @@ describe('App', () => {
       defaultRegion: 'us-east-1',
     });
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('Select a bucket to view files')).toBeInTheDocument();
@@ -71,7 +81,7 @@ describe('App', () => {
         },
       });
 
-      render(<App />);
+      renderApp();
 
       await waitFor(() => {
         expect(screen.getByText('test-bucket')).toBeInTheDocument();
@@ -109,7 +119,7 @@ describe('App', () => {
         },
       });
 
-      render(<App />);
+      renderApp();
 
       // Select the bucket
       await waitFor(() => {
