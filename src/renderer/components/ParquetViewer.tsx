@@ -135,11 +135,13 @@ function ParquetViewer({
         uint8Data.set(result.data);
 
         // Get metadata first to understand schema
+        // IMPORTANT: hyparquet's slice callback expects ArrayBuffer, not Uint8Array
+        // Using Uint8Array.slice() returns a Uint8Array which causes DataView errors
         const metadata = await parquetMetadataAsync({
           byteLength: arrayBuffer.byteLength,
           slice: (start: number, end?: number) => {
-            const slice = uint8Data.slice(start, end);
-            return Promise.resolve(slice);
+            // Return ArrayBuffer slice, not Uint8Array slice
+            return Promise.resolve(arrayBuffer.slice(start, end));
           },
         });
 
