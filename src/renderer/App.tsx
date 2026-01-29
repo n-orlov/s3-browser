@@ -1,11 +1,14 @@
 import React from 'react';
+import ProfileSelector from './components/ProfileSelector';
 
 function App(): React.ReactElement {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>S3 Browser</h1>
-        <p>Lightweight S3 File Manager</p>
+        <div className="app-title">
+          <h1>S3 Browser</h1>
+        </div>
+        <ProfileSelector />
       </header>
       <main className="app-main">
         <aside className="sidebar">
