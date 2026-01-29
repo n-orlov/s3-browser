@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ProfileSelector from './components/ProfileSelector';
 import BucketTree from './components/BucketTree';
 import FileList, { type S3Object } from './components/FileList';
 import FileToolbar from './components/FileToolbar';
+import NavigationBar from './components/NavigationBar';
 import RenameDialog from './components/RenameDialog';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import OperationStatus from './components/OperationStatus';
@@ -30,6 +31,9 @@ function App(): React.ReactElement {
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
+  // Pending file selection (for URL navigation that points to a file)
+  const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
+
   // Reset navigation when profile changes
   useEffect(() => {
     setSelectedBucket(null);
@@ -46,6 +50,18 @@ function App(): React.ReactElement {
   const handleNavigate = useCallback((prefix: string) => {
     setCurrentPrefix(prefix);
     setSelectedFile(null);
+    setPendingFileSelection(null);
+  }, []);
+
+  // Handler for URL-based navigation (from NavigationBar)
+  const handleUrlNavigate = useCallback((bucket: string, prefix: string, selectKey?: string) => {
+    setSelectedBucket(bucket);
+    setCurrentPrefix(prefix);
+    setSelectedFile(null);
+    // If a specific file key was provided, set it as pending selection
+    setPendingFileSelection(selectKey || null);
+    // Trigger refresh to load the new location
+    window.dispatchEvent(new Event('s3-refresh-files'));
   }, []);
 
   const handleSelectFile = useCallback((file: S3Object | null) => {
@@ -104,6 +120,10 @@ function App(): React.ReactElement {
     window.dispatchEvent(new Event('s3-refresh-files'));
   }, []);
 
+  const handlePendingFileSelectionHandled = useCallback(() => {
+    setPendingFileSelection(null);
+  }, []);
+
   const handleFilesDropped = useCallback(
     (filePaths: string[]) => {
       if (!selectedBucket) return;
@@ -155,6 +175,11 @@ function App(): React.ReactElement {
               </div>
             )}
           </div>
+          <NavigationBar
+            currentBucket={selectedBucket}
+            currentPrefix={currentPrefix}
+            onNavigate={handleUrlNavigate}
+          />
           <FileToolbar
             selectedBucket={selectedBucket}
             currentPrefix={currentPrefix}
@@ -175,6 +200,8 @@ function App(): React.ReactElement {
               onSelectFile={handleSelectFile}
               selectedFile={selectedFile}
               onFilesDropped={handleFilesDropped}
+              pendingFileSelection={pendingFileSelection}
+              onPendingFileSelectionHandled={handlePendingFileSelectionHandled}
             />
           </div>
         </section>
