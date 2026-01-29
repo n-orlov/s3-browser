@@ -581,9 +581,14 @@ describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('S3 File Content Operations', () => 
       expect(metadata.schema).toBeDefined();
       expect(metadata.schema!.length).toBeGreaterThan(0);
 
-      // Test data reading
+      // Test data reading - use AsyncBuffer wrapper
+      const asyncBuffer = {
+        byteLength: arrayBuffer.byteLength,
+        slice: (start: number, end?: number) => Promise.resolve(arrayBuffer.slice(start, end)),
+      };
+
       await parquetRead({
-        file: arrayBuffer,
+        file: asyncBuffer,
         onComplete: (readData: Record<string, unknown[]>) => {
           const columns = Object.keys(readData);
           console.log(`Parquet data: ${columns.length} columns`);

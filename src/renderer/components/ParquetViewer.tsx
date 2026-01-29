@@ -158,9 +158,16 @@ function ParquetViewer({
         }
 
         // Read all data from parquet file
+        // Create an AsyncBuffer wrapper for hyparquet
+        // hyparquet expects an object with byteLength and slice that returns Promise<ArrayBuffer>
+        const asyncBuffer = {
+          byteLength: arrayBuffer.byteLength,
+          slice: (start: number, end?: number) => Promise.resolve(arrayBuffer.slice(start, end)),
+        };
+
         const rows: unknown[][] = [];
         await parquetRead({
-          file: arrayBuffer,
+          file: asyncBuffer,
           onComplete: (readData: Record<string, unknown[]>) => {
             // Convert column-oriented data to row-oriented
             const numRows = Object.values(readData)[0]?.length || 0;
