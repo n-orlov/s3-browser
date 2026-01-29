@@ -65,6 +65,19 @@ const mockElectronAPI = {
     getParentPrefix: vi.fn((key: string) => Promise.resolve('')),
     getKeyName: vi.fn((key: string) => Promise.resolve(key)),
     clearClient: vi.fn(() => Promise.resolve()),
+    // File operations
+    downloadFile: vi.fn(() => Promise.resolve({ success: true, localPath: '/downloads/file.txt' })),
+    uploadFile: vi.fn(() => Promise.resolve({ success: true })),
+    uploadFiles: vi.fn(() => Promise.resolve({ success: true, results: [] })),
+    deleteFile: vi.fn(() => Promise.resolve({ success: true })),
+    renameFile: vi.fn(() => Promise.resolve({ success: true })),
+    copyFile: vi.fn(() => Promise.resolve({ success: true })),
+    uploadContent: vi.fn(() => Promise.resolve({ success: true })),
+    downloadContent: vi.fn(() => Promise.resolve({ success: true, content: '' })),
+    getFileSize: vi.fn(() => Promise.resolve({ success: true, size: 0 })),
+    showOpenDialog: vi.fn(() => Promise.resolve(null)),
+    openDownloadsFolder: vi.fn(() => Promise.resolve()),
+    showFileInFolder: vi.fn(() => Promise.resolve()),
   },
 };
 
