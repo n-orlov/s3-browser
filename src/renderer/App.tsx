@@ -8,6 +8,7 @@ import RenameDialog from './components/RenameDialog';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
+import ParquetViewer from './components/ParquetViewer';
 import { useAwsProfiles } from './hooks/useAwsProfiles';
 import { useFileOperations } from './hooks/useFileOperations';
 
@@ -32,6 +33,7 @@ function App(): React.ReactElement {
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
@@ -115,6 +117,15 @@ function App(): React.ReactElement {
   const handleEditorSaved = useCallback(() => {
     // Optionally refresh file list to show updated modification time
     window.dispatchEvent(new Event('s3-refresh-files'));
+  }, []);
+
+  const handleViewParquet = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsParquetViewerOpen(true);
+  }, [selectedFile]);
+
+  const handleParquetViewerClose = useCallback(() => {
+    setIsParquetViewerOpen(false);
   }, []);
 
   const handleConfirmRename = useCallback(
@@ -205,6 +216,7 @@ function App(): React.ReactElement {
             onDelete={handleDelete}
             onRename={handleRename}
             onEdit={handleEdit}
+            onViewParquet={handleViewParquet}
             onRefresh={handleRefresh}
             disabled={isLoading}
           />
@@ -249,6 +261,17 @@ function App(): React.ReactElement {
           fileName={selectedFile.key.split('/').pop() || selectedFile.key}
           onClose={handleEditorClose}
           onSaved={handleEditorSaved}
+        />
+      )}
+
+      {/* Parquet Viewer */}
+      {isParquetViewerOpen && selectedBucket && selectedFile && (
+        <ParquetViewer
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          fileSize={selectedFile.size}
+          onClose={handleParquetViewerClose}
         />
       )}
     </div>
