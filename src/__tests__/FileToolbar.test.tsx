@@ -13,6 +13,7 @@ describe('FileToolbar', () => {
     onRename: vi.fn(),
     onEdit: vi.fn(),
     onViewParquet: vi.fn(),
+    onViewImage: vi.fn(),
     onRefresh: vi.fn(),
     disabled: false,
   };
@@ -295,6 +296,143 @@ describe('FileToolbar', () => {
 
       const parquetButton = screen.getByText('Parquet').closest('button');
       expect(parquetButton).toBeDisabled();
+    });
+  });
+
+  describe('Image button', () => {
+    it('disables Image button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      expect(imageButton).toBeDisabled();
+    });
+
+    it('disables Image button when a folder is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'folder/', isPrefix: true }}
+        />
+      );
+
+      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      expect(imageButton).toBeDisabled();
+    });
+
+    it('disables Image button for non-image files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.json', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      expect(imageButton).toBeDisabled();
+    });
+
+    it('enables Image button for PNG files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'image.png', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle('Preview image');
+      expect(imageButton).not.toBeDisabled();
+    });
+
+    it('enables Image button for JPG files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'photo.jpg', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle('Preview image');
+      expect(imageButton).not.toBeDisabled();
+    });
+
+    it('enables Image button for JPEG files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'photo.jpeg', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle('Preview image');
+      expect(imageButton).not.toBeDisabled();
+    });
+
+    it('enables Image button for GIF files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'animation.gif', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle('Preview image');
+      expect(imageButton).not.toBeDisabled();
+    });
+
+    it('enables Image button for WebP files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'image.webp', isPrefix: false }}
+        />
+      );
+
+      const imageButton = screen.getByTitle('Preview image');
+      expect(imageButton).not.toBeDisabled();
+    });
+
+    it('enables Image button for various image formats', () => {
+      const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
+
+      imageExtensions.forEach((ext) => {
+        const { unmount } = render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: `image.${ext}`, isPrefix: false }}
+          />
+        );
+
+        const imageButton = screen.getByTitle('Preview image');
+        expect(imageButton).not.toBeDisabled();
+        unmount();
+      });
+    });
+
+    it('calls onViewImage when Image button is clicked', () => {
+      const onViewImage = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'photo.png', isPrefix: false }}
+          onViewImage={onViewImage}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Image'));
+      expect(onViewImage).toHaveBeenCalled();
+    });
+
+    it('disables Image button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'photo.png', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const imageButton = screen.getByText('Image').closest('button');
+      expect(imageButton).toBeDisabled();
     });
   });
 });
