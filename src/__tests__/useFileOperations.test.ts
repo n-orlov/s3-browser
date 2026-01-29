@@ -1,0 +1,275 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useFileOperations } from '../renderer/hooks/useFileOperations';
+
+// Mock the window.electronAPI
+const mockElectronAPI = {
+  s3: {
+    downloadFile: vi.fn(),
+    uploadFiles: vi.fn(),
+    deleteFile: vi.fn(),
+    renameFile: vi.fn(),
+    showOpenDialog: vi.fn(),
+  },
+};
+
+// Declare global window type
+declare global {
+  interface Window {
+    electronAPI: typeof mockElectronAPI;
+  }
+}
+
+// Set up the mock before tests
+Object.defineProperty(window, 'electronAPI', {
+  value: mockElectronAPI,
+  writable: true,
+});
+
+describe('useFileOperations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('initial state', () => {
+    it('should have empty operations array', () => {
+      const { result } = renderHook(() => useFileOperations());
+      expect(result.current.operations).toEqual([]);
+    });
+
+    it('should have isLoading as false', () => {
+      const { result } = renderHook(() => useFileOperations());
+      expect(result.current.isLoading).toBe(false);
+    });
+  });
+
+  describe('downloadFile', () => {
+    it('should add operation and update status on success', async () => {
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: true, localPath: '/downloads/file.txt' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'folder/file.txt');
+      });
+
+      // Operation should be added with completed status
+      expect(result.current.operations).toHaveLength(1);
+      expect(result.current.operations[0].type).toBe('download');
+      expect(result.current.operations[0].fileName).toBe('file.txt');
+      expect(result.current.operations[0].status).toBe('completed');
+    });
+
+    it('should handle download error', async () => {
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: false, error: 'Access denied' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'file.txt');
+      });
+
+      expect(result.current.operations[0].status).toBe('error');
+      expect(result.current.operations[0].error).toBe('Access denied');
+    });
+  });
+
+  describe('uploadFiles', () => {
+    it('should show file dialog when no paths provided', async () => {
+      mockElectronAPI.s3.showOpenDialog.mockResolvedValue(['/path/to/file1.txt', '/path/to/file2.txt']);
+      mockElectronAPI.s3.uploadFiles.mockResolvedValue({
+        success: true,
+        results: [
+          { path: '/path/to/file1.txt', success: true },
+          { path: '/path/to/file2.txt', success: true },
+        ],
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.uploadFiles('test-bucket', 'prefix/');
+      });
+
+      expect(mockElectronAPI.s3.showOpenDialog).toHaveBeenCalled();
+      expect(result.current.operations).toHaveLength(2);
+    });
+
+    it('should use provided file paths', async () => {
+      mockElectronAPI.s3.uploadFiles.mockResolvedValue({
+        success: true,
+        results: [{ path: '/my/file.txt', success: true }],
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.uploadFiles('test-bucket', 'prefix/', ['/my/file.txt']);
+      });
+
+      expect(mockElectronAPI.s3.showOpenDialog).not.toHaveBeenCalled();
+      expect(result.current.operations).toHaveLength(1);
+      expect(result.current.operations[0].status).toBe('completed');
+    });
+
+    it('should handle cancelled file dialog', async () => {
+      mockElectronAPI.s3.showOpenDialog.mockResolvedValue(null);
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.uploadFiles('test-bucket', 'prefix/');
+      });
+
+      expect(result.current.operations).toHaveLength(0);
+    });
+
+    it('should handle partial upload failure', async () => {
+      mockElectronAPI.s3.uploadFiles.mockResolvedValue({
+        success: false,
+        results: [
+          { path: '/path/file1.txt', success: true },
+          { path: '/path/file2.txt', success: false, error: 'Access denied' },
+        ],
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.uploadFiles('test-bucket', '', ['/path/file1.txt', '/path/file2.txt']);
+      });
+
+      expect(result.current.operations).toHaveLength(2);
+      expect(result.current.operations[0].status).toBe('completed');
+      expect(result.current.operations[1].status).toBe('error');
+      expect(result.current.operations[1].error).toBe('Access denied');
+    });
+  });
+
+  describe('deleteFile', () => {
+    it('should return true on success', async () => {
+      mockElectronAPI.s3.deleteFile.mockResolvedValue({ success: true });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: boolean = false;
+      await act(async () => {
+        deleteResult = await result.current.deleteFile('test-bucket', 'file.txt');
+      });
+
+      expect(deleteResult).toBe(true);
+    });
+
+    it('should return false on failure', async () => {
+      mockElectronAPI.s3.deleteFile.mockResolvedValue({ success: false, error: 'Access denied' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: boolean = true;
+      await act(async () => {
+        deleteResult = await result.current.deleteFile('test-bucket', 'file.txt');
+      });
+
+      expect(deleteResult).toBe(false);
+    });
+
+    it('should set isLoading during operation', async () => {
+      let resolvePromise: (value: { success: boolean }) => void;
+      mockElectronAPI.s3.deleteFile.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        })
+      );
+
+      const { result } = renderHook(() => useFileOperations());
+
+      expect(result.current.isLoading).toBe(false);
+
+      let deletePromise: Promise<boolean>;
+      act(() => {
+        deletePromise = result.current.deleteFile('test-bucket', 'file.txt');
+      });
+
+      expect(result.current.isLoading).toBe(true);
+
+      await act(async () => {
+        resolvePromise!({ success: true });
+        await deletePromise;
+      });
+
+      expect(result.current.isLoading).toBe(false);
+    });
+  });
+
+  describe('renameFile', () => {
+    it('should return true on success', async () => {
+      mockElectronAPI.s3.renameFile.mockResolvedValue({ success: true });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let renameResult: boolean = false;
+      await act(async () => {
+        renameResult = await result.current.renameFile('test-bucket', 'old.txt', 'new.txt');
+      });
+
+      expect(renameResult).toBe(true);
+    });
+
+    it('should return false on failure', async () => {
+      mockElectronAPI.s3.renameFile.mockResolvedValue({ success: false, error: 'Access denied' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let renameResult: boolean = true;
+      await act(async () => {
+        renameResult = await result.current.renameFile('test-bucket', 'old.txt', 'new.txt');
+      });
+
+      expect(renameResult).toBe(false);
+    });
+  });
+
+  describe('dismissOperation', () => {
+    it('should remove operation from list', async () => {
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: false, error: 'Error' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'file.txt');
+      });
+
+      expect(result.current.operations).toHaveLength(1);
+      const opId = result.current.operations[0].id;
+
+      act(() => {
+        result.current.dismissOperation(opId);
+      });
+
+      expect(result.current.operations).toHaveLength(0);
+    });
+  });
+
+  describe('clearCompleted', () => {
+    it('should remove completed and errored operations', async () => {
+      mockElectronAPI.s3.downloadFile
+        .mockResolvedValueOnce({ success: true, localPath: '/downloads/file1.txt' })
+        .mockResolvedValueOnce({ success: false, error: 'Error' });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'file1.txt');
+        await result.current.downloadFile('test-bucket', 'file2.txt');
+      });
+
+      expect(result.current.operations).toHaveLength(2);
+
+      act(() => {
+        result.current.clearCompleted();
+      });
+
+      expect(result.current.operations).toHaveLength(0);
+    });
+  });
+});

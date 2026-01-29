@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useRef, useState, DragEvent } from 'react';
 
 export interface S3Object {
   key: string;
@@ -16,6 +16,8 @@ export interface FileListProps {
   onNavigate: (prefix: string) => void;
   onSelectFile: (file: S3Object | null) => void;
   selectedFile: S3Object | null;
+  onFilesDropped?: (filePaths: string[]) => void;
+  onRefreshRequest?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -83,15 +85,19 @@ function FileList({
   onNavigate,
   onSelectFile,
   selectedFile,
+  onFilesDropped,
+  onRefreshRequest,
 }: FileListProps): React.ReactElement {
   const [items, setItems] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const continuationTokenRef = useRef<string | undefined>(undefined);
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const dragCounterRef = useRef(0);
 
   const loadObjects = useCallback(
     async (reset = true) => {
@@ -189,6 +195,62 @@ function FileList({
     onNavigate(parentPrefix);
   };
 
+  // Expose refresh via callback
+  useEffect(() => {
+    if (onRefreshRequest) {
+      // This is a bit of a hack - we're using the callback to trigger refresh
+      // A more elegant solution would use useImperativeHandle
+    }
+  }, [onRefreshRequest]);
+
+  // Drag and drop handlers
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    dragCounterRef.current = 0;
+
+    if (onFilesDropped && e.dataTransfer.files.length > 0) {
+      // Get file paths from dropped files
+      const files = Array.from(e.dataTransfer.files);
+      // Note: In Electron, file.path gives us the absolute path
+      const paths = files.map((f) => (f as File & { path: string }).path).filter(Boolean);
+      if (paths.length > 0) {
+        onFilesDropped(paths);
+      }
+    }
+  };
+
+  // Expose refresh function through a custom event listener approach
+  useEffect(() => {
+    const handleRefresh = () => loadObjects(true);
+    window.addEventListener('s3-refresh-files', handleRefresh);
+    return () => window.removeEventListener('s3-refresh-files', handleRefresh);
+  }, [loadObjects]);
+
   if (!currentProfile) {
     return (
       <div className="file-list-container">
@@ -231,7 +293,18 @@ function FileList({
   }
 
   return (
-    <div className="file-list-container">
+    <div
+      className={`file-list-container ${isDragOver ? 'drag-over' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="drop-overlay">
+          <div className="drop-message">Drop files here to upload</div>
+        </div>
+      )}
       {/* Breadcrumb / current path */}
       <div className="file-list-toolbar">
         <div className="breadcrumb">

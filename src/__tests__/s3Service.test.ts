@@ -23,8 +23,65 @@ vi.mock('@aws-sdk/client-s3', () => {
     ListObjectsV2Command: vi.fn().mockImplementation(function (input: unknown) {
       return { input, type: 'ListObjectsV2' };
     }),
+    GetObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'GetObject' };
+    }),
+    PutObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'PutObject' };
+    }),
+    DeleteObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'DeleteObject' };
+    }),
+    CopyObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'CopyObject' };
+    }),
+    HeadObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'HeadObject' };
+    }),
   };
 });
+
+// Mock fs module - need to mock the specific imports used by s3Service
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal() as object;
+  return {
+    ...actual,
+    default: {
+      promises: {
+        mkdir: vi.fn().mockResolvedValue(undefined),
+        stat: vi.fn().mockResolvedValue({ size: 1024 }),
+        readFile: vi.fn().mockResolvedValue(Buffer.from('test content')),
+        unlink: vi.fn().mockResolvedValue(undefined),
+        access: vi.fn().mockRejectedValue(new Error('ENOENT')),
+      },
+      createWriteStream: vi.fn().mockReturnValue({
+        on: vi.fn(),
+        write: vi.fn(),
+        end: vi.fn(),
+      }),
+    },
+    promises: {
+      mkdir: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ size: 1024 }),
+      readFile: vi.fn().mockResolvedValue(Buffer.from('test content')),
+      unlink: vi.fn().mockResolvedValue(undefined),
+      access: vi.fn().mockRejectedValue(new Error('ENOENT')),
+    },
+    createWriteStream: vi.fn().mockReturnValue({
+      on: vi.fn(),
+      write: vi.fn(),
+      end: vi.fn(),
+    }),
+  };
+});
+
+// Mock stream/promises - need to include default export
+vi.mock('stream/promises', () => ({
+  default: {
+    pipeline: vi.fn().mockResolvedValue(undefined),
+  },
+  pipeline: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock the awsCredentials module
 vi.mock('../main/services/awsCredentials', () => ({
@@ -41,9 +98,25 @@ import {
   parseS3Url,
   getParentPrefix,
   getKeyName,
+  uploadContent,
+  downloadContent,
+  deleteFile,
+  renameFile,
+  copyFile,
+  getFileSize,
 } from '../main/services/s3Service';
-import { S3Client, ListBucketsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  ListBucketsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getProfile } from '../main/services/awsCredentials';
+import { Readable } from 'stream';
 
 describe('s3Service', () => {
   beforeEach(() => {
@@ -631,6 +704,301 @@ describe('s3Service', () => {
 
     it('should return folder name for single folder', () => {
       expect(getKeyName('folder/')).toBe('folder');
+    });
+  });
+
+  describe('uploadContent', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should upload string content to S3', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await uploadContent('default', 'test-bucket', 'file.txt', 'Hello World');
+
+      expect(result.success).toBe(true);
+      expect(PutObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'file.txt',
+        })
+      );
+    });
+
+    it('should set correct content type for JSON files', async () => {
+      mockSend.mockResolvedValue({});
+
+      await uploadContent('default', 'test-bucket', 'data.json', '{"key":"value"}');
+
+      expect(PutObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ContentType: 'application/json',
+        })
+      );
+    });
+
+    it('should set correct content type for YAML files', async () => {
+      mockSend.mockResolvedValue({});
+
+      await uploadContent('default', 'test-bucket', 'config.yaml', 'key: value');
+
+      expect(PutObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ContentType: 'text/yaml',
+        })
+      );
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValue(new Error('Upload failed'));
+
+      const result = await uploadContent('default', 'test-bucket', 'file.txt', 'content');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Upload failed');
+    });
+  });
+
+  describe('downloadContent', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should download content from S3', async () => {
+      const mockStream = Readable.from([Buffer.from('Hello World')]);
+      mockSend.mockResolvedValue({ Body: mockStream });
+
+      const result = await downloadContent('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.content).toBe('Hello World');
+    });
+
+    it('should return error when body is empty', async () => {
+      mockSend.mockResolvedValue({ Body: null });
+
+      const result = await downloadContent('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Empty response body');
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValue(new Error('Download failed'));
+
+      const result = await downloadContent('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Download failed');
+    });
+  });
+
+  describe('deleteFile', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should delete file from S3', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await deleteFile('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(DeleteObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'file.txt',
+        })
+      );
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValue(new Error('Access denied'));
+
+      const result = await deleteFile('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Access denied');
+    });
+  });
+
+  describe('renameFile', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should copy and delete the original file', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await renameFile('default', 'test-bucket', 'old.txt', 'new.txt');
+
+      expect(result.success).toBe(true);
+      expect(CopyObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'new.txt',
+          CopySource: encodeURIComponent('test-bucket/old.txt'),
+        })
+      );
+      expect(DeleteObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'old.txt',
+        })
+      );
+    });
+
+    it('should preserve path when renaming nested file', async () => {
+      mockSend.mockResolvedValue({});
+
+      await renameFile('default', 'test-bucket', 'folder/old.txt', 'folder/new.txt');
+
+      expect(CopyObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Key: 'folder/new.txt',
+        })
+      );
+    });
+
+    it('should return error on copy failure', async () => {
+      mockSend.mockRejectedValue(new Error('Copy failed'));
+
+      const result = await renameFile('default', 'test-bucket', 'old.txt', 'new.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Copy failed');
+    });
+  });
+
+  describe('copyFile', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should copy file within same bucket', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await copyFile(
+        'default',
+        'test-bucket',
+        'source.txt',
+        'test-bucket',
+        'destination.txt'
+      );
+
+      expect(result.success).toBe(true);
+      expect(CopyObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'destination.txt',
+          CopySource: encodeURIComponent('test-bucket/source.txt'),
+        })
+      );
+    });
+
+    it('should copy file to different bucket', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await copyFile(
+        'default',
+        'source-bucket',
+        'file.txt',
+        'dest-bucket',
+        'file.txt'
+      );
+
+      expect(result.success).toBe(true);
+      expect(CopyObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'dest-bucket',
+          CopySource: encodeURIComponent('source-bucket/file.txt'),
+        })
+      );
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValue(new Error('Bucket not found'));
+
+      const result = await copyFile(
+        'default',
+        'source-bucket',
+        'file.txt',
+        'nonexistent-bucket',
+        'file.txt'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Bucket not found');
+    });
+  });
+
+  describe('getFileSize', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should return file size', async () => {
+      mockSend.mockResolvedValue({ ContentLength: 1234 });
+
+      const result = await getFileSize('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.size).toBe(1234);
+      expect(HeadObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'file.txt',
+        })
+      );
+    });
+
+    it('should return 0 for undefined ContentLength', async () => {
+      mockSend.mockResolvedValue({});
+
+      const result = await getFileSize('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.size).toBe(0);
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValue(new Error('Not found'));
+
+      const result = await getFileSize('default', 'test-bucket', 'nonexistent.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Not found');
     });
   });
 });
