@@ -567,4 +567,252 @@ describe('FileList', () => {
       expect(onNavigate).toHaveBeenCalledWith('keyboard-folder/');
     });
   });
+
+  describe('sorting and filtering', () => {
+    beforeEach(() => {
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: [
+            { key: 'alpha.txt', size: 500, lastModified: new Date('2024-01-15'), isPrefix: false },
+            { key: 'beta.json', size: 1000, lastModified: new Date('2024-01-10'), isPrefix: false },
+            { key: 'gamma.png', size: 2000, lastModified: new Date('2024-01-20'), isPrefix: false },
+          ],
+          prefixes: [
+            { key: 'folder/', size: 0, isPrefix: true },
+          ],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: '',
+          keyCount: 4,
+        },
+      });
+    });
+
+    it('renders filter controls', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Quick filter...')).toBeInTheDocument();
+        expect(screen.getByLabelText('Filter by type')).toBeInTheDocument();
+      });
+    });
+
+    it('renders sortable column headers', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTitle('Sort by name')).toBeInTheDocument();
+        expect(screen.getByTitle('Sort by size')).toBeInTheDocument();
+        expect(screen.getByTitle('Sort by date')).toBeInTheDocument();
+      });
+    });
+
+    it('filters by search query', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText('Quick filter...');
+      fireEvent.change(searchInput, { target: { value: 'alpha' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+        expect(screen.queryByText('beta.json')).not.toBeInTheDocument();
+        expect(screen.queryByText('gamma.png')).not.toBeInTheDocument();
+      });
+    });
+
+    it('filters by file type', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      const typeFilter = screen.getByLabelText('Filter by type');
+      fireEvent.change(typeFilter, { target: { value: 'images' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('gamma.png')).toBeInTheDocument();
+        expect(screen.queryByText('alpha.txt')).not.toBeInTheDocument();
+        expect(screen.queryByText('beta.json')).not.toBeInTheDocument();
+        // Folders should still be visible
+        expect(screen.getByText('folder')).toBeInTheDocument();
+      });
+    });
+
+    it('sorts by clicking column header', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      // Click on Size header to sort by size ascending
+      const sizeHeader = screen.getByTitle('Sort by size');
+      fireEvent.click(sizeHeader);
+
+      // Files should now be sorted by size (smallest first, after folder)
+      const rows = screen.getAllByRole('row').slice(1); // Skip header row
+      const cellTexts = rows.map(row => row.querySelector('.file-name')?.textContent);
+
+      // folder comes first, then files by size: alpha (500), beta (1000), gamma (2000)
+      expect(cellTexts[0]).toBe('folder');
+      expect(cellTexts[1]).toBe('alpha.txt');
+      expect(cellTexts[2]).toBe('beta.json');
+      expect(cellTexts[3]).toBe('gamma.png');
+    });
+
+    it('shows item count', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('4 items')).toBeInTheDocument();
+      });
+    });
+
+    it('shows filtered count when filtering', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText('Quick filter...');
+      fireEvent.change(searchInput, { target: { value: 'alpha' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('1 of 4 items')).toBeInTheDocument();
+      });
+    });
+
+    it('shows no results message when filter matches nothing', async () => {
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      const searchInput = screen.getByPlaceholderText('Quick filter...');
+      fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('No files match your filter')).toBeInTheDocument();
+      });
+    });
+
+    it('clears search when navigating to new location', async () => {
+      const { rerender } = render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix=""
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha.txt')).toBeInTheDocument();
+      });
+
+      // Type in search
+      const searchInput = screen.getByPlaceholderText('Quick filter...');
+      fireEvent.change(searchInput, { target: { value: 'test' } });
+      expect(searchInput).toHaveValue('test');
+
+      // Navigate to new prefix
+      rerender(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="folder/"
+          onNavigate={vi.fn()}
+          onSelectFile={vi.fn()}
+          selectedFile={null}
+        />
+      );
+
+      // Search should be cleared
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Quick filter...')).toHaveValue('');
+      });
+    });
+  });
 });
