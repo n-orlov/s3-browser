@@ -9,6 +9,7 @@ import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
+import ImagePreview from './components/ImagePreview';
 import { useAwsProfiles } from './hooks/useAwsProfiles';
 import { useFileOperations } from './hooks/useFileOperations';
 
@@ -34,6 +35,7 @@ function App(): React.ReactElement {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
@@ -128,6 +130,15 @@ function App(): React.ReactElement {
     setIsParquetViewerOpen(false);
   }, []);
 
+  const handleViewImage = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsImagePreviewOpen(true);
+  }, [selectedFile]);
+
+  const handleImagePreviewClose = useCallback(() => {
+    setIsImagePreviewOpen(false);
+  }, []);
+
   const handleConfirmRename = useCallback(
     async (newName: string) => {
       if (!selectedBucket || !selectedFile) return;
@@ -217,6 +228,7 @@ function App(): React.ReactElement {
             onRename={handleRename}
             onEdit={handleEdit}
             onViewParquet={handleViewParquet}
+            onViewImage={handleViewImage}
             onRefresh={handleRefresh}
             disabled={isLoading}
           />
@@ -272,6 +284,17 @@ function App(): React.ReactElement {
           fileName={selectedFile.key.split('/').pop() || selectedFile.key}
           fileSize={selectedFile.size}
           onClose={handleParquetViewerClose}
+        />
+      )}
+
+      {/* Image Preview */}
+      {isImagePreviewOpen && selectedBucket && selectedFile && (
+        <ImagePreview
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          fileSize={selectedFile.size}
+          onClose={handleImagePreviewClose}
         />
       )}
     </div>
