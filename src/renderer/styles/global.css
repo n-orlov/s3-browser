@@ -1702,3 +1702,125 @@ body {
   color: var(--text-secondary);
   flex-shrink: 0;
 }
+
+/* File List Controls */
+.file-list-controls {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.file-list-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-list-search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 8px;
+  flex: 1;
+  min-width: 0;
+  max-width: 300px;
+  transition: border-color 0.15s ease;
+}
+
+.file-list-search-wrapper:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.file-list-search-icon {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-list-search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 6px 0;
+  outline: none;
+  min-width: 0;
+}
+
+.file-list-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.file-list-search-input:disabled {
+  opacity: 0.5;
+}
+
+.file-list-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.file-list-search-clear:hover {
+  background-color: var(--border);
+  color: var(--text-primary);
+}
+
+.file-list-type-filter {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  min-width: 130px;
+}
+
+.file-list-type-filter:hover {
+  border-color: var(--accent);
+}
+
+.file-list-type-filter:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.file-list-type-filter:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-list-type-filter option {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.file-list-showing-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Sortable Headers */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.sortable-header:hover {
+  background-color: var(--bg-tertiary);
+}
