@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
+import NetworkStatusBanner from './components/NetworkStatusBanner';
 import ProfileSelector from './components/ProfileSelector';
 import BucketTree from './components/BucketTree';
 import FileList, { type S3Object } from './components/FileList';
@@ -181,14 +183,16 @@ function App(): React.ReactElement {
   };
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="app-title">
-          <h1>S3 Browser</h1>
-        </div>
-        <ProfileSelector />
-      </header>
-      <main className="app-main">
+    <ErrorBoundary>
+      <div className="app">
+        <NetworkStatusBanner />
+        <header className="app-header">
+          <div className="app-title">
+            <h1>S3 Browser</h1>
+          </div>
+          <ProfileSelector />
+        </header>
+        <main className="app-main">
         <aside className="sidebar">
           <div className="sidebar-header">
             <h2>Buckets</h2>
@@ -297,7 +301,8 @@ function App(): React.ReactElement {
           onClose={handleImagePreviewClose}
         />
       )}
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
 
