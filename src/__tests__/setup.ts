@@ -75,6 +75,7 @@ const mockElectronAPI = {
     uploadContent: vi.fn(() => Promise.resolve({ success: true })),
     downloadContent: vi.fn(() => Promise.resolve({ success: true, content: '' })),
     getFileSize: vi.fn(() => Promise.resolve({ success: true, size: 0 })),
+    downloadBinaryContent: vi.fn(() => Promise.resolve({ success: true, data: new Uint8Array() })),
     showOpenDialog: vi.fn(() => Promise.resolve(null)),
     openDownloadsFolder: vi.fn(() => Promise.resolve()),
     showFileInFolder: vi.fn(() => Promise.resolve()),

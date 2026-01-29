@@ -12,6 +12,7 @@ import {
   uploadFile,
   uploadContent,
   downloadContent,
+  downloadBinaryContent,
   deleteFile,
   renameFile,
   copyFile,
@@ -387,6 +388,25 @@ export function registerS3Ipc(): void {
       try {
         const profileName = getCurrentProfile();
         return await getFileSize(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Download binary content (for parquet files)
+  ipcMain.handle(
+    's3:download-binary-content',
+    async (_event, bucket: string, key: string): Promise<{ success: boolean; data?: Uint8Array; error?: string }> => {
+      try {
+        const profileName = getCurrentProfile();
+        const result = await downloadBinaryContent(profileName, bucket, key);
+        if (result.success && result.data) {
+          // Convert Buffer to Uint8Array for IPC transfer
+          return { success: true, data: new Uint8Array(result.data) };
+        }
+        return { success: false, error: result.error };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };

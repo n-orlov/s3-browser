@@ -12,6 +12,7 @@ export interface FileToolbarProps {
   onDelete: () => void;
   onRename: () => void;
   onEdit: () => void;
+  onViewParquet: () => void;
   onRefresh: () => void;
   disabled?: boolean;
 }
@@ -37,6 +38,14 @@ function isEditableFile(key: string): boolean {
   return editableExtensions.includes(ext) || key.endsWith('file'); // e.g., Dockerfile, Makefile
 }
 
+/**
+ * Determine if a file is a parquet file
+ */
+function isParquetFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  return ext === 'parquet';
+}
+
 function FileToolbar({
   selectedBucket,
   currentPrefix,
@@ -46,11 +55,13 @@ function FileToolbar({
   onDelete,
   onRename,
   onEdit,
+  onViewParquet,
   onRefresh,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
   const canEdit = hasSelection && isEditableFile(selectedFile!.key);
+  const canViewParquet = hasSelection && isParquetFile(selectedFile!.key);
 
   return (
     <div className="file-toolbar">
@@ -80,6 +91,15 @@ function FileToolbar({
       >
         <span className="toolbar-icon">E</span>
         <span className="toolbar-label">Edit</span>
+      </button>
+      <button
+        className="toolbar-btn"
+        onClick={onViewParquet}
+        disabled={disabled || !canViewParquet}
+        title={canViewParquet ? 'View parquet file' : 'Select a parquet file to view'}
+      >
+        <span className="toolbar-icon">P</span>
+        <span className="toolbar-label">Parquet</span>
       </button>
       <button
         className="toolbar-btn"
