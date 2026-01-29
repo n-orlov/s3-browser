@@ -13,6 +13,7 @@ export interface FileToolbarProps {
   onRename: () => void;
   onEdit: () => void;
   onViewParquet: () => void;
+  onViewImage: () => void;
   onRefresh: () => void;
   disabled?: boolean;
 }
@@ -46,6 +47,15 @@ function isParquetFile(key: string): boolean {
   return ext === 'parquet';
 }
 
+/**
+ * Determine if a file is an image that can be previewed
+ */
+function isImageFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
+  return imageExtensions.includes(ext);
+}
+
 function FileToolbar({
   selectedBucket,
   currentPrefix,
@@ -56,12 +66,14 @@ function FileToolbar({
   onRename,
   onEdit,
   onViewParquet,
+  onViewImage,
   onRefresh,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
   const canEdit = hasSelection && isEditableFile(selectedFile!.key);
   const canViewParquet = hasSelection && isParquetFile(selectedFile!.key);
+  const canViewImage = hasSelection && isImageFile(selectedFile!.key);
 
   return (
     <div className="file-toolbar">
@@ -100,6 +112,15 @@ function FileToolbar({
       >
         <span className="toolbar-icon">P</span>
         <span className="toolbar-label">Parquet</span>
+      </button>
+      <button
+        className="toolbar-btn"
+        onClick={onViewImage}
+        disabled={disabled || !canViewImage}
+        title={canViewImage ? 'Preview image' : 'Select an image file to preview'}
+      >
+        <span className="toolbar-icon">I</span>
+        <span className="toolbar-label">Image</span>
       </button>
       <button
         className="toolbar-btn"
