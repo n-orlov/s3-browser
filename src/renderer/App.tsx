@@ -12,6 +12,7 @@ import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
 import ImagePreview from './components/ImagePreview';
+import { ToastContainer, useToasts } from './components/Toast';
 import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
 
@@ -26,6 +27,7 @@ function App(): React.ReactElement {
     renameFile,
     dismissOperation,
   } = useFileOperations();
+  const { toasts, addToast, removeToast } = useToasts();
 
   // Navigation state
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
@@ -141,6 +143,29 @@ function App(): React.ReactElement {
     setIsImagePreviewOpen(false);
   }, []);
 
+  const handleCopyUrl = useCallback(async () => {
+    if (!selectedBucket || !selectedFile || selectedFile.isPrefix) return;
+
+    const s3Url = `s3://${selectedBucket}/${selectedFile.key}`;
+    try {
+      await navigator.clipboard.writeText(s3Url);
+      addToast({
+        type: 'success',
+        title: 'URL Copied',
+        message: s3Url,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error('Failed to copy URL to clipboard:', err);
+      addToast({
+        type: 'error',
+        title: 'Copy Failed',
+        message: 'Failed to copy URL to clipboard',
+        duration: 5000,
+      });
+    }
+  }, [selectedBucket, selectedFile, addToast]);
+
   const handleConfirmRename = useCallback(
     async (newName: string) => {
       if (!selectedBucket || !selectedFile) return;
@@ -233,6 +258,7 @@ function App(): React.ReactElement {
             onEdit={handleEdit}
             onViewParquet={handleViewParquet}
             onViewImage={handleViewImage}
+            onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
             disabled={isLoading}
           />
@@ -301,6 +327,9 @@ function App(): React.ReactElement {
           onClose={handleImagePreviewClose}
         />
       )}
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </div>
     </ErrorBoundary>
   );

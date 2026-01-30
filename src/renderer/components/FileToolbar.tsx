@@ -14,6 +14,7 @@ export interface FileToolbarProps {
   onEdit: () => void;
   onViewParquet: () => void;
   onViewImage: () => void;
+  onCopyUrl: () => void;
   onRefresh: () => void;
   disabled?: boolean;
 }
@@ -67,6 +68,7 @@ function FileToolbar({
   onEdit,
   onViewParquet,
   onViewImage,
+  onCopyUrl,
   onRefresh,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
@@ -121,6 +123,15 @@ function FileToolbar({
       >
         <span className="toolbar-icon">I</span>
         <span className="toolbar-label">Image</span>
+      </button>
+      <button
+        className="toolbar-btn toolbar-btn-copy"
+        onClick={onCopyUrl}
+        disabled={disabled || !hasSelection}
+        title={hasSelection ? 'Copy S3 URL to clipboard' : 'Select a file to copy URL'}
+      >
+        <span className="toolbar-icon">C</span>
+        <span className="toolbar-label">Copy URL</span>
       </button>
       <button
         className="toolbar-btn"
