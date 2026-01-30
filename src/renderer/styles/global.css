@@ -990,6 +990,32 @@ input, textarea {
   font-size: 12px;
 }
 
+/* New Item Dialog Preview */
+.new-item-preview {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.new-item-preview .preview-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.new-item-preview .preview-path {
+  display: block;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

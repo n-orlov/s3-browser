@@ -234,6 +234,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       key: string
     ): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> =>
       ipcRenderer.invoke('s3:get-object-metadata', bucket, key),
+    createFile: (bucket: string, key: string): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:create-file', bucket, key),
+    createFolder: (bucket: string, prefix: string): Promise<FileOperationResult> =>
+      ipcRenderer.invoke('s3:create-folder', bucket, prefix),
   },
 
   // Direct top-level access to getObjectMetadata for PropertiesDialog
@@ -320,6 +324,8 @@ declare global {
           bucket: string,
           key: string
         ) => Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }>;
+        createFile: (bucket: string, key: string) => Promise<FileOperationResult>;
+        createFolder: (bucket: string, prefix: string) => Promise<FileOperationResult>;
       };
       getObjectMetadata: (
         bucket: string,

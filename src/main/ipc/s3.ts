@@ -19,6 +19,8 @@ import {
   copyFile,
   getFileSize,
   getObjectMetadata,
+  createEmptyFile,
+  createFolder,
   type S3Bucket,
   type S3Object,
   type ListObjectsResult,
@@ -464,6 +466,34 @@ export function registerS3Ipc(): void {
       try {
         const profileName = getCurrentProfile();
         return await getObjectMetadata(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Create an empty file in S3
+  ipcMain.handle(
+    's3:create-file',
+    async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await createEmptyFile(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Create a folder in S3
+  ipcMain.handle(
+    's3:create-folder',
+    async (_event, bucket: string, prefix: string): Promise<FileOperationResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await createFolder(profileName, bucket, prefix);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };

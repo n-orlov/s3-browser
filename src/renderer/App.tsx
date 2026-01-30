@@ -9,6 +9,7 @@ import NavigationBar from './components/NavigationBar';
 import RenameDialog from './components/RenameDialog';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import PropertiesDialog from './components/PropertiesDialog';
+import NewItemDialog, { type NewItemType } from './components/NewItemDialog';
 import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
@@ -65,6 +66,8 @@ function App(): React.ReactElement {
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
+  const [isNewItemOpen, setIsNewItemOpen] = useState(false);
+  const [newItemType, setNewItemType] = useState<NewItemType>('file');
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
@@ -313,6 +316,54 @@ function App(): React.ReactElement {
     window.dispatchEvent(new Event('s3-refresh-files'));
   }, []);
 
+  const handleNewFile = useCallback(() => {
+    setNewItemType('file');
+    setIsNewItemOpen(true);
+  }, []);
+
+  const handleNewFolder = useCallback(() => {
+    setNewItemType('folder');
+    setIsNewItemOpen(true);
+  }, []);
+
+  const handleConfirmNewItem = useCallback(
+    async (name: string) => {
+      if (!selectedBucket) return;
+      setIsNewItemOpen(false);
+
+      const key = currentPrefix ? `${currentPrefix}${name}` : name;
+
+      let result;
+      if (newItemType === 'file') {
+        result = await window.electronAPI.s3.createFile(selectedBucket, key);
+      } else {
+        result = await window.electronAPI.s3.createFolder(selectedBucket, key);
+      }
+
+      if (result.success) {
+        addToast({
+          type: 'success',
+          title: newItemType === 'file' ? 'File Created' : 'Folder Created',
+          message: name,
+          duration: 3000,
+        });
+        // Refresh the file list
+        window.dispatchEvent(new Event('s3-refresh-files'));
+        // Set pending selection to auto-select the new item
+        const newKey = newItemType === 'folder' ? (key.endsWith('/') ? key : `${key}/`) : key;
+        setPendingFileSelection(newKey);
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Creation Failed',
+          message: result.error || 'Unknown error',
+          duration: 5000,
+        });
+      }
+    },
+    [selectedBucket, currentPrefix, newItemType, addToast]
+  );
+
   const handlePendingFileSelectionHandled = useCallback(() => {
     setPendingFileSelection(null);
   }, []);
@@ -406,6 +457,8 @@ function App(): React.ReactElement {
             onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
             onProperties={handleProperties}
+            onNewFile={handleNewFile}
+            onNewFolder={handleNewFolder}
             disabled={isLoading}
           />
           <div className="file-list">
@@ -448,6 +501,13 @@ function App(): React.ReactElement {
         fileNames={selectedFiles.map(f => f.key.split('/').pop() || '')}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
+      />
+      <NewItemDialog
+        isOpen={isNewItemOpen}
+        itemType={newItemType}
+        currentPrefix={currentPrefix}
+        onConfirm={handleConfirmNewItem}
+        onCancel={() => setIsNewItemOpen(false)}
       />
       {selectedBucket && selectedFile && (
         <PropertiesDialog
