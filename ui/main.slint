@@ -5,6 +5,7 @@ import { ExplorerComponent, BucketItem } from "explorer.slint";
 import { FileItem } from "file_list.slint";
 import { ParquetViewerDialog, ParquetColumn, ParquetRow, ParquetCell } from "dialogs/parquet_viewer.slint";
 import { CsvViewerDialog, CsvColumn, CsvRow, CsvCell } from "dialogs/csv_viewer.slint";
+import { ImageViewerDialog } from "dialogs/image_viewer.slint";
 
 // Re-export structs for Rust access
 export { BucketItem, FileItem, ParquetColumn, ParquetRow, ParquetCell, CsvColumn, CsvRow, CsvCell }
@@ -71,6 +72,20 @@ export global CsvViewer {
 
     callback close-requested();
     callback load-more-requested();
+}
+
+// Global state for Image Viewer - allows Rust to control the viewer
+export global ImageViewer {
+    in-out property <string> file-name: "";
+    in-out property <image> image-data;
+    in-out property <int> image-width: 0;
+    in-out property <int> image-height: 0;
+    in-out property <string> file-size: "";
+    in-out property <string> format-name: "";
+    in-out property <bool> is-loading: false;
+    in-out property <bool> dialog-visible: false;
+
+    callback close-requested();
 }
 
 export component MainWindow inherits Window {
@@ -261,6 +276,22 @@ export component MainWindow inherits Window {
         }
         load-more-clicked => {
             CsvViewer.load-more-requested();
+        }
+    }
+
+    // Image Viewer Dialog (overlay)
+    ImageViewerDialog {
+        file-name: ImageViewer.file-name;
+        image-data: ImageViewer.image-data;
+        image-width: ImageViewer.image-width;
+        image-height: ImageViewer.image-height;
+        file-size: ImageViewer.file-size;
+        format-name: ImageViewer.format-name;
+        is-loading: ImageViewer.is-loading;
+        dialog-visible: ImageViewer.dialog-visible;
+
+        close-clicked => {
+            ImageViewer.close-requested();
         }
     }
 }

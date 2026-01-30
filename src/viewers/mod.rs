@@ -3,3 +3,4 @@
 pub mod parquet;
 pub mod csv;
 pub mod text;
+pub mod image;
