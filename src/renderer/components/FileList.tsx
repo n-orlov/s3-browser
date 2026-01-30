@@ -41,6 +41,8 @@ export interface FileListProps {
   pendingFileSelection?: string | null;
   /** Callback when pending file selection is processed */
   onPendingFileSelectionHandled?: () => void;
+  /** Callback to report item count changes for status bar */
+  onItemCountChange?: (count: number, allLoaded: boolean, loading: boolean) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -114,6 +116,7 @@ function FileList({
   onRefreshRequest,
   pendingFileSelection,
   onPendingFileSelectionHandled,
+  onItemCountChange,
 }: FileListProps): React.ReactElement {
   const [items, setItems] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
@@ -443,6 +446,15 @@ function FileList({
     window.addEventListener('s3-refresh-files', handleRefresh);
     return () => window.removeEventListener('s3-refresh-files', handleRefresh);
   }, [loadObjects]);
+
+  // Notify parent of item count changes for status bar
+  useEffect(() => {
+    if (onItemCountChange) {
+      const allLoaded = !hasMore;
+      const isLoading = loading || loadingMore;
+      onItemCountChange(items.length, allLoaded, isLoading);
+    }
+  }, [items.length, hasMore, loading, loadingMore, onItemCountChange]);
 
   if (!currentProfile) {
     return (

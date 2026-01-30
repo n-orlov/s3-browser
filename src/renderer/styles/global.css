@@ -2468,6 +2468,39 @@ input {
   transition: opacity 0.2s ease-out;
 }
 
+/* Status Bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar-items {
+  color: var(--text-secondary);
+}
+
+.status-bar-selection {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 /* Responsive adjustments */
 @media (max-width: 900px) {
   .sidebar {
