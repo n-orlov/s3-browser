@@ -589,6 +589,48 @@ export async function deleteFile(
   }
 }
 
+export interface DeleteFilesResult {
+  success: boolean;
+  results: Array<{ key: string; success: boolean; error?: string }>;
+  deletedCount: number;
+  failedCount: number;
+}
+
+/**
+ * Deletes multiple files from S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param keys - Array of S3 object keys to delete
+ */
+export async function deleteFiles(
+  profileName: string,
+  bucket: string,
+  keys: string[]
+): Promise<DeleteFilesResult> {
+  const results: Array<{ key: string; success: boolean; error?: string }> = [];
+  let deletedCount = 0;
+  let failedCount = 0;
+
+  // Delete files one by one (could use DeleteObjectsCommand for batch, but this gives per-file feedback)
+  for (const key of keys) {
+    const result = await deleteFile(profileName, bucket, key);
+    if (result.success) {
+      results.push({ key, success: true });
+      deletedCount++;
+    } else {
+      results.push({ key, success: false, error: result.error });
+      failedCount++;
+    }
+  }
+
+  return {
+    success: failedCount === 0,
+    results,
+    deletedCount,
+    failedCount,
+  };
+}
+
 /**
  * Renames (copies then deletes) a file in S3
  * @param profileName - The AWS profile name to use

@@ -31,6 +31,10 @@ export interface FileListProps {
   onNavigate: (prefix: string) => void;
   onSelectFile: (file: S3Object | null) => void;
   selectedFile: S3Object | null;
+  /** Array of selected files for multiselect */
+  selectedFiles: S3Object[];
+  /** Callback for multiselect changes */
+  onSelectFiles: (files: S3Object[]) => void;
   onFilesDropped?: (filePaths: string[]) => void;
   onRefreshRequest?: () => void;
   /** Key to auto-select after files are loaded (for URL navigation) */
@@ -104,6 +108,8 @@ function FileList({
   onNavigate,
   onSelectFile,
   selectedFile,
+  selectedFiles,
+  onSelectFiles,
   onFilesDropped,
   onRefreshRequest,
   pendingFileSelection,
@@ -136,6 +142,8 @@ function FileList({
   const listContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  // Track last clicked index for shift+click range selection
+  const lastClickedIndexRef = useRef<number>(-1);
 
   const loadObjects = useCallback(
     async (reset = true) => {
@@ -193,7 +201,9 @@ function FileList({
   useEffect(() => {
     loadObjects(true);
     onSelectFile(null); // Clear selection on navigation
-  }, [selectedBucket, currentPrefix, loadObjects, onSelectFile]);
+    onSelectFiles([]); // Clear multiselect on navigation
+    lastClickedIndexRef.current = -1;
+  }, [selectedBucket, currentPrefix, loadObjects, onSelectFile, onSelectFiles]);
 
   // Cancel file search
   const cancelFileSearch = useCallback(() => {
@@ -303,14 +313,61 @@ function FileList({
     [sortConfig]
   );
 
-  const handleItemClick = (item: S3Object) => {
+  const handleItemClick = (item: S3Object, index: number, event: React.MouseEvent) => {
     if (item.isPrefix) {
-      // Navigate into folder
-      onNavigate(item.key);
-      onSelectFile(null);
-    } else {
-      // Select file
+      // Navigate into folder on single click (unless modifier keys are held)
+      if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        onNavigate(item.key);
+        onSelectFile(null);
+        onSelectFiles([]);
+        lastClickedIndexRef.current = -1;
+      }
+      return;
+    }
+
+    // Handle multiselect with modifier keys
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
+
+    if (event.shiftKey && lastClickedIndexRef.current >= 0) {
+      // Shift+click: range selection
+      const start = Math.min(lastClickedIndexRef.current, index);
+      const end = Math.max(lastClickedIndexRef.current, index);
+      const rangeItems = displayedItems.slice(start, end + 1).filter(i => !i.isPrefix);
+
+      if (isCtrlOrCmd) {
+        // Shift+Ctrl/Cmd: add range to existing selection
+        const existingKeys = new Set(selectedFiles.map(f => f.key));
+        const newSelection = [...selectedFiles];
+        for (const rangeItem of rangeItems) {
+          if (!existingKeys.has(rangeItem.key)) {
+            newSelection.push(rangeItem);
+          }
+        }
+        onSelectFiles(newSelection);
+      } else {
+        // Shift only: replace selection with range
+        onSelectFiles(rangeItems);
+      }
+      // Set the primary selected file to the clicked item
       onSelectFile(item);
+    } else if (isCtrlOrCmd) {
+      // Ctrl/Cmd+click: toggle selection
+      const isSelected = selectedFiles.some(f => f.key === item.key);
+      if (isSelected) {
+        const newSelection = selectedFiles.filter(f => f.key !== item.key);
+        onSelectFiles(newSelection);
+        onSelectFile(newSelection.length > 0 ? newSelection[newSelection.length - 1] : null);
+      } else {
+        onSelectFiles([...selectedFiles, item]);
+        onSelectFile(item);
+      }
+      lastClickedIndexRef.current = index;
+    } else {
+      // Single click: select only this item
+      onSelectFile(item);
+      onSelectFiles([item]);
+      lastClickedIndexRef.current = index;
     }
   };
 
@@ -553,9 +610,10 @@ function FileList({
               </tr>
             </thead>
             <tbody>
-              {displayedItems.map((item) => {
+              {displayedItems.map((item, index) => {
                 const name = getFileName(item.key, currentPrefix);
                 const isSelected = selectedFile?.key === item.key;
+                const isInMultiselect = selectedFiles.some(f => f.key === item.key);
                 return (
                   <tr
                     key={item.key}
@@ -566,8 +624,8 @@ function FileList({
                         rowRefs.current.delete(item.key);
                       }
                     }}
-                    className={`file-row ${item.isPrefix ? 'folder' : 'file'} ${isSelected ? 'selected' : ''}`}
-                    onClick={() => handleItemClick(item)}
+                    className={`file-row ${item.isPrefix ? 'folder' : 'file'} ${isSelected ? 'selected' : ''} ${isInMultiselect && !isSelected ? 'multiselected' : ''}`}
+                    onClick={(e) => handleItemClick(item, index, e)}
                     onDoubleClick={() => handleItemDoubleClick(item)}
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -577,6 +635,7 @@ function FileList({
                           onNavigate(item.key);
                         } else {
                           onSelectFile(item);
+                          onSelectFiles([item]);
                         }
                       }
                     }}

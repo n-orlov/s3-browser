@@ -16,12 +16,19 @@ export interface UseFileOperationsOptions {
   onDownloadComplete?: (info: DownloadCompleteInfo) => void;
 }
 
+export interface DeleteFilesResult {
+  success: boolean;
+  deletedCount: number;
+  failedCount: number;
+}
+
 export interface UseFileOperationsResult {
   operations: Operation[];
   isLoading: boolean;
   downloadFile: (bucket: string, key: string) => Promise<void>;
   uploadFiles: (bucket: string, prefix: string, filePaths?: string[]) => Promise<void>;
   deleteFile: (bucket: string, key: string) => Promise<boolean>;
+  deleteFiles: (bucket: string, keys: string[]) => Promise<DeleteFilesResult>;
   renameFile: (bucket: string, sourceKey: string, newName: string) => Promise<boolean>;
   dismissOperation: (id: string) => void;
   clearCompleted: () => void;
@@ -149,6 +156,27 @@ export function useFileOperations(options: UseFileOperationsOptions = {}): UseFi
     }
   }, []);
 
+  const deleteFiles = useCallback(async (bucket: string, keys: string[]): Promise<DeleteFilesResult> => {
+    setIsLoading(true);
+
+    try {
+      const result = await window.electronAPI.s3.deleteFiles(bucket, keys);
+      return {
+        success: result.success,
+        deletedCount: result.deletedCount,
+        failedCount: result.failedCount,
+      };
+    } catch {
+      return {
+        success: false,
+        deletedCount: 0,
+        failedCount: keys.length,
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const renameFile = useCallback(
     async (bucket: string, sourceKey: string, newName: string): Promise<boolean> => {
       setIsLoading(true);
@@ -171,6 +199,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}): UseFi
     downloadFile,
     uploadFiles,
     deleteFile,
+    deleteFiles,
     renameFile,
     dismissOperation,
     clearCompleted,

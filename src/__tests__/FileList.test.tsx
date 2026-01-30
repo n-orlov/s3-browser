@@ -1,7 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import FileList from '../renderer/components/FileList';
+import FileList, { type FileListProps, type S3Object } from '../renderer/components/FileList';
 import { mockElectronAPI } from './setup';
+
+// Helper to create default props for FileList
+const createDefaultProps = (overrides: Partial<FileListProps> = {}): FileListProps => ({
+  currentProfile: null,
+  selectedBucket: null,
+  currentPrefix: '',
+  onNavigate: vi.fn(),
+  onSelectFile: vi.fn(),
+  selectedFile: null,
+  selectedFiles: [],
+  onSelectFiles: vi.fn(),
+  ...overrides,
+});
 
 describe('FileList', () => {
   beforeEach(() => {
@@ -10,31 +23,13 @@ describe('FileList', () => {
 
   describe('placeholder states', () => {
     it('shows placeholder when no profile selected', () => {
-      render(
-        <FileList
-          currentProfile={null}
-          selectedBucket={null}
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps()} />);
 
       expect(screen.getByText('Select a profile to browse files')).toBeInTheDocument();
     });
 
     it('shows placeholder when no bucket selected', () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket={null}
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile' })} />);
 
       expect(screen.getByText('Select a bucket to view files')).toBeInTheDocument();
     });
@@ -44,16 +39,7 @@ describe('FileList', () => {
     it('shows loading indicator while fetching', () => {
       mockElectronAPI.s3.listObjects.mockImplementation(() => new Promise(() => {}));
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       expect(screen.getByText('Loading...')).toBeInTheDocument();
     });
@@ -78,16 +64,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('folder1')).toBeInTheDocument();
@@ -109,16 +86,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('This folder is empty')).toBeInTheDocument();
@@ -142,16 +110,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('512 B')).toBeInTheDocument();
@@ -176,16 +135,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={onNavigate}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', onNavigate })} />);
 
       await waitFor(() => {
         expect(screen.getByText('subfolder')).toBeInTheDocument();
@@ -208,16 +158,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="folder1/folder2/"
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix: 'folder1/folder2/' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('my-bucket')).toBeInTheDocument();
@@ -240,16 +181,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="folder1/folder2/"
-          onNavigate={onNavigate}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix: 'folder1/folder2/', onNavigate })} />);
 
       await waitFor(() => {
         expect(screen.getByText('folder1')).toBeInTheDocument();
@@ -273,16 +205,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="some/path/"
-          onNavigate={onNavigate}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix: 'some/path/', onNavigate })} />);
 
       await waitFor(() => {
         expect(screen.getByText('my-bucket')).toBeInTheDocument();
@@ -306,16 +229,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="a/b/c/"
-          onNavigate={onNavigate}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix: 'a/b/c/', onNavigate })} />);
 
       await waitFor(() => {
         expect(screen.getByTitle('Go to parent folder')).toBeInTheDocument();
@@ -342,16 +256,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', onSelectFile })} />);
 
       await waitFor(() => {
         expect(screen.getByText('data.csv')).toBeInTheDocument();
@@ -378,16 +283,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={selectedFile}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', selectedFile, selectedFiles: [selectedFile] })} />);
 
       await waitFor(() => {
         expect(screen.getByText('selected.txt')).toBeInTheDocument();
@@ -408,16 +304,7 @@ describe('FileList', () => {
         error: 'Permission denied',
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('Permission denied')).toBeInTheDocument();
@@ -430,16 +317,7 @@ describe('FileList', () => {
         error: 'Temporary error',
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('Temporary error')).toBeInTheDocument();
@@ -479,16 +357,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('Scroll to load more')).toBeInTheDocument();
@@ -511,16 +380,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', onSelectFile })} />);
 
       await waitFor(() => {
         expect(screen.getByText('keyboard-file.txt')).toBeInTheDocument();
@@ -546,16 +406,7 @@ describe('FileList', () => {
         },
       });
 
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={onNavigate}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', onNavigate })} />);
 
       await waitFor(() => {
         expect(screen.getByText('keyboard-folder')).toBeInTheDocument();
@@ -590,16 +441,7 @@ describe('FileList', () => {
     });
 
     it('renders filter controls', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Quick filter...')).toBeInTheDocument();
@@ -608,16 +450,7 @@ describe('FileList', () => {
     });
 
     it('renders sortable column headers', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByTitle('Sort by name')).toBeInTheDocument();
@@ -627,16 +460,7 @@ describe('FileList', () => {
     });
 
     it('filters by search query', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('alpha.txt')).toBeInTheDocument();
@@ -653,16 +477,7 @@ describe('FileList', () => {
     });
 
     it('filters by file type', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('alpha.txt')).toBeInTheDocument();
@@ -681,16 +496,7 @@ describe('FileList', () => {
     });
 
     it('sorts by clicking column header', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('alpha.txt')).toBeInTheDocument();
@@ -712,16 +518,7 @@ describe('FileList', () => {
     });
 
     it('shows item count', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('4 items')).toBeInTheDocument();
@@ -729,16 +526,7 @@ describe('FileList', () => {
     });
 
     it('shows filtered count when filtering', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('alpha.txt')).toBeInTheDocument();
@@ -753,16 +541,7 @@ describe('FileList', () => {
     });
 
     it('shows no results message when filter matches nothing', async () => {
-      render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
-      );
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
 
       await waitFor(() => {
         expect(screen.getByText('alpha.txt')).toBeInTheDocument();
@@ -778,14 +557,7 @@ describe('FileList', () => {
 
     it('clears search when navigating to new location', async () => {
       const { rerender } = render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix=""
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
+        <FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />
       );
 
       await waitFor(() => {
@@ -799,14 +571,7 @@ describe('FileList', () => {
 
       // Navigate to new prefix
       rerender(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="folder/"
-          onNavigate={vi.fn()}
-          onSelectFile={vi.fn()}
-          selectedFile={null}
-        />
+        <FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix: 'folder/' })} />
       );
 
       // Search should be cleared
@@ -838,16 +603,14 @@ describe('FileList', () => {
       });
 
       render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="prefix/"
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-          pendingFileSelection="prefix/target.txt"
-          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
-        />
+        <FileList {...createDefaultProps({
+          currentProfile: 'test-profile',
+          selectedBucket: 'my-bucket',
+          currentPrefix: 'prefix/',
+          onSelectFile,
+          pendingFileSelection: 'prefix/target.txt',
+          onPendingFileSelectionHandled,
+        })} />
       );
 
       await waitFor(() => {
@@ -890,16 +653,14 @@ describe('FileList', () => {
       });
 
       render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="prefix/"
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-          pendingFileSelection="prefix/target.txt"
-          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
-        />
+        <FileList {...createDefaultProps({
+          currentProfile: 'test-profile',
+          selectedBucket: 'my-bucket',
+          currentPrefix: 'prefix/',
+          onSelectFile,
+          pendingFileSelection: 'prefix/target.txt',
+          onPendingFileSelectionHandled,
+        })} />
       );
 
       // Wait for file search to complete
@@ -947,16 +708,14 @@ describe('FileList', () => {
       );
 
       render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="prefix/"
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-          pendingFileSelection="prefix/target.txt"
-          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
-        />
+        <FileList {...createDefaultProps({
+          currentProfile: 'test-profile',
+          selectedBucket: 'my-bucket',
+          currentPrefix: 'prefix/',
+          onSelectFile,
+          pendingFileSelection: 'prefix/target.txt',
+          onPendingFileSelectionHandled,
+        })} />
       );
 
       // Should show search progress overlay
@@ -1006,16 +765,14 @@ describe('FileList', () => {
       );
 
       render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="prefix/"
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-          pendingFileSelection="prefix/target.txt"
-          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
-        />
+        <FileList {...createDefaultProps({
+          currentProfile: 'test-profile',
+          selectedBucket: 'my-bucket',
+          currentPrefix: 'prefix/',
+          onSelectFile,
+          pendingFileSelection: 'prefix/target.txt',
+          onPendingFileSelectionHandled,
+        })} />
       );
 
       // Wait for search progress to show
@@ -1055,16 +812,14 @@ describe('FileList', () => {
       });
 
       render(
-        <FileList
-          currentProfile="test-profile"
-          selectedBucket="my-bucket"
-          currentPrefix="prefix/"
-          onNavigate={vi.fn()}
-          onSelectFile={onSelectFile}
-          selectedFile={null}
-          pendingFileSelection="prefix/nonexistent.txt"
-          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
-        />
+        <FileList {...createDefaultProps({
+          currentProfile: 'test-profile',
+          selectedBucket: 'my-bucket',
+          currentPrefix: 'prefix/',
+          onSelectFile,
+          pendingFileSelection: 'prefix/nonexistent.txt',
+          onPendingFileSelectionHandled,
+        })} />
       );
 
       // Should clear pending selection since file not found

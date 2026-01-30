@@ -14,6 +14,7 @@ import {
   downloadContent,
   downloadBinaryContent,
   deleteFile,
+  deleteFiles,
   renameFile,
   copyFile,
   getFileSize,
@@ -22,6 +23,7 @@ import {
   type ListObjectsResult,
   type ListObjectsOptions,
   type FileOperationResult,
+  type DeleteFilesResult,
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
 
@@ -310,6 +312,20 @@ export function registerS3Ipc(): void {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
+      }
+    }
+  );
+
+  // Delete multiple files from S3
+  ipcMain.handle(
+    's3:delete-files',
+    async (_event, bucket: string, keys: string[]): Promise<DeleteFilesResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await deleteFiles(profileName, bucket, keys);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, results: [], deletedCount: 0, failedCount: keys.length };
       }
     }
   );

@@ -7,6 +7,8 @@ export interface FileToolbarProps {
     key: string;
     isPrefix: boolean;
   } | null;
+  /** Number of files selected in multiselect */
+  selectedCount: number;
   onUpload: () => void;
   onDownload: () => void;
   onDelete: () => void;
@@ -61,6 +63,7 @@ function FileToolbar({
   selectedBucket,
   currentPrefix,
   selectedFile,
+  selectedCount,
   onUpload,
   onDownload,
   onDelete,
@@ -73,9 +76,12 @@ function FileToolbar({
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
-  const canEdit = hasSelection && isEditableFile(selectedFile!.key);
-  const canViewParquet = hasSelection && isParquetFile(selectedFile!.key);
-  const canViewImage = hasSelection && isImageFile(selectedFile!.key);
+  const hasMultipleSelection = selectedCount > 1;
+  const canEdit = hasSelection && !hasMultipleSelection && isEditableFile(selectedFile!.key);
+  const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
+  const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
+  // Delete is allowed for any number of files selected (but not folders)
+  const canDelete = selectedCount > 0;
 
   return (
     <div className="file-toolbar">
@@ -91,8 +97,8 @@ function FileToolbar({
       <button
         className="toolbar-btn"
         onClick={onDownload}
-        disabled={disabled || !hasSelection}
-        title="Download selected file"
+        disabled={disabled || !hasSelection || hasMultipleSelection}
+        title={hasMultipleSelection ? 'Download not available for multiple files' : 'Download selected file'}
       >
         <span className="toolbar-icon">D</span>
         <span className="toolbar-label">Download</span>
@@ -127,8 +133,8 @@ function FileToolbar({
       <button
         className="toolbar-btn toolbar-btn-copy"
         onClick={onCopyUrl}
-        disabled={disabled || !hasSelection}
-        title={hasSelection ? 'Copy S3 URL to clipboard' : 'Select a file to copy URL'}
+        disabled={disabled || !hasSelection || hasMultipleSelection}
+        title={hasMultipleSelection ? 'Copy URL not available for multiple files' : (hasSelection ? 'Copy S3 URL to clipboard' : 'Select a file to copy URL')}
       >
         <span className="toolbar-icon">C</span>
         <span className="toolbar-label">Copy URL</span>
@@ -136,8 +142,8 @@ function FileToolbar({
       <button
         className="toolbar-btn"
         onClick={onRename}
-        disabled={disabled || !hasSelection}
-        title="Rename selected file"
+        disabled={disabled || !hasSelection || hasMultipleSelection}
+        title={hasMultipleSelection ? 'Rename not available for multiple files' : 'Rename selected file'}
       >
         <span className="toolbar-icon">R</span>
         <span className="toolbar-label">Rename</span>
@@ -145,11 +151,11 @@ function FileToolbar({
       <button
         className="toolbar-btn toolbar-btn-danger"
         onClick={onDelete}
-        disabled={disabled || !hasSelection}
-        title="Delete selected file"
+        disabled={disabled || !canDelete}
+        title={selectedCount > 1 ? `Delete ${selectedCount} files` : 'Delete selected file'}
       >
         <span className="toolbar-icon">X</span>
-        <span className="toolbar-label">Delete</span>
+        <span className="toolbar-label">{selectedCount > 1 ? `Delete (${selectedCount})` : 'Delete'}</span>
       </button>
       <div className="toolbar-spacer" />
       <button

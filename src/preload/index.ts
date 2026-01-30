@@ -94,6 +94,13 @@ export interface UploadFilesResult {
   results: UploadResult[];
 }
 
+export interface DeleteFilesResult {
+  success: boolean;
+  results: Array<{ key: string; success: boolean; error?: string }>;
+  deletedCount: number;
+  failedCount: number;
+}
+
 // Types for App State API
 export interface AppStateData {
   lastProfile: string | null;
@@ -170,6 +177,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('s3:upload-files', bucket, prefix, filePaths, operationId),
     deleteFile: (bucket: string, key: string): Promise<FileOperationResult> =>
       ipcRenderer.invoke('s3:delete-file', bucket, key),
+    deleteFiles: (bucket: string, keys: string[]): Promise<DeleteFilesResult> =>
+      ipcRenderer.invoke('s3:delete-files', bucket, keys),
     renameFile: (bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> =>
       ipcRenderer.invoke('s3:rename-file', bucket, sourceKey, newName),
     copyFile: (
@@ -251,6 +260,7 @@ declare global {
           operationId: string
         ) => Promise<UploadFilesResult>;
         deleteFile: (bucket: string, key: string) => Promise<FileOperationResult>;
+        deleteFiles: (bucket: string, keys: string[]) => Promise<DeleteFilesResult>;
         renameFile: (bucket: string, sourceKey: string, newName: string) => Promise<FileOperationResult>;
         copyFile: (
           sourceBucket: string,

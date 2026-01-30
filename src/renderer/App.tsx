@@ -45,6 +45,7 @@ function App(): React.ReactElement {
     downloadFile,
     uploadFiles,
     deleteFile,
+    deleteFiles,
     renameFile,
     dismissOperation,
   } = useFileOperations({ onDownloadComplete: handleDownloadComplete });
@@ -53,6 +54,7 @@ function App(): React.ReactElement {
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<S3Object | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<S3Object[]>([]);
 
   // Dialog state
   const [isRenameOpen, setIsRenameOpen] = useState(false);
@@ -123,11 +125,13 @@ function App(): React.ReactElement {
     setSelectedBucket(bucket);
     setCurrentPrefix('');
     setSelectedFile(null);
+    setSelectedFiles([]);
   }, []);
 
   const handleNavigate = useCallback((prefix: string) => {
     setCurrentPrefix(prefix);
     setSelectedFile(null);
+    setSelectedFiles([]);
     setPendingFileSelection(null);
   }, []);
 
@@ -136,6 +140,7 @@ function App(): React.ReactElement {
     setSelectedBucket(bucket);
     setCurrentPrefix(prefix);
     setSelectedFile(null);
+    setSelectedFiles([]);
     // If a specific file key was provided, set it as pending selection
     setPendingFileSelection(selectKey || null);
     // Trigger refresh to load the new location
@@ -144,6 +149,10 @@ function App(): React.ReactElement {
 
   const handleSelectFile = useCallback((file: S3Object | null) => {
     setSelectedFile(file);
+  }, []);
+
+  const handleSelectFiles = useCallback((files: S3Object[]) => {
+    setSelectedFiles(files);
   }, []);
 
   // File operation handlers
@@ -158,21 +167,52 @@ function App(): React.ReactElement {
   }, [selectedBucket, selectedFile, downloadFile]);
 
   const handleDelete = useCallback(() => {
-    if (!selectedFile || selectedFile.isPrefix) return;
+    // Allow delete if there are selected files (single or multiple)
+    if (selectedFiles.length === 0) return;
+    // Don't allow deleting folders in multiselect
+    if (selectedFiles.some(f => f.isPrefix)) return;
     setIsDeleteOpen(true);
-  }, [selectedFile]);
+  }, [selectedFiles]);
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!selectedBucket || !selectedFile) return;
+    if (!selectedBucket || selectedFiles.length === 0) return;
     setIsDeleteOpen(false);
 
-    const success = await deleteFile(selectedBucket, selectedFile.key);
-    if (success) {
-      setSelectedFile(null);
-      // Trigger refresh
-      window.dispatchEvent(new Event('s3-refresh-files'));
+    if (selectedFiles.length === 1) {
+      // Single file delete
+      const success = await deleteFile(selectedBucket, selectedFiles[0].key);
+      if (success) {
+        setSelectedFile(null);
+        setSelectedFiles([]);
+        window.dispatchEvent(new Event('s3-refresh-files'));
+      }
+    } else {
+      // Batch delete
+      const keys = selectedFiles.map(f => f.key);
+      const result = await deleteFiles(selectedBucket, keys);
+      if (result.deletedCount > 0) {
+        setSelectedFile(null);
+        setSelectedFiles([]);
+        window.dispatchEvent(new Event('s3-refresh-files'));
+      }
+      // Show toast with results
+      if (result.failedCount > 0) {
+        addToast({
+          type: 'warning',
+          title: 'Partial Delete',
+          message: `Deleted ${result.deletedCount} files, ${result.failedCount} failed`,
+          duration: 5000,
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: 'Delete Complete',
+          message: `Deleted ${result.deletedCount} files`,
+          duration: 3000,
+        });
+      }
     }
-  }, [selectedBucket, selectedFile, deleteFile]);
+  }, [selectedBucket, selectedFiles, deleteFile, deleteFiles, addToast]);
 
   const handleRename = useCallback(() => {
     if (!selectedFile || selectedFile.isPrefix) return;
@@ -301,7 +341,14 @@ function App(): React.ReactElement {
         <section className="content">
           <div className="content-header">
             <h2 title={getDisplayPath()}>{getDisplayPath()}</h2>
-            {selectedFile && (
+            {selectedFiles.length > 1 ? (
+              <div className="selected-file-info">
+                <span className="selected-label">Selected:</span>
+                <span className="selected-name selected-count">
+                  {selectedFiles.length} files
+                </span>
+              </div>
+            ) : selectedFile && (
               <div className="selected-file-info">
                 <span className="selected-label">Selected:</span>
                 <span className="selected-name" title={selectedFile.key}>
@@ -319,6 +366,7 @@ function App(): React.ReactElement {
             selectedBucket={selectedBucket}
             currentPrefix={currentPrefix}
             selectedFile={selectedFile}
+            selectedCount={selectedFiles.filter(f => !f.isPrefix).length}
             onUpload={handleUpload}
             onDownload={handleDownload}
             onDelete={handleDelete}
@@ -338,6 +386,8 @@ function App(): React.ReactElement {
               onNavigate={handleNavigate}
               onSelectFile={handleSelectFile}
               selectedFile={selectedFile}
+              selectedFiles={selectedFiles}
+              onSelectFiles={handleSelectFiles}
               onFilesDropped={handleFilesDropped}
               pendingFileSelection={pendingFileSelection}
               onPendingFileSelectionHandled={handlePendingFileSelectionHandled}
@@ -358,7 +408,7 @@ function App(): React.ReactElement {
       />
       <DeleteConfirmDialog
         isOpen={isDeleteOpen}
-        fileName={selectedFile?.key.split('/').pop() || ''}
+        fileNames={selectedFiles.map(f => f.key.split('/').pop() || '')}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
       />
