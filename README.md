@@ -17,7 +17,8 @@ A lightweight desktop application for viewing and managing files in Amazon S3 bu
 
 ## Screenshots
 
-*Coming soon*
+![Main Interface](docs/screenshots/main-interface.png)
+*Main interface showing bucket tree and file list (screenshot coming soon)*
 
 ## Installation
 
