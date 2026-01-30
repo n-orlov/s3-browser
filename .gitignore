@@ -1,9 +1,6 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-release/
+# Rust build artifacts
+/target/
+Cargo.lock
 
 # IDE
 .vscode/
@@ -17,15 +14,16 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-
-# Test coverage
-coverage/
 
 # Environment variables
 .env
 .env.local
 .env.*.local
 
-# Electron builder cache
-.electron-builder-cache/
+# Release builds
+/release/
+*.exe
+*.msi
+*.AppImage
+*.deb
+*.rpm

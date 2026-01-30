@@ -1,0 +1,85 @@
+// Explorer component - bucket tree and file list
+
+import { VerticalBox, HorizontalBox, ListView, LineEdit, ScrollView } from "std-widgets.slint";
+import { FileList } from "file_list.slint";
+
+export struct BucketItem {
+    name: string,
+    is-expanded: bool,
+    is-selected: bool,
+}
+
+export component Explorer inherits HorizontalBox {
+    // Properties
+    in-out property <[BucketItem]> buckets: [];
+    in-out property <string> bucket-filter: "";
+    in-out property <int> selected-bucket-index: -1;
+    in-out property <string> current-prefix: "";
+
+    // Callbacks
+    callback bucket-selected(int);
+    callback bucket-filter-changed(string);
+
+    // Left panel - bucket tree
+    VerticalBox {
+        width: 250px;
+        padding: 4px;
+
+        // Bucket filter
+        LineEdit {
+            placeholder-text: "Filter buckets...";
+            text <=> bucket-filter;
+            edited(text) => {
+                bucket-filter-changed(text);
+            }
+        }
+
+        // Bucket list
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalBox {
+                for bucket[index] in buckets: Rectangle {
+                    height: 28px;
+                    background: bucket.is-selected ? #e0e0ff : (touch.has-hover ? #f0f0f0 : transparent);
+                    border-radius: 4px;
+
+                    touch := TouchArea {
+                        clicked => {
+                            bucket-selected(index);
+                        }
+                    }
+
+                    HorizontalBox {
+                        padding-left: 8px;
+                        padding-right: 8px;
+
+                        Text {
+                            text: "📁";
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: bucket.name;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Divider
+    Rectangle {
+        width: 1px;
+        background: #cccccc;
+    }
+
+    // Right panel - file list
+    FileList {
+        horizontal-stretch: 1;
+    }
+}
