@@ -1,6 +1,7 @@
 //! Application state and logic
 
 use anyhow::Result;
+use async_compat::Compat;
 use copypasta::{ClipboardContext, ClipboardProvider};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 use std::cell::RefCell;
@@ -156,9 +157,9 @@ impl App {
                     // Spawn async task to load buckets
                     let state = state.clone();
                     let window_weak = window_weak.clone();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::load_profile_and_buckets(state, window_weak, &profile_name).await;
-                    }).unwrap();
+                    })).unwrap();
                 }
             }
         });
@@ -185,9 +186,9 @@ impl App {
 
                     let state = state.clone();
                     let window_weak = window_weak.clone();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::load_bucket_contents(state, window_weak, &bucket_name, "").await;
-                    }).unwrap();
+                    })).unwrap();
                 }
             }
         });
@@ -227,9 +228,9 @@ impl App {
 
                             let state = state.clone();
                             let window_weak = window_weak.clone();
-                            slint::spawn_local(async move {
+                            slint::spawn_local(Compat::new(async move {
                                 Self::load_bucket_contents(state, window_weak, &bucket, &key).await;
-                            }).unwrap();
+                            })).unwrap();
                         }
                     } else {
                         // Check file type and open appropriate viewer
@@ -250,9 +251,9 @@ impl App {
 
                                 let state = state.clone();
                                 let window_weak = window_weak.clone();
-                                slint::spawn_local(async move {
+                                slint::spawn_local(Compat::new(async move {
                                     Self::open_parquet_file(state, window_weak, &bucket, &file_key, &file_name).await;
-                                }).unwrap();
+                                })).unwrap();
                             }
                         } else if file_name_lower.ends_with(".csv") || file_name_lower.ends_with(".tsv") {
                             tracing::info!("Opening CSV file: {}", file_key);
@@ -267,9 +268,9 @@ impl App {
 
                                 let state = state.clone();
                                 let window_weak = window_weak.clone();
-                                slint::spawn_local(async move {
+                                slint::spawn_local(Compat::new(async move {
                                     Self::open_csv_file(state, window_weak, &bucket, &file_key, &file_name).await;
-                                }).unwrap();
+                                })).unwrap();
                             }
                         } else if ImageType::from_extension(&file_name_lower).is_some() {
                             // Image files (PNG, JPG, GIF)
@@ -285,9 +286,9 @@ impl App {
 
                                 let state = state.clone();
                                 let window_weak = window_weak.clone();
-                                slint::spawn_local(async move {
+                                slint::spawn_local(Compat::new(async move {
                                     Self::open_image_file(state, window_weak, &bucket, &file_key, &file_name).await;
-                                }).unwrap();
+                                })).unwrap();
                             }
                         } else if file_name_lower.ends_with(".json") || file_name_lower.ends_with(".jsonl") || file_name_lower.ends_with(".ndjson") {
                             // JSON files - use dedicated JSON viewer with tree view
@@ -303,9 +304,9 @@ impl App {
 
                                 let state = state.clone();
                                 let window_weak = window_weak.clone();
-                                slint::spawn_local(async move {
+                                slint::spawn_local(Compat::new(async move {
                                     Self::open_json_file(state, window_weak, &bucket, &file_key, &file_name).await;
-                                }).unwrap();
+                                })).unwrap();
                             }
                         } else if is_text_file(&file_name_lower) {
                             // Text files (YAML, TXT, etc.) - but not JSON which has dedicated viewer
@@ -321,9 +322,9 @@ impl App {
 
                                 let state = state.clone();
                                 let window_weak = window_weak.clone();
-                                slint::spawn_local(async move {
+                                slint::spawn_local(Compat::new(async move {
                                     Self::open_text_file(state, window_weak, &bucket, &file_key, &file_name).await;
-                                }).unwrap();
+                                })).unwrap();
                             }
                         } else {
                             // Other file types - show message
@@ -357,9 +358,9 @@ impl App {
 
                     let state = state.clone();
                     let window_weak = window_weak.clone();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::load_bucket_contents(state, window_weak, &bucket, &parent_prefix).await;
-                    }).unwrap();
+                    })).unwrap();
                 }
             }
         });
@@ -464,9 +465,9 @@ impl App {
 
                 let state = state.clone();
                 let window_weak = window_weak.clone();
-                slint::spawn_local(async move {
+                slint::spawn_local(Compat::new(async move {
                     Self::download_files(state, window_weak, &bucket, files_to_download).await;
-                }).unwrap();
+                })).unwrap();
             }
         });
 
@@ -491,9 +492,9 @@ impl App {
                 // Use native file dialog
                 let state = state.clone();
                 let window_weak = window_weak.clone();
-                slint::spawn_local(async move {
+                slint::spawn_local(Compat::new(async move {
                     Self::upload_file_dialog(state, window_weak, &bucket, &prefix).await;
-                }).unwrap();
+                })).unwrap();
             }
         });
 
@@ -571,9 +572,9 @@ impl App {
 
                 let state = state.clone();
                 let window_weak = window_weak.clone();
-                slint::spawn_local(async move {
+                slint::spawn_local(Compat::new(async move {
                     Self::delete_files(state, window_weak, &bucket, &prefix, keys_to_delete).await;
-                }).unwrap();
+                })).unwrap();
             }
         });
 
@@ -653,9 +654,9 @@ impl App {
 
                     let state = state.clone();
                     let window_weak = window_weak.clone();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::navigate_to_s3_url(state, window_weak, s3_url).await;
-                    }).unwrap();
+                    })).unwrap();
                 } else {
                     win.set_status_message(format!("Invalid S3 URL: {}", url_str).into());
                 }
@@ -682,9 +683,9 @@ impl App {
 
                     let state = state.clone();
                     let window_weak = window_weak.clone();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::load_bucket_contents(state, window_weak, &bucket, &prefix).await;
-                    }).unwrap();
+                    })).unwrap();
                 } else {
                     win.set_status_message("Select a bucket first".into());
                     win.set_is_error(true);
@@ -745,9 +746,9 @@ impl App {
                 let parquet_viewer = win.global::<ParquetViewer>();
                 parquet_viewer.set_is_loading(true);
 
-                slint::spawn_local(async move {
+                slint::spawn_local(Compat::new(async move {
                     Self::load_more_parquet_rows(state, window_weak).await;
-                }).unwrap();
+                })).unwrap();
             }
         });
 
@@ -779,9 +780,9 @@ impl App {
                 let csv_viewer = win.global::<CsvViewer>();
                 csv_viewer.set_is_loading(true);
 
-                slint::spawn_local(async move {
+                slint::spawn_local(Compat::new(async move {
                     Self::load_more_csv_rows(state, window_weak).await;
-                }).unwrap();
+                })).unwrap();
             }
         });
 
@@ -823,9 +824,9 @@ impl App {
             let window_weak = window_weak.clone();
             let content_str = content.to_string();
 
-            slint::spawn_local(async move {
+            slint::spawn_local(Compat::new(async move {
                 Self::save_text_file(state, window_weak, content_str).await;
-            }).unwrap();
+            })).unwrap();
         });
 
         // Content changed callback
@@ -873,9 +874,9 @@ impl App {
             let window_weak = window_weak.clone();
             let node_id_str = node_id.to_string();
 
-            slint::spawn_local(async move {
+            slint::spawn_local(Compat::new(async move {
                 Self::toggle_json_node(state, window_weak, node_id_str).await;
-            }).unwrap();
+            })).unwrap();
         });
 
         // Expand all callback
@@ -885,9 +886,9 @@ impl App {
             let state = state_clone.clone();
             let window_weak = window_weak.clone();
 
-            slint::spawn_local(async move {
+            slint::spawn_local(Compat::new(async move {
                 Self::expand_all_json_nodes(state, window_weak).await;
-            }).unwrap();
+            })).unwrap();
         });
 
         // Collapse all callback
@@ -897,9 +898,9 @@ impl App {
             let state = state_clone.clone();
             let window_weak = window_weak.clone();
 
-            slint::spawn_local(async move {
+            slint::spawn_local(Compat::new(async move {
                 Self::collapse_all_json_nodes(state, window_weak).await;
-            }).unwrap();
+            })).unwrap();
         });
 
         // Restore last session if settings are available
@@ -928,9 +929,9 @@ impl App {
                     // Spawn async task to restore the session
                     let state = state.clone();
                     let window_weak = window.as_weak();
-                    slint::spawn_local(async move {
+                    slint::spawn_local(Compat::new(async move {
                         Self::restore_session(state, window_weak, profile_name, last_bucket, last_prefix).await;
-                    }).unwrap();
+                    })).unwrap();
                 } else {
                     tracing::warn!("Last profile '{}' not found, starting fresh", profile_name);
                     window.set_status_message("Select a profile to connect to AWS".into());
@@ -1565,13 +1566,13 @@ impl App {
 
     /// Hide toast notification after a delay
     fn schedule_toast_hide(window_weak: Weak<MainWindow>, delay_secs: u64) {
-        slint::spawn_local(async move {
+        slint::spawn_local(Compat::new(async move {
             tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
             if let Some(win) = window_weak.upgrade() {
                 let file_list = win.global::<FileList>();
                 file_list.set_show_toast(false);
             }
-        }).unwrap();
+        })).unwrap();
     }
 
     /// Set loading status message in file list

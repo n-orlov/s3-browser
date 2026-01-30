@@ -13,6 +13,7 @@ slint = "1.9"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+async-compat = "0.2"
 
 # AWS SDK
 aws-config = { version = "1", features = ["behavior-version-latest"] }
