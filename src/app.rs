@@ -7,13 +7,14 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell};
+use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell, ImageViewer};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
 use crate::settings::Settings;
 use crate::viewers::parquet::ParquetViewer as ParquetViewerLogic;
 use crate::viewers::csv::CsvViewer as CsvViewerLogic;
+use crate::viewers::image::{ImageViewer as ImageViewerLogic, ImageType, format_file_size};
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -227,6 +228,24 @@ impl App {
                                 let window_weak = window_weak.clone();
                                 slint::spawn_local(async move {
                                     Self::open_csv_file(state, window_weak, &bucket, &file_key, &file_name).await;
+                                }).unwrap();
+                            }
+                        } else if ImageType::from_extension(&file_name_lower).is_some() {
+                            // Image files (PNG, JPG, GIF)
+                            tracing::info!("Opening image file: {}", file_key);
+
+                            let state_ref = state.borrow();
+                            if let Some(bucket) = &state_ref.current_bucket {
+                                let bucket = bucket.clone();
+                                drop(state_ref);
+
+                                win.set_status_message(format!("Loading image: {}...", file_name).into());
+                                win.set_is_loading(true);
+
+                                let state = state.clone();
+                                let window_weak = window_weak.clone();
+                                slint::spawn_local(async move {
+                                    Self::open_image_file(state, window_weak, &bucket, &file_key, &file_name).await;
                                 }).unwrap();
                             }
                         } else {
@@ -596,6 +615,18 @@ impl App {
                 slint::spawn_local(async move {
                     Self::load_more_csv_rows(state, window_weak).await;
                 }).unwrap();
+            }
+        });
+
+        // Set up Image Viewer callbacks
+        let image_viewer = window.global::<ImageViewer>();
+
+        // Close callback
+        let window_weak = window.as_weak();
+        image_viewer.on_close_requested(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let image_viewer = win.global::<ImageViewer>();
+                image_viewer.set_dialog_visible(false);
             }
         });
 
@@ -1600,6 +1631,105 @@ impl App {
                 if csv_data.has_more { "+" } else { "" },
                 file_name.unwrap_or_default()
             );
+        }
+    }
+
+    /// Open an image file in the viewer (PNG, JPG, GIF)
+    async fn open_image_file(
+        _state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        key: &str,
+        file_name: &str,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let win = match window_weak.upgrade() {
+                Some(w) => w,
+                None => return,
+            };
+            // Get profile from window state
+            let profiles = win.get_profiles();
+            let idx = win.get_current_profile_index();
+            profile_name = if idx >= 0 && (idx as usize) < profiles.row_count() {
+                profiles.row_data(idx as usize).map(|s| s.to_string())
+            } else {
+                None
+            };
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Download the image file
+        let data = match client.get_object(bucket, key).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to download image: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Load the image
+        let viewer = ImageViewerLogic::new();
+        let img_data = match viewer.load_bytes(&data, file_name) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to load image: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Create Slint image from RGBA data
+        let slint_image = slint::Image::from_rgba8(
+            slint::SharedPixelBuffer::clone_from_slice(
+                &img_data.rgba_data,
+                img_data.width,
+                img_data.height,
+            )
+        );
+
+        // Get format name for display
+        let format_name = match img_data.format {
+            ImageType::Png => "PNG",
+            ImageType::Jpeg => "JPEG",
+            ImageType::Gif => "GIF",
+        };
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let image_viewer = win.global::<ImageViewer>();
+
+            image_viewer.set_file_name(file_name.into());
+            image_viewer.set_image_data(slint_image);
+            image_viewer.set_image_width(img_data.width as i32);
+            image_viewer.set_image_height(img_data.height as i32);
+            image_viewer.set_file_size(format_file_size(img_data.file_size).into());
+            image_viewer.set_format_name(format_name.into());
+            image_viewer.set_is_loading(false);
+            image_viewer.set_dialog_visible(true);
+
+            win.set_is_loading(false);
+            win.set_status_message(format!(
+                "Opened: {} ({}×{} {})",
+                file_name, img_data.width, img_data.height, format_name
+            ).into());
         }
     }
 

@@ -1,0 +1,152 @@
+// Image Viewer Dialog
+// Displays PNG, JPG, GIF images from S3
+
+import { Button, HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
+
+export component ImageViewerDialog inherits Rectangle {
+    // Properties
+    in property <string> file-name: "";
+    in property <image> image-data;
+    in property <int> image-width: 0;
+    in property <int> image-height: 0;
+    in property <string> file-size: "";
+    in property <string> format-name: "";
+    in property <bool> is-loading: false;
+    in property <bool> dialog-visible: false;
+
+    // Callbacks
+    callback close-clicked();
+
+    // Only show when visible
+    visible: dialog-visible;
+
+    // Semi-transparent overlay background
+    background: #000000aa;
+    width: 100%;
+    height: 100%;
+
+    // Dialog container
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 40px, 1000px);
+        height: min(parent.height - 40px, 800px);
+        background: white;
+        border-radius: 8px;
+
+        // Drop shadow effect
+        drop-shadow-blur: 20px;
+        drop-shadow-color: #00000066;
+        drop-shadow-offset-x: 0;
+        drop-shadow-offset-y: 4px;
+
+        VerticalBox {
+            padding: 16px;
+            spacing: 12px;
+
+            // Header
+            HorizontalBox {
+                height: 32px;
+                spacing: 8px;
+
+                Text {
+                    text: file-name;
+                    font-size: 16px;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                Button {
+                    text: "✕";
+                    width: 32px;
+                    clicked => {
+                        close-clicked();
+                    }
+                }
+            }
+
+            // Image info bar
+            HorizontalBox {
+                height: 24px;
+                spacing: 16px;
+
+                Text {
+                    text: format-name;
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: image-width > 0 ? "\{image-width} × \{image-height} px" : "";
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: file-size;
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+            }
+
+            // Image display area
+            Rectangle {
+                vertical-stretch: 1;
+                background: #f0f0f0;
+                border-radius: 4px;
+
+                if is-loading: VerticalBox {
+                    alignment: center;
+
+                    Text {
+                        text: "Loading image...";
+                        color: #666666;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                if !is-loading && image-width > 0: ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+
+                    Image {
+                        source: image-data;
+                        // Scale to fit while maintaining aspect ratio
+                        width: min(self.source.width * 1px, parent.width - 20px);
+                        height: min(self.source.height * 1px, parent.height - 20px);
+                        image-fit: contain;
+                    }
+                }
+
+                if !is-loading && image-width == 0: VerticalBox {
+                    alignment: center;
+
+                    Text {
+                        text: "No image loaded";
+                        color: #999999;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    // Click outside to close
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            // Only close if click is outside the dialog
+            // (This is a simplified approach - the inner Rectangle will handle its own clicks)
+        }
+    }
+}
