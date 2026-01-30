@@ -7,11 +7,12 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList};
+use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
 use crate::settings::Settings;
+use crate::viewers::parquet::ParquetViewer as ParquetViewerLogic;
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -26,6 +27,10 @@ struct AppState {
     selected_indices: HashSet<usize>,
     /// Persistent settings
     settings: Settings,
+    /// Current parquet file data for lazy loading
+    parquet_data: Option<Vec<u8>>,
+    /// Current parquet file name
+    parquet_file_name: Option<String>,
 }
 
 /// Main application state
@@ -67,6 +72,8 @@ impl App {
             all_objects: Vec::new(),
             selected_indices: HashSet::new(),
             settings,
+            parquet_data: None,
+            parquet_file_name: None,
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -147,7 +154,7 @@ impl App {
             }
         });
 
-        // Set up file double-click callback (navigate into folder)
+        // Set up file double-click callback (navigate into folder or open file)
         let state_clone = state.clone();
         let window_weak = window.as_weak();
         file_list.on_file_double_clicked(move |index| {
@@ -176,9 +183,32 @@ impl App {
                             }).unwrap();
                         }
                     } else {
-                        // File selected - could open viewer in future
-                        tracing::info!("File selected: {}", file.key);
-                        win.set_status_message(format!("Selected: {}", file.name).into());
+                        // Check if it's a parquet file
+                        let file_name = file.name.to_string();
+                        let file_key = file.key.to_string();
+
+                        if file_name.ends_with(".parquet") || file_name.ends_with(".pq") {
+                            tracing::info!("Opening parquet file: {}", file_key);
+
+                            let state_ref = state.borrow();
+                            if let Some(bucket) = &state_ref.current_bucket {
+                                let bucket = bucket.clone();
+                                drop(state_ref);
+
+                                win.set_status_message(format!("Loading parquet file: {}...", file_name).into());
+                                win.set_is_loading(true);
+
+                                let state = state.clone();
+                                let window_weak = window_weak.clone();
+                                slint::spawn_local(async move {
+                                    Self::open_parquet_file(state, window_weak, &bucket, &file_key, &file_name).await;
+                                }).unwrap();
+                            }
+                        } else {
+                            // Other file types - show message
+                            tracing::info!("File selected: {}", file_key);
+                            win.set_status_message(format!("Selected: {} (viewer not implemented for this file type)", file_name).into());
+                        }
                     }
                 }
             }
@@ -473,6 +503,40 @@ impl App {
                 } else {
                     win.set_status_message("Select a bucket first".into());
                 }
+            }
+        });
+
+        // Set up Parquet Viewer callbacks
+        let parquet_viewer = window.global::<ParquetViewer>();
+
+        // Close callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        parquet_viewer.on_close_requested(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let parquet_viewer = win.global::<ParquetViewer>();
+                parquet_viewer.set_dialog_visible(false);
+
+                // Clear parquet data from state
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.parquet_data = None;
+                state_ref.parquet_file_name = None;
+            }
+        });
+
+        // Load more callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        parquet_viewer.on_load_more_requested(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            if let Some(win) = window_weak.upgrade() {
+                let parquet_viewer = win.global::<ParquetViewer>();
+                parquet_viewer.set_is_loading(true);
+
+                slint::spawn_local(async move {
+                    Self::load_more_parquet_rows(state, window_weak).await;
+                }).unwrap();
             }
         });
 
@@ -1109,6 +1173,186 @@ impl App {
         match trimmed.rfind('/') {
             Some(pos) => format!("{}/", &trimmed[..pos]),
             None => String::new(),
+        }
+    }
+
+    /// Open a parquet file in the viewer
+    async fn open_parquet_file(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        key: &str,
+        file_name: &str,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Download the parquet file
+        let data = match client.get_object(bucket, key).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to download parquet file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Parse the parquet file
+        let viewer = ParquetViewerLogic::new();
+        let parquet_data = match viewer.read_bytes(&data) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to parse parquet file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Store the raw data for load-more functionality
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.parquet_data = Some(data);
+            state_ref.parquet_file_name = Some(file_name.to_string());
+        }
+
+        // Convert to UI model
+        let columns: Vec<ParquetColumn> = parquet_data.columns
+            .iter()
+            .map(|c| {
+                // Calculate column width based on name length (min 80px, max 200px)
+                let width = (c.name.len() as f32 * 10.0).max(80.0).min(200.0);
+                ParquetColumn {
+                    name: c.name.clone().into(),
+                    data_type: c.data_type.clone().into(),
+                    width: width,  // Slint length type maps to f32
+                }
+            })
+            .collect();
+
+        let rows: Vec<ParquetRow> = parquet_data.rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<ParquetCell> = row
+                    .iter()
+                    .map(|v| ParquetCell { value: v.clone().into() })
+                    .collect();
+                ParquetRow {
+                    cells: ModelRc::from(Rc::new(VecModel::from(cells))),
+                }
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let parquet_viewer = win.global::<ParquetViewer>();
+
+            parquet_viewer.set_file_name(file_name.into());
+            parquet_viewer.set_columns(ModelRc::from(Rc::new(VecModel::from(columns))));
+            parquet_viewer.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+            parquet_viewer.set_total_rows(parquet_data.total_rows as i32);
+            parquet_viewer.set_loaded_rows(parquet_data.loaded_rows as i32);
+            parquet_viewer.set_is_loading(false);
+            parquet_viewer.set_dialog_visible(true);
+
+            win.set_is_loading(false);
+            win.set_status_message(format!("Opened: {} ({} rows)", file_name, parquet_data.total_rows).into());
+        }
+    }
+
+    /// Load more rows from the current parquet file
+    async fn load_more_parquet_rows(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+    ) {
+        // Get stored parquet data and current loaded count
+        let (data, current_loaded, file_name) = {
+            let state_ref = state.borrow();
+            let data = state_ref.parquet_data.clone();
+            let file_name = state_ref.parquet_file_name.clone();
+
+            if let Some(win) = window_weak.upgrade() {
+                let parquet_viewer = win.global::<ParquetViewer>();
+                (data, parquet_viewer.get_loaded_rows() as usize, file_name)
+            } else {
+                return;
+            }
+        };
+
+        let data = match data {
+            Some(d) => d,
+            None => {
+                if let Some(win) = window_weak.upgrade() {
+                    let parquet_viewer = win.global::<ParquetViewer>();
+                    parquet_viewer.set_is_loading(false);
+                }
+                return;
+            }
+        };
+
+        // Parse more rows
+        let viewer = ParquetViewerLogic::new();
+        let new_limit = current_loaded + 1000; // Load 1000 more rows
+
+        let parquet_data = match viewer.read_bytes_with_limit(&data, new_limit) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::error!("Failed to load more parquet rows: {}", e);
+                if let Some(win) = window_weak.upgrade() {
+                    let parquet_viewer = win.global::<ParquetViewer>();
+                    parquet_viewer.set_is_loading(false);
+                }
+                return;
+            }
+        };
+
+        // Convert rows to UI model
+        let rows: Vec<ParquetRow> = parquet_data.rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<ParquetCell> = row
+                    .iter()
+                    .map(|v| ParquetCell { value: v.clone().into() })
+                    .collect();
+                ParquetRow {
+                    cells: ModelRc::from(Rc::new(VecModel::from(cells))),
+                }
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let parquet_viewer = win.global::<ParquetViewer>();
+
+            parquet_viewer.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+            parquet_viewer.set_loaded_rows(parquet_data.loaded_rows as i32);
+            parquet_viewer.set_is_loading(false);
+
+            tracing::info!(
+                "Loaded {} rows (total: {}) for {}",
+                parquet_data.loaded_rows,
+                parquet_data.total_rows,
+                file_name.unwrap_or_default()
+            );
         }
     }
 

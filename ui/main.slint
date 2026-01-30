@@ -3,9 +3,10 @@
 import { Button, VerticalBox, HorizontalBox, ListView, ComboBox, LineEdit, StandardButton } from "std-widgets.slint";
 import { ExplorerComponent, BucketItem } from "explorer.slint";
 import { FileItem } from "file_list.slint";
+import { ParquetViewerDialog, ParquetColumn, ParquetRow, ParquetCell } from "dialogs/parquet_viewer.slint";
 
 // Re-export structs for Rust access
-export { BucketItem, FileItem }
+export { BucketItem, FileItem, ParquetColumn, ParquetRow, ParquetCell }
 
 // Global state for Explorer - allows Rust to access explorer data
 export global Explorer {
@@ -40,6 +41,20 @@ export global FileList {
     callback upload-clicked();
     callback delete-clicked();
     callback rename-clicked();
+}
+
+// Global state for Parquet Viewer - allows Rust to control the viewer
+export global ParquetViewer {
+    in-out property <string> file-name: "";
+    in-out property <[ParquetColumn]> columns: [];
+    in-out property <[ParquetRow]> rows: [];
+    in-out property <int> total-rows: 0;
+    in-out property <int> loaded-rows: 0;
+    in-out property <bool> is-loading: false;
+    in-out property <bool> dialog-visible: false;
+
+    callback close-requested();
+    callback load-more-requested();
 }
 
 export component MainWindow inherits Window {
@@ -193,6 +208,24 @@ export component MainWindow inherits Window {
                 color: #666666;
                 font-size: 12px;
             }
+        }
+    }
+
+    // Parquet Viewer Dialog (overlay)
+    ParquetViewerDialog {
+        file-name: ParquetViewer.file-name;
+        columns: ParquetViewer.columns;
+        rows: ParquetViewer.rows;
+        total-rows: ParquetViewer.total-rows;
+        loaded-rows: ParquetViewer.loaded-rows;
+        is-loading: ParquetViewer.is-loading;
+        dialog-visible: ParquetViewer.dialog-visible;
+
+        close-clicked => {
+            ParquetViewer.close-requested();
+        }
+        load-more-clicked => {
+            ParquetViewer.load-more-requested();
         }
     }
 }
