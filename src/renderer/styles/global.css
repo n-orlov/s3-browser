@@ -2154,6 +2154,23 @@ body {
   color: var(--text-primary);
 }
 
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  text-decoration: underline;
+  text-align: left;
+  margin-top: 4px;
+}
+
+.toast-action:hover {
+  color: var(--accent-hover);
+  text-decoration: none;
+}
+
 /* Network Status Banner */
 .network-banner {
   display: flex;

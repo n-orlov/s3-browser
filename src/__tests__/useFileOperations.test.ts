@@ -72,6 +72,50 @@ describe('useFileOperations', () => {
       expect(result.current.operations[0].status).toBe('error');
       expect(result.current.operations[0].error).toBe('Access denied');
     });
+
+    it('should call onDownloadComplete callback with file info on success', async () => {
+      const localPath = '/downloads/my-file.txt';
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: true, localPath });
+
+      const onDownloadComplete = vi.fn();
+      const { result } = renderHook(() => useFileOperations({ onDownloadComplete }));
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'folder/my-file.txt');
+      });
+
+      expect(onDownloadComplete).toHaveBeenCalledTimes(1);
+      expect(onDownloadComplete).toHaveBeenCalledWith({
+        fileName: 'my-file.txt',
+        localPath: '/downloads/my-file.txt',
+      });
+    });
+
+    it('should not call onDownloadComplete callback on error', async () => {
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: false, error: 'Failed' });
+
+      const onDownloadComplete = vi.fn();
+      const { result } = renderHook(() => useFileOperations({ onDownloadComplete }));
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'file.txt');
+      });
+
+      expect(onDownloadComplete).not.toHaveBeenCalled();
+    });
+
+    it('should not call onDownloadComplete callback if localPath is missing', async () => {
+      mockElectronAPI.s3.downloadFile.mockResolvedValue({ success: true }); // No localPath
+
+      const onDownloadComplete = vi.fn();
+      const { result } = renderHook(() => useFileOperations({ onDownloadComplete }));
+
+      await act(async () => {
+        await result.current.downloadFile('test-bucket', 'file.txt');
+      });
+
+      expect(onDownloadComplete).not.toHaveBeenCalled();
+    });
   });
 
   describe('uploadFiles', () => {
