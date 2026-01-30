@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
@@ -19,7 +19,9 @@
     "test:coverage": "vitest run --coverage",
     "package": "npm run build && electron-builder --linux",
     "package:win": "npm run build && electron-builder --win",
-    "package:all": "npm run build && electron-builder --win --mac --linux"
+    "package:win:docker": "./scripts/build-windows.sh",
+    "package:all": "npm run build && electron-builder --win --mac --linux",
+    "package:all:docker": "./scripts/build-all.sh"
   },
   "build": {
     "appId": "org.github.n-orlov.s3-browser",
