@@ -1,9 +1,9 @@
 {
   "name": "s3-browser",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
-  "author": "EST-5962",
+  "author": "Nikolai Orlov",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently -k \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -22,7 +22,7 @@
     "package:all": "npm run build && electron-builder --win --mac --linux"
   },
   "build": {
-    "appId": "com.s3browser.app",
+    "appId": "org.github.n-orlov.s3-browser",
     "productName": "S3 Browser",
     "directories": {
       "output": "release"
