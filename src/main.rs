@@ -24,9 +24,15 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting S3 Browser v{}", env!("CARGO_PKG_VERSION"));
 
-    // Create and run the application
+    // Create the application (async initialization)
     let app = app::App::new().await?;
-    app.run()?;
+
+    // Run the Slint event loop in block_in_place to properly integrate with tokio.
+    // This is required because Slint's event loop and tokio's runtime can conflict.
+    // See: https://slint.dev/docs/rust/slint/fn.spawn_local.html#compatibility-with-tokio-and-other-runtimes
+    tokio::task::block_in_place(|| {
+        app.run()
+    })?;
 
     Ok(())
 }
