@@ -158,7 +158,10 @@ function App(): React.ReactElement {
   // File operation handlers
   const handleUpload = useCallback(() => {
     if (!selectedBucket) return;
-    uploadFiles(selectedBucket, currentPrefix);
+    uploadFiles(selectedBucket, currentPrefix).then(() => {
+      // Trigger refresh after upload completes
+      window.dispatchEvent(new Event('s3-refresh-files'));
+    });
   }, [selectedBucket, currentPrefix, uploadFiles]);
 
   const handleDownload = useCallback(() => {
