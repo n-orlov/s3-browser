@@ -10,8 +10,24 @@ export default defineConfig({
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     coverage: {
-      reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'dist/'],
+      provider: 'v8',
+      reporter: ['text', 'json', 'html', 'lcov'],
+      exclude: [
+        'node_modules/',
+        'dist/',
+        'src/__tests__/**',
+        '**/*.d.ts',
+        '**/*.test.{ts,tsx}',
+        '**/*.spec.{ts,tsx}',
+        'src/main/index.ts',
+        'src/preload/index.ts',
+      ],
+      thresholds: {
+        lines: 80,
+        functions: 78,
+        branches: 70,
+        statements: 79,
+      },
     },
   },
   resolve: {
