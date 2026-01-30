@@ -23,6 +23,13 @@ export component FileListComponent inherits VerticalBox {
     in-out property <int> selection-count: 0;
     in-out property <string> toast-message: "";
     in-out property <bool> show-toast: false;
+    // Toast type for styling: "info", "success", "error"
+    in-out property <string> toast-type: "info";
+    // Delete confirmation dialog
+    in-out property <bool> show-delete-confirm: false;
+    in-out property <int> delete-count: 0;
+    // Loading progress
+    in-out property <string> loading-status: "";
 
     // Callbacks
     callback file-selected(int);
@@ -36,7 +43,10 @@ export component FileListComponent inherits VerticalBox {
     callback download-clicked();
     callback upload-clicked();
     callback delete-clicked();
+    callback delete-confirmed();
+    callback delete-cancelled();
     callback rename-clicked();
+    callback cancel-loading();
 
     padding: 4px;
     spacing: 4px;
@@ -257,15 +267,26 @@ export component FileListComponent inherits VerticalBox {
     // Loading indicator
     if is-loading: Rectangle {
         height: 40px;
-        background: #f0f0f0;
+        background: #e8f4ff;
         border-radius: 4px;
+        border-width: 1px;
+        border-color: #4a90d9;
 
         HorizontalBox {
             padding: 8px;
+            spacing: 8px;
+
+            // Loading spinner placeholder (animated in real app)
+            Text {
+                text: "⏳";
+                font-size: 16px;
+                vertical-alignment: center;
+            }
 
             Text {
-                text: "Loading...";
+                text: loading-status != "" ? loading-status : "Loading...";
                 vertical-alignment: center;
+                color: #333333;
             }
 
             Rectangle {
@@ -274,25 +295,47 @@ export component FileListComponent inherits VerticalBox {
 
             Button {
                 text: "Cancel";
+                clicked => {
+                    cancel-loading();
+                }
             }
         }
     }
 
-    // Toast notification
+    // Toast notification with type-based styling
     if show-toast: Rectangle {
         height: 40px;
-        background: #333333;
+        background: toast-type == "error" ? #ffebee : (toast-type == "success" ? #e8f5e9 : #333333);
         border-radius: 4px;
+        border-width: toast-type != "info" ? 1px : 0px;
+        border-color: toast-type == "error" ? #ef9a9a : (toast-type == "success" ? #a5d6a7 : transparent);
 
         HorizontalBox {
             padding: 12px;
+            spacing: 8px;
+
+            // Toast icon
+            if toast-type == "error": Text {
+                text: "⚠";
+                color: #c62828;
+                font-size: 14px;
+                vertical-alignment: center;
+            }
+
+            if toast-type == "success": Text {
+                text: "✓";
+                color: #2e7d32;
+                font-size: 14px;
+                vertical-alignment: center;
+            }
 
             Text {
                 text: toast-message;
-                color: white;
+                color: toast-type == "error" ? #c62828 : (toast-type == "success" ? #2e7d32 : white);
                 font-size: 13px;
                 vertical-alignment: center;
             }
         }
     }
+
 }

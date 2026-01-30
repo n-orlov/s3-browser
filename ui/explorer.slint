@@ -27,6 +27,11 @@ export component ExplorerComponent inherits HorizontalBox {
     in-out property <int> file-selection-count: 0;
     in-out property <string> file-toast-message: "";
     in-out property <bool> file-show-toast: false;
+    // New properties for enhanced error handling
+    in-out property <string> file-toast-type: "info";
+    in-out property <bool> file-show-delete-confirm: false;
+    in-out property <int> file-delete-count: 0;
+    in-out property <string> file-loading-status: "";
 
     // Bucket tree callbacks
     callback bucket-selected(int);
@@ -43,7 +48,10 @@ export component ExplorerComponent inherits HorizontalBox {
     callback download-clicked();
     callback upload-clicked();
     callback delete-clicked();
+    callback delete-confirmed();
+    callback delete-cancelled();
     callback rename-clicked();
+    callback cancel-loading();
 
     // Left panel - bucket tree
     VerticalBox {
@@ -114,6 +122,10 @@ export component ExplorerComponent inherits HorizontalBox {
         selection-count: root.file-selection-count;
         toast-message: root.file-toast-message;
         show-toast: root.file-show-toast;
+        toast-type: root.file-toast-type;
+        show-delete-confirm: root.file-show-delete-confirm;
+        delete-count: root.file-delete-count;
+        loading-status: root.file-loading-status;
 
         file-selected(index) => {
             root.file-selected(index);
@@ -145,8 +157,17 @@ export component ExplorerComponent inherits HorizontalBox {
         delete-clicked() => {
             root.delete-clicked();
         }
+        delete-confirmed() => {
+            root.delete-confirmed();
+        }
+        delete-cancelled() => {
+            root.delete-cancelled();
+        }
         rename-clicked() => {
             root.rename-clicked();
+        }
+        cancel-loading() => {
+            root.cancel-loading();
         }
     }
 }
