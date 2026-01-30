@@ -19,8 +19,14 @@ export component FileListComponent inherits VerticalBox {
     in-out property <string> current-path: "";
     in-out property <bool> is-loading: false;
 
+    // Selection count for UI feedback
+    in-out property <int> selection-count: 0;
+    in-out property <string> toast-message: "";
+    in-out property <bool> show-toast: false;
+
     // Callbacks
     callback file-selected(int);
+    callback file-selected-with-ctrl(int, bool);  // index, ctrl-held
     callback file-double-clicked(int);
     callback file-context-menu(int);
     callback prefix-filter-changed(string);
@@ -28,7 +34,9 @@ export component FileListComponent inherits VerticalBox {
     callback navigate-up();
     callback copy-url-clicked();
     callback download-clicked();
+    callback upload-clicked();
     callback delete-clicked();
+    callback rename-clicked();
 
     padding: 4px;
     spacing: 4px;
@@ -87,14 +95,15 @@ export component FileListComponent inherits VerticalBox {
         spacing: 4px;
 
         Button {
-            text: "Copy URL";
+            text: "Upload";
             clicked => {
-                copy-url-clicked();
+                upload-clicked();
             }
         }
 
         Button {
             text: "Download";
+            enabled: selection-count > 0;
             clicked => {
                 download-clicked();
             }
@@ -102,13 +111,38 @@ export component FileListComponent inherits VerticalBox {
 
         Button {
             text: "Delete";
+            enabled: selection-count > 0;
             clicked => {
                 delete-clicked();
             }
         }
 
+        Button {
+            text: "Rename";
+            enabled: selection-count == 1;
+            clicked => {
+                rename-clicked();
+            }
+        }
+
+        Button {
+            text: "Copy URL";
+            enabled: selection-count > 0;
+            clicked => {
+                copy-url-clicked();
+            }
+        }
+
         Rectangle {
             horizontal-stretch: 1;
+        }
+
+        // Selection indicator
+        if selection-count > 0: Text {
+            text: selection-count == 1 ? "1 selected" : "\{selection-count} selected";
+            font-size: 12px;
+            color: #666666;
+            vertical-alignment: center;
         }
     }
 
@@ -159,16 +193,17 @@ export component FileListComponent inherits VerticalBox {
                 background: file.is-selected ? #e0e0ff : (touch.has-hover ? #f0f0f0 : transparent);
 
                 touch := TouchArea {
-                    clicked => {
-                        file-selected(index);
-                    }
-                    double-clicked => {
-                        file-double-clicked(index);
-                    }
                     pointer-event(event) => {
+                        if event.button == PointerEventButton.left && event.kind == PointerEventKind.up {
+                            // Pass ctrl-held state with selection
+                            file-selected-with-ctrl(index, event.modifiers.control);
+                        }
                         if event.button == PointerEventButton.right && event.kind == PointerEventKind.up {
                             file-context-menu(index);
                         }
+                    }
+                    double-clicked => {
+                        file-double-clicked(index);
                     }
                 }
 
@@ -239,6 +274,24 @@ export component FileListComponent inherits VerticalBox {
 
             Button {
                 text: "Cancel";
+            }
+        }
+    }
+
+    // Toast notification
+    if show-toast: Rectangle {
+        height: 40px;
+        background: #333333;
+        border-radius: 4px;
+
+        HorizontalBox {
+            padding: 12px;
+
+            Text {
+                text: toast-message;
+                color: white;
+                font-size: 13px;
+                vertical-alignment: center;
             }
         }
     }

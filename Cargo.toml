@@ -50,6 +50,12 @@ copypasta = "0.10"
 # Image handling
 image = "0.25"
 
+# File dialogs
+rfd = "0.15"
+
+# System directories (Downloads, etc.)
+dirs = "5"
+
 # Webview for Monaco editor (optional - requires GTK/WebKit libs)
 # wry = { version = "0.47", optional = true }
 

@@ -25,15 +25,21 @@ export global FileList {
     in-out property <string> search-filter: "";
     in-out property <string> current-path: "";
     in-out property <bool> is-loading: false;
+    in-out property <int> selection-count: 0;
+    in-out property <string> toast-message: "";
+    in-out property <bool> show-toast: false;
 
     callback file-selected(int);
+    callback file-selected-with-ctrl(int, bool);
     callback file-double-clicked(int);
     callback prefix-filter-changed(string);
     callback search-filter-changed(string);
     callback navigate-up();
     callback copy-url-clicked();
     callback download-clicked();
+    callback upload-clicked();
     callback delete-clicked();
+    callback rename-clicked();
 }
 
 export component MainWindow inherits Window {
@@ -128,9 +134,15 @@ export component MainWindow inherits Window {
             file-is-loading: FileList.is-loading;
             file-prefix-filter: FileList.prefix-filter;
             file-search-filter: FileList.search-filter;
+            file-selection-count: FileList.selection-count;
+            file-toast-message: FileList.toast-message;
+            file-show-toast: FileList.show-toast;
 
             file-selected(index) => {
                 FileList.file-selected(index);
+            }
+            file-selected-with-ctrl(index, ctrl) => {
+                FileList.file-selected-with-ctrl(index, ctrl);
             }
             file-double-clicked(index) => {
                 FileList.file-double-clicked(index);
@@ -150,8 +162,14 @@ export component MainWindow inherits Window {
             download-clicked() => {
                 FileList.download-clicked();
             }
+            upload-clicked() => {
+                FileList.upload-clicked();
+            }
             delete-clicked() => {
                 FileList.delete-clicked();
+            }
+            rename-clicked() => {
+                FileList.rename-clicked();
             }
         }
 
