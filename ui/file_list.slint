@@ -1,0 +1,245 @@
+// File list component
+
+import { VerticalBox, HorizontalBox, LineEdit, ScrollView, Button } from "std-widgets.slint";
+
+export struct FileItem {
+    key: string,
+    name: string,
+    size: string,
+    last-modified: string,
+    is-folder: bool,
+    is-selected: bool,
+}
+
+export component FileList inherits VerticalBox {
+    // Properties
+    in-out property <[FileItem]> files: [];
+    in-out property <string> prefix-filter: "";
+    in-out property <string> search-filter: "";
+    in-out property <string> current-path: "";
+    in-out property <bool> is-loading: false;
+
+    // Callbacks
+    callback file-selected(int);
+    callback file-double-clicked(int);
+    callback file-context-menu(int);
+    callback prefix-filter-changed(string);
+    callback search-filter-changed(string);
+    callback navigate-up();
+    callback copy-url-clicked();
+    callback download-clicked();
+    callback delete-clicked();
+
+    padding: 4px;
+    spacing: 4px;
+
+    // Toolbar
+    HorizontalBox {
+        height: 32px;
+        spacing: 4px;
+
+        // Path breadcrumb
+        Text {
+            text: current-path;
+            font-size: 12px;
+            color: #666666;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        Button {
+            text: "⬆";
+            width: 28px;
+            clicked => {
+                navigate-up();
+            }
+        }
+    }
+
+    // Filters
+    HorizontalBox {
+        height: 28px;
+        spacing: 8px;
+
+        LineEdit {
+            placeholder-text: "Prefix filter...";
+            text <=> prefix-filter;
+            horizontal-stretch: 1;
+            edited(text) => {
+                prefix-filter-changed(text);
+            }
+        }
+
+        LineEdit {
+            placeholder-text: "Search...";
+            text <=> search-filter;
+            horizontal-stretch: 1;
+            edited(text) => {
+                search-filter-changed(text);
+            }
+        }
+    }
+
+    // Action buttons
+    HorizontalBox {
+        height: 32px;
+        spacing: 4px;
+
+        Button {
+            text: "Copy URL";
+            clicked => {
+                copy-url-clicked();
+            }
+        }
+
+        Button {
+            text: "Download";
+            clicked => {
+                download-clicked();
+            }
+        }
+
+        Button {
+            text: "Delete";
+            clicked => {
+                delete-clicked();
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+    }
+
+    // Column headers
+    Rectangle {
+        height: 24px;
+        background: #f5f5f5;
+
+        HorizontalBox {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Name";
+                font-weight: 600;
+                font-size: 12px;
+                horizontal-stretch: 3;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "Size";
+                font-weight: 600;
+                font-size: 12px;
+                width: 80px;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "Modified";
+                font-weight: 600;
+                font-size: 12px;
+                width: 150px;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // File list
+    ScrollView {
+        vertical-stretch: 1;
+
+        VerticalBox {
+            for file[index] in files: Rectangle {
+                height: 28px;
+                background: file.is-selected ? #e0e0ff : (touch.has-hover ? #f0f0f0 : transparent);
+
+                touch := TouchArea {
+                    clicked => {
+                        file-selected(index);
+                    }
+                    double-clicked => {
+                        file-double-clicked(index);
+                    }
+                    pointer-event(event) => {
+                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.up {
+                            file-context-menu(index);
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    padding-left: 8px;
+                    padding-right: 8px;
+
+                    // Icon and name
+                    HorizontalBox {
+                        horizontal-stretch: 3;
+                        spacing: 4px;
+
+                        Text {
+                            text: file.is-folder ? "📁" : "📄";
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: file.name;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    // Size
+                    Text {
+                        text: file.size;
+                        font-size: 13px;
+                        width: 80px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        color: #666666;
+                    }
+
+                    // Modified date
+                    Text {
+                        text: file.last-modified;
+                        font-size: 13px;
+                        width: 150px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        color: #666666;
+                    }
+                }
+            }
+        }
+    }
+
+    // Loading indicator
+    if is-loading: Rectangle {
+        height: 40px;
+        background: #f0f0f0;
+        border-radius: 4px;
+
+        HorizontalBox {
+            padding: 8px;
+
+            Text {
+                text: "Loading...";
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Cancel";
+            }
+        }
+    }
+}

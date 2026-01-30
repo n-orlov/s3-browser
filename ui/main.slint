@@ -1,0 +1,104 @@
+// S3 Browser Main Window
+
+import { Button, VerticalBox, HorizontalBox, ListView, ComboBox, LineEdit, StandardButton } from "std-widgets.slint";
+import { Explorer } from "explorer.slint";
+
+export component MainWindow inherits Window {
+    title: "S3 Browser";
+    min-width: 1024px;
+    min-height: 768px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+
+    // Profile selection
+    in-out property <[string]> profiles: ["default"];
+    in-out property <int> current-profile-index: 0;
+    in-out property <string> status-message: "Ready";
+    in-out property <bool> is-loading: false;
+
+    // Callbacks
+    callback profile-changed(int);
+    callback navigate-to-url(string);
+    callback refresh-requested();
+
+    VerticalBox {
+        // Toolbar
+        HorizontalBox {
+            height: 40px;
+            padding: 4px;
+            spacing: 8px;
+
+            Text {
+                text: "Profile:";
+                vertical-alignment: center;
+            }
+
+            profile-combo := ComboBox {
+                model: profiles;
+                current-index <=> current-profile-index;
+                selected(value) => {
+                    profile-changed(profile-combo.current-index);
+                }
+            }
+
+            Rectangle {
+                width: 16px;
+            }
+
+            Text {
+                text: "Go to:";
+                vertical-alignment: center;
+            }
+
+            url-input := LineEdit {
+                placeholder-text: "s3://bucket/path or https://...";
+                horizontal-stretch: 1;
+                accepted(text) => {
+                    navigate-to-url(text);
+                }
+            }
+
+            Button {
+                text: "Go";
+                clicked => {
+                    navigate-to-url(url-input.text);
+                }
+            }
+
+            Button {
+                text: "↻";
+                width: 32px;
+                clicked => {
+                    refresh-requested();
+                }
+            }
+        }
+
+        // Main content
+        Explorer {
+            vertical-stretch: 1;
+        }
+
+        // Status bar
+        HorizontalBox {
+            height: 24px;
+            padding: 4px;
+
+            Text {
+                text: status-message;
+                color: #666666;
+                font-size: 12px;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            if is-loading: Text {
+                text: "Loading...";
+                color: #666666;
+                font-size: 12px;
+            }
+        }
+    }
+}
