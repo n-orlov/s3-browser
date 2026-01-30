@@ -7,6 +7,7 @@ describe('FileToolbar', () => {
     selectedBucket: 'test-bucket',
     currentPrefix: 'path/',
     selectedFile: null,
+    selectedCount: 0,
     onUpload: vi.fn(),
     onDownload: vi.fn(),
     onDelete: vi.fn(),
@@ -198,6 +199,7 @@ describe('FileToolbar', () => {
         <FileToolbar
           {...defaultProps}
           selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={1}
         />
       );
 
@@ -433,6 +435,111 @@ describe('FileToolbar', () => {
       );
 
       const imageButton = screen.getByText('Image').closest('button');
+      expect(imageButton).toBeDisabled();
+    });
+  });
+
+  describe('multiselect behavior', () => {
+    it('disables Download button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const downloadButton = screen.getByTitle(/Download not available for multiple files/);
+      expect(downloadButton).toBeDisabled();
+    });
+
+    it('disables Rename button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const renameButton = screen.getByTitle(/Rename not available for multiple files/);
+      expect(renameButton).toBeDisabled();
+    });
+
+    it('disables Copy URL button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const copyButton = screen.getByTitle(/Copy URL not available for multiple files/);
+      expect(copyButton).toBeDisabled();
+    });
+
+    it('enables Delete button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={3}
+        />
+      );
+
+      const deleteButton = screen.getByTitle(/Delete 3 files/);
+      expect(deleteButton).not.toBeDisabled();
+    });
+
+    it('shows file count on Delete button when multiple files selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={5}
+        />
+      );
+
+      expect(screen.getByText('Delete (5)')).toBeInTheDocument();
+    });
+
+    it('disables Edit button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.json', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const editButton = screen.getByTitle(/Select a text file to edit/);
+      expect(editButton).toBeDisabled();
+    });
+
+    it('disables Parquet button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.parquet', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      expect(parquetButton).toBeDisabled();
+    });
+
+    it('disables Image button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'image.png', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const imageButton = screen.getByTitle(/Select an image file to preview/);
       expect(imageButton).toBeDisabled();
     });
   });

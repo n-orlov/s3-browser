@@ -8,6 +8,7 @@ const mockElectronAPI = {
     downloadFile: vi.fn(),
     uploadFiles: vi.fn(),
     deleteFile: vi.fn(),
+    deleteFiles: vi.fn(),
     renameFile: vi.fn(),
     showOpenDialog: vi.fn(),
   },
@@ -238,6 +239,96 @@ describe('useFileOperations', () => {
 
       await act(async () => {
         resolvePromise!({ success: true });
+        await deletePromise;
+      });
+
+      expect(result.current.isLoading).toBe(false);
+    });
+  });
+
+  describe('deleteFiles (batch)', () => {
+    it('should return success result when all files deleted', async () => {
+      mockElectronAPI.s3.deleteFiles.mockResolvedValue({
+        success: true,
+        results: [
+          { key: 'file1.txt', success: true },
+          { key: 'file2.txt', success: true },
+        ],
+        deletedCount: 2,
+        failedCount: 0,
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number };
+      await act(async () => {
+        deleteResult = await result.current.deleteFiles('test-bucket', ['file1.txt', 'file2.txt']);
+      });
+
+      expect(deleteResult!.success).toBe(true);
+      expect(deleteResult!.deletedCount).toBe(2);
+      expect(deleteResult!.failedCount).toBe(0);
+    });
+
+    it('should return partial result when some files fail', async () => {
+      mockElectronAPI.s3.deleteFiles.mockResolvedValue({
+        success: false,
+        results: [
+          { key: 'file1.txt', success: true },
+          { key: 'file2.txt', success: false, error: 'Access denied' },
+        ],
+        deletedCount: 1,
+        failedCount: 1,
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number };
+      await act(async () => {
+        deleteResult = await result.current.deleteFiles('test-bucket', ['file1.txt', 'file2.txt']);
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.deletedCount).toBe(1);
+      expect(deleteResult!.failedCount).toBe(1);
+    });
+
+    it('should handle exception gracefully', async () => {
+      mockElectronAPI.s3.deleteFiles.mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number };
+      await act(async () => {
+        deleteResult = await result.current.deleteFiles('test-bucket', ['file1.txt', 'file2.txt', 'file3.txt']);
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.deletedCount).toBe(0);
+      expect(deleteResult!.failedCount).toBe(3);
+    });
+
+    it('should set isLoading during batch delete operation', async () => {
+      let resolvePromise: (value: any) => void;
+      mockElectronAPI.s3.deleteFiles.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        })
+      );
+
+      const { result } = renderHook(() => useFileOperations());
+
+      expect(result.current.isLoading).toBe(false);
+
+      let deletePromise: Promise<{ success: boolean; deletedCount: number; failedCount: number }>;
+      act(() => {
+        deletePromise = result.current.deleteFiles('test-bucket', ['file1.txt']);
+      });
+
+      expect(result.current.isLoading).toBe(true);
+
+      await act(async () => {
+        resolvePromise!({ success: true, results: [], deletedCount: 1, failedCount: 0 });
         await deletePromise;
       });
 
