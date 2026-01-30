@@ -7,9 +7,10 @@ import { ParquetViewerDialog, ParquetColumn, ParquetRow, ParquetCell } from "dia
 import { CsvViewerDialog, CsvColumn, CsvRow, CsvCell } from "dialogs/csv_viewer.slint";
 import { ImageViewerDialog } from "dialogs/image_viewer.slint";
 import { TextEditorDialog } from "dialogs/text_editor.slint";
+import { JsonViewerDialog, JsonTreeNode } from "dialogs/json_viewer.slint";
 
 // Re-export structs for Rust access
-export { BucketItem, FileItem, ParquetColumn, ParquetRow, ParquetCell, CsvColumn, CsvRow, CsvCell }
+export { BucketItem, FileItem, ParquetColumn, ParquetRow, ParquetCell, CsvColumn, CsvRow, CsvCell, JsonTreeNode }
 
 // Global state for Explorer - allows Rust to access explorer data
 export global Explorer {
@@ -105,6 +106,25 @@ export global TextEditor {
     callback close-requested();
     callback save-requested(string);
     callback content-changed(string);
+}
+
+// Global state for JSON Viewer - allows Rust to control the viewer
+export global JsonViewer {
+    in-out property <string> file-name: "";
+    in-out property <[JsonTreeNode]> tree-nodes: [];
+    in-out property <string> text-content: "";
+    in-out property <int> total-nodes: 0;
+    in-out property <string> file-size: "";
+    in-out property <bool> is-valid: true;
+    in-out property <string> error-message: "";
+    in-out property <bool> is-loading: false;
+    in-out property <bool> dialog-visible: false;
+    in-out property <bool> show-tree-view: true;
+
+    callback close-requested();
+    callback node-toggle-requested(string);
+    callback expand-all-requested();
+    callback collapse-all-requested();
 }
 
 export component MainWindow inherits Window {
@@ -335,6 +355,33 @@ export component MainWindow inherits Window {
         }
         content-changed(text) => {
             TextEditor.content-changed(text);
+        }
+    }
+
+    // JSON Viewer Dialog (overlay)
+    JsonViewerDialog {
+        file-name: JsonViewer.file-name;
+        tree-nodes: JsonViewer.tree-nodes;
+        text-content: JsonViewer.text-content;
+        total-nodes: JsonViewer.total-nodes;
+        file-size: JsonViewer.file-size;
+        is-valid: JsonViewer.is-valid;
+        error-message: JsonViewer.error-message;
+        is-loading: JsonViewer.is-loading;
+        dialog-visible: JsonViewer.dialog-visible;
+        show-tree-view: JsonViewer.show-tree-view;
+
+        close-clicked => {
+            JsonViewer.close-requested();
+        }
+        node-toggle-clicked(node-id) => {
+            JsonViewer.node-toggle-requested(node-id);
+        }
+        expand-all-clicked => {
+            JsonViewer.expand-all-requested();
+        }
+        collapse-all-clicked => {
+            JsonViewer.collapse-all-requested();
         }
     }
 }
