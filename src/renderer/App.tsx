@@ -12,6 +12,7 @@ import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
 import ImagePreview from './components/ImagePreview';
+import StatusBar from './components/StatusBar';
 import { ToastContainer, useToasts } from './components/Toast';
 import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
@@ -65,6 +66,11 @@ function App(): React.ReactElement {
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
+
+  // Status bar state
+  const [itemCount, setItemCount] = useState(0);
+  const [allItemsLoaded, setAllItemsLoaded] = useState(false);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   // Track if initial state has been restored
   const initialStateRestored = useRef(false);
@@ -300,6 +306,15 @@ function App(): React.ReactElement {
     setPendingFileSelection(null);
   }, []);
 
+  const handleItemCountChange = useCallback(
+    (count: number, allLoaded: boolean, loading: boolean) => {
+      setItemCount(count);
+      setAllItemsLoaded(allLoaded);
+      setIsLoadingItems(loading);
+    },
+    []
+  );
+
   const handleFilesDropped = useCallback(
     (filePaths: string[]) => {
       if (!selectedBucket) return;
@@ -394,8 +409,15 @@ function App(): React.ReactElement {
               onFilesDropped={handleFilesDropped}
               pendingFileSelection={pendingFileSelection}
               onPendingFileSelectionHandled={handlePendingFileSelectionHandled}
+              onItemCountChange={handleItemCountChange}
             />
           </div>
+          <StatusBar
+            loadedCount={itemCount}
+            allLoaded={allItemsLoaded}
+            selectedFiles={selectedFiles}
+            loading={isLoadingItems}
+          />
         </section>
       </main>
 
