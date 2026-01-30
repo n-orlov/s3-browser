@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=S3 Browser
+Comment=Browse and manage AWS S3 buckets
+Exec=s3-browser
+Icon=s3-browser
+Categories=Utility;FileManager;Network;
+Terminal=false
+StartupWMClass=s3-browser

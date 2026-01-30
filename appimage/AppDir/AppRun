@@ -1,0 +1,11 @@
+#!/bin/bash
+# AppRun script for S3 Browser
+
+# Get the directory containing this script
+APPDIR="$(dirname "$(readlink -f "$0")")"
+
+# Export library paths
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
+
+# Run the application
+exec "${APPDIR}/usr/bin/s3-browser" "$@"

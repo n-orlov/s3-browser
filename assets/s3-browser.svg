@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bucket" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF9900"/>
+      <stop offset="100%" style="stop-color:#FF6600"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#232F3E"/>
+  <!-- S3 bucket shape -->
+  <path d="M 64 80 L 192 80 L 180 200 L 76 200 Z" fill="url(#bucket)" stroke="#FF9900" stroke-width="2"/>
+  <!-- Handle -->
+  <path d="M 96 60 C 96 40, 160 40, 160 60" fill="none" stroke="#FF9900" stroke-width="8" stroke-linecap="round"/>
+  <!-- S3 text -->
+  <text x="128" y="150" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle">S3</text>
+</svg>
