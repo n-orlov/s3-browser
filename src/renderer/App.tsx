@@ -17,7 +17,7 @@ import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
 
 function App(): React.ReactElement {
-  const { currentProfile } = useAwsProfiles();
+  const { currentProfile, profileRestored } = useAwsProfiles();
   const {
     operations,
     isLoading,
@@ -44,12 +44,60 @@ function App(): React.ReactElement {
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
 
-  // Reset navigation when profile changes
+  // Track if initial state has been restored
+  const initialStateRestored = useRef(false);
+  const previousProfile = useRef<string | null>(null);
+
+  // Restore saved bucket/prefix when profile is restored
   useEffect(() => {
-    setSelectedBucket(null);
-    setCurrentPrefix('');
-    setSelectedFile(null);
+    if (profileRestored && currentProfile && !initialStateRestored.current) {
+      initialStateRestored.current = true;
+      // Load saved bucket/prefix for this profile
+      window.electronAPI.appState.load().then(savedState => {
+        // Only restore if the saved profile matches the current profile
+        if (savedState.lastProfile === currentProfile && savedState.lastBucket) {
+          setSelectedBucket(savedState.lastBucket);
+          setCurrentPrefix(savedState.lastPrefix || '');
+        }
+      }).catch(err => {
+        console.warn('Failed to restore navigation state:', err);
+      });
+    }
+  }, [profileRestored, currentProfile]);
+
+  // Reset navigation when profile changes (but not on initial restore)
+  useEffect(() => {
+    // Skip reset if this is the first profile set (during restoration)
+    if (previousProfile.current === null && currentProfile !== null) {
+      previousProfile.current = currentProfile;
+      return;
+    }
+    // Reset only when profile actually changes after initial load
+    if (previousProfile.current !== currentProfile) {
+      previousProfile.current = currentProfile;
+      setSelectedBucket(null);
+      setCurrentPrefix('');
+      setSelectedFile(null);
+    }
   }, [currentProfile]);
+
+  // Save state when profile/bucket/prefix changes (debounced)
+  useEffect(() => {
+    // Don't save until initial state is restored
+    if (!profileRestored) return;
+
+    const saveTimeout = setTimeout(() => {
+      window.electronAPI.appState.save({
+        lastProfile: currentProfile,
+        lastBucket: selectedBucket,
+        lastPrefix: currentPrefix,
+      }).catch(err => {
+        console.warn('Failed to save app state:', err);
+      });
+    }, 500); // Debounce 500ms to avoid too many writes
+
+    return () => clearTimeout(saveTimeout);
+  }, [profileRestored, currentProfile, selectedBucket, currentPrefix]);
 
   const handleSelectBucket = useCallback((bucket: string) => {
     setSelectedBucket(bucket);

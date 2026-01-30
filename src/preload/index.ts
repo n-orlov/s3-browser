@@ -94,6 +94,13 @@ export interface UploadFilesResult {
   results: UploadResult[];
 }
 
+// Types for App State API
+export interface AppStateData {
+  lastProfile: string | null;
+  lastBucket: string | null;
+  lastPrefix: string;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -102,6 +109,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Platform info
   platform: process.platform,
+
+  // App State persistence API
+  appState: {
+    load: (): Promise<AppStateData> => ipcRenderer.invoke('app-state:load'),
+    save: (data: Partial<AppStateData>): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('app-state:save', data),
+  },
 
   // AWS Credentials API
   aws: {
@@ -195,6 +209,10 @@ declare global {
     electronAPI: {
       getAppVersion: () => Promise<string>;
       platform: NodeJS.Platform;
+      appState: {
+        load: () => Promise<AppStateData>;
+        save: (data: Partial<AppStateData>) => Promise<{ success: boolean; error?: string }>;
+      };
       aws: {
         getProfiles: () => Promise<CredentialsState>;
         setProfile: (profileName: string) => Promise<{ success: boolean; error?: string }>;

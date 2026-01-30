@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
 import { registerCredentialsIpc } from './ipc/credentials';
 import { registerS3Ipc } from './ipc/s3';
+import { registerAppStateIpc } from './ipc/appState';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -65,6 +66,7 @@ app.whenReady().then(() => {
   // Register IPC handlers before creating window
   registerCredentialsIpc();
   registerS3Ipc();
+  registerAppStateIpc();
   createWindow();
 });
 

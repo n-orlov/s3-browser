@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 
 export type ProfileType =
   | 'static'       // Direct access_key_id + secret_access_key
@@ -24,6 +24,7 @@ export interface AwsProfileContextValue {
   defaultRegion?: string;
   loading: boolean;
   error: string | null;
+  profileRestored: boolean;
   selectProfile: (profileName: string) => Promise<void>;
   refreshProfiles: () => Promise<void>;
 }
@@ -36,6 +37,8 @@ export function AwsProfileProvider({ children }: { children: ReactNode }): React
   const [defaultRegion, setDefaultRegion] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileRestored, setProfileRestored] = useState(false);
+  const restorationAttempted = useRef(false);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -45,8 +48,34 @@ export function AwsProfileProvider({ children }: { children: ReactNode }): React
       setProfiles(state.profiles);
       setCurrentProfile(state.currentProfile);
       setDefaultRegion(state.defaultRegion);
+
+      // On first load, try to restore last used profile
+      if (!restorationAttempted.current) {
+        restorationAttempted.current = true;
+        try {
+          const savedState = await window.electronAPI.appState.load();
+          if (savedState.lastProfile) {
+            // Check if the saved profile exists and is valid
+            const savedProfileExists = state.profiles.find(
+              p => p.name === savedState.lastProfile && p.isValid
+            );
+            if (savedProfileExists) {
+              // Clear S3 client and select the saved profile
+              await window.electronAPI.s3.clearClient();
+              const result = await window.electronAPI.aws.setProfile(savedState.lastProfile);
+              if (result.success) {
+                setCurrentProfile(savedState.lastProfile);
+              }
+            }
+          }
+        } catch (restoreErr) {
+          console.warn('Failed to restore saved profile:', restoreErr);
+        }
+        setProfileRestored(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profiles');
+      setProfileRestored(true);
     } finally {
       setLoading(false);
     }
@@ -94,6 +123,7 @@ export function AwsProfileProvider({ children }: { children: ReactNode }): React
     defaultRegion,
     loading,
     error,
+    profileRestored,
     selectProfile,
     refreshProfiles,
   };

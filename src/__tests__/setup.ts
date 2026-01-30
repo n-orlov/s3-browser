@@ -7,6 +7,16 @@ import { cleanup } from '@testing-library/react';
 const mockElectronAPI = {
   getAppVersion: vi.fn(() => Promise.resolve('0.1.0')),
   platform: 'linux' as NodeJS.Platform,
+  appState: {
+    load: vi.fn(() =>
+      Promise.resolve({
+        lastProfile: null,
+        lastBucket: null,
+        lastPrefix: '',
+      })
+    ),
+    save: vi.fn(() => Promise.resolve({ success: true })),
+  },
   aws: {
     getProfiles: vi.fn(() =>
       Promise.resolve({
