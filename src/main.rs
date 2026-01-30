@@ -5,6 +5,7 @@
 
 mod app;
 mod s3;
+mod settings;
 mod viewers;
 mod ui;
 
