@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, Menu } from 'electron';
 import path from 'path';
 import { registerCredentialsIpc } from './ipc/credentials';
 import { registerS3Ipc } from './ipc/s3';
@@ -22,7 +22,11 @@ function createWindow(): void {
     },
     title: 'S3 Browser',
     show: false,
+    autoHideMenuBar: true,
   });
+
+  // Remove the application menu for a cleaner native look
+  Menu.setApplicationMenu(null);
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
