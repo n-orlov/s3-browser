@@ -101,11 +101,14 @@ export component FileListComponent inherits VerticalBox {
 
     // Action buttons
     HorizontalBox {
-        height: 32px;
-        spacing: 4px;
+        height: 36px;
+        spacing: 6px;
+        padding-top: 2px;
+        padding-bottom: 2px;
 
         Button {
             text: "Upload";
+            min-width: 70px;
             clicked => {
                 upload-clicked();
             }
@@ -113,6 +116,7 @@ export component FileListComponent inherits VerticalBox {
 
         Button {
             text: "Download";
+            min-width: 85px;
             enabled: selection-count > 0;
             clicked => {
                 download-clicked();
@@ -121,6 +125,7 @@ export component FileListComponent inherits VerticalBox {
 
         Button {
             text: "Delete";
+            min-width: 65px;
             enabled: selection-count > 0;
             clicked => {
                 delete-clicked();
@@ -129,6 +134,7 @@ export component FileListComponent inherits VerticalBox {
 
         Button {
             text: "Rename";
+            min-width: 75px;
             enabled: selection-count == 1;
             clicked => {
                 rename-clicked();
@@ -137,6 +143,7 @@ export component FileListComponent inherits VerticalBox {
 
         Button {
             text: "Copy URL";
+            min-width: 85px;
             enabled: selection-count > 0;
             clicked => {
                 copy-url-clicked();

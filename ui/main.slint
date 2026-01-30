@@ -165,8 +165,8 @@ export component MainWindow inherits Window {
     VerticalBox {
         // Toolbar
         HorizontalBox {
-            height: 40px;
-            padding: 4px;
+            height: 44px;
+            padding: 6px;
             spacing: 8px;
 
             Text {
@@ -203,14 +203,15 @@ export component MainWindow inherits Window {
 
             Button {
                 text: "Go";
+                min-width: 50px;
                 clicked => {
                     navigate-to-url(url-input.text);
                 }
             }
 
             Button {
-                text: "↻";
-                width: 32px;
+                text: "↻ Refresh";
+                min-width: 80px;
                 clicked => {
                     refresh-requested();
                 }
