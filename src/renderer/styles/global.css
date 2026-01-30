@@ -30,6 +30,33 @@ body {
   color: var(--text-primary);
   background-color: var(--bg-primary);
   overflow: hidden;
+  /* Prevent text selection across UI for native desktop feel */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in specific input elements */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Allow text selection in Monaco Editor content */
+.monaco-editor,
+.monaco-editor * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Allow text selection in code/monospace content areas */
+.parquet-viewer-table td,
+.dialog-filename,
+.text-editor-path,
+.parquet-viewer-path,
+.image-preview-path,
+.navigation-bar-input {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .app {
