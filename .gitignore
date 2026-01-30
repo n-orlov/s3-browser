@@ -27,3 +27,6 @@ Thumbs.db
 *.AppImage
 *.deb
 *.rpm
+dist/
+*.profraw
+appimage/AppDir/usr/bin/s3-browser
