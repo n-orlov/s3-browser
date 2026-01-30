@@ -2,12 +2,18 @@ import React, { useEffect, useState, useCallback } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastMessage {
   id: string;
   type: ToastType;
   title: string;
   message?: string;
   duration?: number; // ms, 0 for persistent
+  action?: ToastAction;
 }
 
 interface ToastProps {
@@ -50,6 +56,11 @@ function Toast({ toast, onDismiss }: ToastProps): React.ReactElement {
       <div className="toast-content">
         <div className="toast-title">{toast.title}</div>
         {toast.message && <div className="toast-message">{toast.message}</div>}
+        {toast.action && (
+          <button className="toast-action" onClick={toast.action.onClick}>
+            {toast.action.label}
+          </button>
+        )}
       </div>
       <button className="toast-dismiss" onClick={handleDismiss} aria-label="Dismiss">
         \u00D7

@@ -7,6 +7,15 @@ function generateOperationId(): string {
   return `op-${Date.now()}-${++operationCounter}`;
 }
 
+export interface DownloadCompleteInfo {
+  fileName: string;
+  localPath: string;
+}
+
+export interface UseFileOperationsOptions {
+  onDownloadComplete?: (info: DownloadCompleteInfo) => void;
+}
+
 export interface UseFileOperationsResult {
   operations: Operation[];
   isLoading: boolean;
@@ -18,7 +27,8 @@ export interface UseFileOperationsResult {
   clearCompleted: () => void;
 }
 
-export function useFileOperations(): UseFileOperationsResult {
+export function useFileOperations(options: UseFileOperationsOptions = {}): UseFileOperationsResult {
+  const { onDownloadComplete } = options;
   const [operations, setOperations] = useState<Operation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -63,6 +73,10 @@ export function useFileOperations(): UseFileOperationsResult {
         updateOperation(opId, { status: 'completed' });
         // Auto-dismiss after 3 seconds
         setTimeout(() => dismissOperation(opId), 3000);
+        // Notify about completed download with local path
+        if (result.localPath && onDownloadComplete) {
+          onDownloadComplete({ fileName, localPath: result.localPath });
+        }
       } else {
         updateOperation(opId, { status: 'error', error: result.error });
       }
@@ -72,7 +86,7 @@ export function useFileOperations(): UseFileOperationsResult {
         error: error instanceof Error ? error.message : 'Download failed',
       });
     }
-  }, [addOperation, updateOperation, dismissOperation]);
+  }, [addOperation, updateOperation, dismissOperation, onDownloadComplete]);
 
   const uploadFiles = useCallback(
     async (bucket: string, prefix: string, filePaths?: string[]) => {
