@@ -18,12 +18,14 @@ import {
   renameFile,
   copyFile,
   getFileSize,
+  getObjectMetadata,
   type S3Bucket,
   type S3Object,
   type ListObjectsResult,
   type ListObjectsOptions,
   type FileOperationResult,
   type DeleteFilesResult,
+  type ObjectMetadata,
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
 
@@ -454,6 +456,20 @@ export function registerS3Ipc(): void {
   ipcMain.handle('s3:show-file-in-folder', async (_event, filePath: string): Promise<void> => {
     shell.showItemInFolder(filePath);
   });
+
+  // Get object metadata
+  ipcMain.handle(
+    's3:get-object-metadata',
+    async (_event, bucket: string, key: string): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await getObjectMetadata(profileName, bucket, key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, error: message };
+      }
+    }
+  );
 }
 
 /**

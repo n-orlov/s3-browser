@@ -101,6 +101,26 @@ export interface DeleteFilesResult {
   failedCount: number;
 }
 
+// Types for Object Metadata
+export interface ObjectMetadata {
+  key: string;
+  bucket: string;
+  s3Url: string;
+  httpUrl: string;
+  contentLength?: number;
+  contentType?: string;
+  lastModified?: Date;
+  etag?: string;
+  storageClass?: string;
+  versionId?: string;
+  serverSideEncryption?: string;
+  contentEncoding?: string;
+  cacheControl?: string;
+  expires?: Date;
+  tags: Record<string, string>;
+  customMetadata: Record<string, string>;
+}
+
 // Types for App State API
 export interface AppStateData {
   lastProfile: string | null;
@@ -209,7 +229,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openDownloadsFolder: (): Promise<void> => ipcRenderer.invoke('s3:open-downloads-folder'),
     showFileInFolder: (filePath: string): Promise<void> =>
       ipcRenderer.invoke('s3:show-file-in-folder', filePath),
+    getObjectMetadata: (
+      bucket: string,
+      key: string
+    ): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> =>
+      ipcRenderer.invoke('s3:get-object-metadata', bucket, key),
   },
+
+  // Direct top-level access to getObjectMetadata for PropertiesDialog
+  getObjectMetadata: (
+    bucket: string,
+    key: string
+  ): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> =>
+    ipcRenderer.invoke('s3:get-object-metadata', bucket, key),
 });
 
 // Type definitions for the exposed API
@@ -284,7 +316,15 @@ declare global {
         showOpenDialog: () => Promise<string[] | null>;
         openDownloadsFolder: () => Promise<void>;
         showFileInFolder: (filePath: string) => Promise<void>;
+        getObjectMetadata: (
+          bucket: string,
+          key: string
+        ) => Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }>;
       };
+      getObjectMetadata: (
+        bucket: string,
+        key: string
+      ) => Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }>;
     };
   }
 }

@@ -8,6 +8,7 @@ import FileToolbar from './components/FileToolbar';
 import NavigationBar from './components/NavigationBar';
 import RenameDialog from './components/RenameDialog';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog';
+import PropertiesDialog from './components/PropertiesDialog';
 import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
@@ -63,6 +64,7 @@ function App(): React.ReactElement {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+  const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
 
   // Pending file selection (for URL navigation that points to a file)
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
@@ -260,6 +262,15 @@ function App(): React.ReactElement {
     setIsImagePreviewOpen(false);
   }, []);
 
+  const handleProperties = useCallback(() => {
+    if (!selectedFile) return;
+    setIsPropertiesOpen(true);
+  }, [selectedFile]);
+
+  const handlePropertiesClose = useCallback(() => {
+    setIsPropertiesOpen(false);
+  }, []);
+
   const handleCopyUrl = useCallback(async () => {
     if (!selectedBucket || !selectedFile || selectedFile.isPrefix) return;
 
@@ -394,6 +405,7 @@ function App(): React.ReactElement {
             onViewImage={handleViewImage}
             onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
+            onProperties={handleProperties}
             disabled={isLoading}
           />
           <div className="file-list">
@@ -437,6 +449,15 @@ function App(): React.ReactElement {
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
       />
+      {selectedBucket && selectedFile && (
+        <PropertiesDialog
+          isOpen={isPropertiesOpen}
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          isFolder={selectedFile.isPrefix}
+          onClose={handlePropertiesClose}
+        />
+      )}
 
       {/* Text Editor */}
       {isEditorOpen && selectedBucket && selectedFile && (

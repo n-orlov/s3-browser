@@ -18,6 +18,7 @@ export interface FileToolbarProps {
   onViewImage: () => void;
   onCopyUrl: () => void;
   onRefresh: () => void;
+  onProperties: () => void;
   disabled?: boolean;
 }
 
@@ -73,15 +74,20 @@ function FileToolbar({
   onViewImage,
   onCopyUrl,
   onRefresh,
+  onProperties,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
+  const hasFolderSelection = selectedFile !== null && selectedFile.isPrefix;
+  const hasAnySelection = selectedFile !== null;
   const hasMultipleSelection = selectedCount > 1;
   const canEdit = hasSelection && !hasMultipleSelection && isEditableFile(selectedFile!.key);
   const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
   const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
   // Delete is allowed for any number of files selected (but not folders)
   const canDelete = selectedCount > 0;
+  // Properties can be shown for any single selected item (file or folder)
+  const canShowProperties = hasAnySelection && !hasMultipleSelection;
 
   return (
     <div className="file-toolbar">
@@ -156,6 +162,15 @@ function FileToolbar({
       >
         <span className="toolbar-icon">X</span>
         <span className="toolbar-label">{selectedCount > 1 ? `Delete (${selectedCount})` : 'Delete'}</span>
+      </button>
+      <button
+        className="toolbar-btn"
+        onClick={onProperties}
+        disabled={disabled || !canShowProperties}
+        title={canShowProperties ? 'View properties' : 'Select a file or folder to view properties'}
+      >
+        <span className="toolbar-icon">i</span>
+        <span className="toolbar-label">Properties</span>
       </button>
       <div className="toolbar-spacer" />
       <button
