@@ -27,11 +27,10 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build application
-        run: npm run build
-
-      - name: Build Linux AppImage
-        run: npm run package
+      - name: Build and package Linux AppImage
+        run: |
+          npm run build
+          npx electron-builder --linux -p never
 
       - name: Upload Linux artifacts to release
         uses: softprops/action-gh-release@v2
