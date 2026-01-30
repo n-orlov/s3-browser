@@ -1,0 +1,283 @@
+// JSON Viewer Dialog
+// Displays JSON files with tree view (collapsible nodes) and text view modes
+
+import { VerticalBox, HorizontalBox, ScrollView, Button, TextEdit } from "std-widgets.slint";
+
+// JSON tree node structure
+export struct JsonTreeNode {
+    id: string,
+    key: string,
+    value: string,
+    value-type: string,  // "null", "boolean", "number", "string", "object", "array"
+    depth: int,
+    expandable: bool,
+    expanded: bool,
+    child-count: int,
+}
+
+export component JsonViewerDialog inherits Rectangle {
+    // Properties
+    in-out property <string> file-name: "";
+    in-out property <[JsonTreeNode]> tree-nodes: [];
+    in-out property <string> text-content: "";
+    in-out property <int> total-nodes: 0;
+    in-out property <string> file-size: "";
+    in-out property <bool> is-valid: true;
+    in-out property <string> error-message: "";
+    in-out property <bool> is-loading: false;
+    in-out property <bool> dialog-visible: false;
+    in-out property <bool> show-tree-view: true;  // Toggle between tree and text view
+
+    // Callbacks
+    callback close-clicked();
+    callback node-toggle-clicked(string);  // Node ID to toggle
+    callback expand-all-clicked();
+    callback collapse-all-clicked();
+
+    // Dialog background - only visible when dialog is shown
+    background: dialog-visible ? #00000080 : transparent;
+
+    // Only show when dialog-visible
+    if dialog-visible: Rectangle {
+        width: 100%;
+        height: 100%;
+
+        TouchArea {
+            // Clicking background closes dialog
+            clicked => {
+                close-clicked();
+            }
+        }
+
+        // Dialog content
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(parent.width - 40px, 1000px);
+            height: min(parent.height - 40px, 700px);
+            background: white;
+            border-radius: 8px;
+            drop-shadow-blur: 20px;
+            drop-shadow-color: #00000040;
+
+            TouchArea {
+                // Prevent clicks from closing when clicking dialog content
+            }
+
+            VerticalBox {
+                padding: 16px;
+                spacing: 12px;
+
+                // Header
+                HorizontalBox {
+                    height: 32px;
+
+                    Text {
+                        text: "JSON Viewer: " + file-name;
+                        font-size: 16px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    // File info
+                    Text {
+                        text: file-size + " | " + total-nodes + " nodes";
+                        font-size: 12px;
+                        color: #666666;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        width: 16px;
+                    }
+
+                    Button {
+                        text: "x";
+                        width: 32px;
+                        clicked => {
+                            close-clicked();
+                        }
+                    }
+                }
+
+                // Error message if JSON is invalid
+                if !is-valid: Rectangle {
+                    height: 40px;
+                    background: #ffeeee;
+                    border-radius: 4px;
+
+                    HorizontalBox {
+                        padding: 8px;
+
+                        Text {
+                            text: error-message;
+                            color: #cc0000;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // View mode toggle and actions
+                HorizontalBox {
+                    height: 32px;
+                    spacing: 8px;
+
+                    Button {
+                        text: show-tree-view ? "Tree View" : "Text View";
+                        width: 100px;
+                        clicked => {
+                            show-tree-view = !show-tree-view;
+                        }
+                    }
+
+                    if show-tree-view && is-valid: Button {
+                        text: "Expand All";
+                        clicked => {
+                            expand-all-clicked();
+                        }
+                    }
+
+                    if show-tree-view && is-valid: Button {
+                        text: "Collapse All";
+                        clicked => {
+                            collapse-all-clicked();
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                // Content area
+                if show-tree-view && is-valid: ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalBox {
+                        spacing: 0px;
+
+                        for node[node-idx] in tree-nodes: Rectangle {
+                            height: 28px;
+                            background: mod(node-idx, 2) == 0 ? #ffffff : #fafafa;
+
+                            HorizontalBox {
+                                padding-left: 8px + node.depth * 20px;
+                                padding-right: 8px;
+                                spacing: 4px;
+
+                                // Expand/collapse indicator
+                                Rectangle {
+                                    width: 20px;
+
+                                    if node.expandable: TouchArea {
+                                        clicked => {
+                                            node-toggle-clicked(node.id);
+                                        }
+
+                                        Text {
+                                            text: node.expanded ? "v" : ">";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: #666666;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                // Key
+                                Text {
+                                    text: node.key + ":";
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                    color: #000080;
+                                    vertical-alignment: center;
+                                }
+
+                                // Value with type-based coloring
+                                Text {
+                                    text: node.value;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    color:
+                                        node.value-type == "null" ? #808080 :
+                                        node.value-type == "boolean" ? #0000ff :
+                                        node.value-type == "number" ? #008000 :
+                                        node.value-type == "string" ? #a31515 :
+                                        #000000;
+                                }
+
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                }
+
+                                // Type indicator for complex types
+                                if node.expandable: Text {
+                                    text: node.value-type;
+                                    font-size: 10px;
+                                    color: #888888;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Loading indicator
+                        if is-loading: Rectangle {
+                            height: 40px;
+                            background: #f5f5f5;
+
+                            Text {
+                                text: "Loading...";
+                                font-size: 12px;
+                                color: #666666;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Text view (pretty-printed JSON)
+                if !show-tree-view || !is-valid: ScrollView {
+                    vertical-stretch: 1;
+
+                    Rectangle {
+                        background: #1e1e1e;
+                        border-radius: 4px;
+
+                        TextEdit {
+                            width: parent.width;
+                            height: parent.height;
+                            text: text-content;
+                            read-only: true;
+                            font-size: 12px;
+                        }
+                    }
+                }
+
+                // Footer
+                HorizontalBox {
+                    height: 32px;
+                    spacing: 8px;
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    Button {
+                        text: "Close";
+                        clicked => {
+                            close-clicked();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

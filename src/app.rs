@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell, ImageViewer, TextEditor};
+use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell, ImageViewer, TextEditor, JsonViewer, JsonTreeNode};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
@@ -16,6 +16,7 @@ use crate::viewers::parquet::ParquetViewer as ParquetViewerLogic;
 use crate::viewers::csv::CsvViewer as CsvViewerLogic;
 use crate::viewers::image::{ImageViewer as ImageViewerLogic, ImageType, format_file_size};
 use crate::viewers::text::{TextEditor as TextEditorLogic, is_text_file};
+use crate::viewers::json::{JsonViewer as JsonViewerLogic, format_file_size as json_format_file_size};
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -42,6 +43,12 @@ struct AppState {
     text_file_key: Option<String>,
     /// Original text content (for detecting modifications)
     text_original_content: Option<String>,
+    /// Current JSON file data for tree operations
+    json_data: Option<Vec<u8>>,
+    /// Current JSON file name
+    json_file_name: Option<String>,
+    /// Current expanded node paths in JSON viewer
+    json_expanded_paths: Vec<String>,
 }
 
 /// Main application state
@@ -89,6 +96,9 @@ impl App {
             csv_file_name: None,
             text_file_key: None,
             text_original_content: None,
+            json_data: None,
+            json_file_name: None,
+            json_expanded_paths: Vec::new(),
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -255,8 +265,26 @@ impl App {
                                     Self::open_image_file(state, window_weak, &bucket, &file_key, &file_name).await;
                                 }).unwrap();
                             }
+                        } else if file_name_lower.ends_with(".json") || file_name_lower.ends_with(".jsonl") || file_name_lower.ends_with(".ndjson") {
+                            // JSON files - use dedicated JSON viewer with tree view
+                            tracing::info!("Opening JSON file: {}", file_key);
+
+                            let state_ref = state.borrow();
+                            if let Some(bucket) = &state_ref.current_bucket {
+                                let bucket = bucket.clone();
+                                drop(state_ref);
+
+                                win.set_status_message(format!("Loading JSON file: {}...", file_name).into());
+                                win.set_is_loading(true);
+
+                                let state = state.clone();
+                                let window_weak = window_weak.clone();
+                                slint::spawn_local(async move {
+                                    Self::open_json_file(state, window_weak, &bucket, &file_key, &file_name).await;
+                                }).unwrap();
+                            }
                         } else if is_text_file(&file_name_lower) {
-                            // Text files (JSON, YAML, TXT, etc.)
+                            // Text files (YAML, TXT, etc.) - but not JSON which has dedicated viewer
                             tracing::info!("Opening text file: {}", file_key);
 
                             let state_ref = state.borrow();
@@ -702,6 +730,62 @@ impl App {
 
                 text_editor.set_is_modified(is_modified);
             }
+        });
+
+        // Set up JSON Viewer callbacks
+        let json_viewer = window.global::<JsonViewer>();
+
+        // Close callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        json_viewer.on_close_requested(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let json_viewer = win.global::<JsonViewer>();
+                json_viewer.set_dialog_visible(false);
+
+                // Clear JSON data from state
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.json_data = None;
+                state_ref.json_file_name = None;
+                state_ref.json_expanded_paths.clear();
+            }
+        });
+
+        // Node toggle callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        json_viewer.on_node_toggle_requested(move |node_id| {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            let node_id_str = node_id.to_string();
+
+            slint::spawn_local(async move {
+                Self::toggle_json_node(state, window_weak, node_id_str).await;
+            }).unwrap();
+        });
+
+        // Expand all callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        json_viewer.on_expand_all_requested(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+
+            slint::spawn_local(async move {
+                Self::expand_all_json_nodes(state, window_weak).await;
+            }).unwrap();
+        });
+
+        // Collapse all callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        json_viewer.on_collapse_all_requested(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+
+            slint::spawn_local(async move {
+                Self::collapse_all_json_nodes(state, window_weak).await;
+            }).unwrap();
         });
 
         // Restore last session if settings are available
@@ -1982,6 +2066,274 @@ impl App {
                     win.set_status_message(format!("Save failed: {}", e).into());
                 }
             }
+        }
+    }
+
+    /// Open a JSON file in the JSON viewer
+    async fn open_json_file(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        key: &str,
+        file_name: &str,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Download the JSON file
+        let data = match client.get_object(bucket, key).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to download JSON file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Parse the JSON file
+        let viewer = JsonViewerLogic::new();
+        let json_data = match viewer.load_bytes(&data) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to load JSON file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Store the raw data for tree operations
+        let expanded_paths = JsonViewerLogic::get_expanded_paths(&json_data.tree_nodes);
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.json_data = Some(data);
+            state_ref.json_file_name = Some(file_name.to_string());
+            state_ref.json_expanded_paths = expanded_paths;
+        }
+
+        // Convert to UI model
+        let tree_nodes: Vec<JsonTreeNode> = json_data.tree_nodes
+            .iter()
+            .map(|n| JsonTreeNode {
+                id: n.id.clone().into(),
+                key: n.key.clone().into(),
+                value: n.value.clone().into(),
+                value_type: n.value_type.display_name().into(),
+                depth: n.depth as i32,
+                expandable: n.expandable,
+                expanded: n.expanded,
+                child_count: n.child_count as i32,
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let json_viewer = win.global::<JsonViewer>();
+
+            json_viewer.set_file_name(file_name.into());
+            json_viewer.set_tree_nodes(ModelRc::from(Rc::new(VecModel::from(tree_nodes))));
+            json_viewer.set_text_content(json_data.text_content.into());
+            json_viewer.set_total_nodes(json_data.total_nodes as i32);
+            json_viewer.set_file_size(json_format_file_size(json_data.file_size).into());
+            json_viewer.set_is_valid(json_data.is_valid);
+            json_viewer.set_error_message(json_data.error_message.unwrap_or_default().into());
+            json_viewer.set_is_loading(false);
+            json_viewer.set_show_tree_view(true);
+            json_viewer.set_dialog_visible(true);
+
+            win.set_is_loading(false);
+            let status = if json_data.is_valid {
+                format!("Opened: {} ({} nodes)", file_name, json_data.total_nodes)
+            } else {
+                format!("Opened: {} (invalid JSON)", file_name)
+            };
+            win.set_status_message(status.into());
+        }
+    }
+
+    /// Toggle a JSON tree node (expand/collapse)
+    async fn toggle_json_node(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        node_id: String,
+    ) {
+        // Get stored JSON data
+        let (data, expanded_paths) = {
+            let state_ref = state.borrow();
+            (state_ref.json_data.clone(), state_ref.json_expanded_paths.clone())
+        };
+
+        let data = match data {
+            Some(d) => d,
+            None => return,
+        };
+
+        // Rebuild tree with toggled node
+        let viewer = JsonViewerLogic::new();
+        let nodes = match viewer.rebuild_with_toggle(&data, &node_id, &expanded_paths) {
+            Ok(n) => n,
+            Err(e) => {
+                tracing::error!("Failed to toggle JSON node: {}", e);
+                return;
+            }
+        };
+
+        // Update stored expanded paths
+        let new_expanded_paths = JsonViewerLogic::get_expanded_paths(&nodes);
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.json_expanded_paths = new_expanded_paths;
+        }
+
+        // Convert to UI model
+        let tree_nodes: Vec<JsonTreeNode> = nodes
+            .iter()
+            .map(|n| JsonTreeNode {
+                id: n.id.clone().into(),
+                key: n.key.clone().into(),
+                value: n.value.clone().into(),
+                value_type: n.value_type.display_name().into(),
+                depth: n.depth as i32,
+                expandable: n.expandable,
+                expanded: n.expanded,
+                child_count: n.child_count as i32,
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let json_viewer = win.global::<JsonViewer>();
+            json_viewer.set_tree_nodes(ModelRc::from(Rc::new(VecModel::from(tree_nodes))));
+        }
+    }
+
+    /// Expand all JSON tree nodes
+    async fn expand_all_json_nodes(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+    ) {
+        // Get stored JSON data
+        let data = {
+            let state_ref = state.borrow();
+            state_ref.json_data.clone()
+        };
+
+        let data = match data {
+            Some(d) => d,
+            None => return,
+        };
+
+        // Expand all nodes
+        let viewer = JsonViewerLogic::with_settings(100, 100_000);  // Very deep expansion
+        let nodes = match viewer.expand_to_depth(&data, 100) {
+            Ok(n) => n,
+            Err(e) => {
+                tracing::error!("Failed to expand all JSON nodes: {}", e);
+                return;
+            }
+        };
+
+        // Update stored expanded paths
+        let new_expanded_paths = JsonViewerLogic::get_expanded_paths(&nodes);
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.json_expanded_paths = new_expanded_paths;
+        }
+
+        // Convert to UI model
+        let tree_nodes: Vec<JsonTreeNode> = nodes
+            .iter()
+            .map(|n| JsonTreeNode {
+                id: n.id.clone().into(),
+                key: n.key.clone().into(),
+                value: n.value.clone().into(),
+                value_type: n.value_type.display_name().into(),
+                depth: n.depth as i32,
+                expandable: n.expandable,
+                expanded: n.expanded,
+                child_count: n.child_count as i32,
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let json_viewer = win.global::<JsonViewer>();
+            json_viewer.set_tree_nodes(ModelRc::from(Rc::new(VecModel::from(tree_nodes))));
+            json_viewer.set_total_nodes(nodes.len() as i32);
+        }
+    }
+
+    /// Collapse all JSON tree nodes
+    async fn collapse_all_json_nodes(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+    ) {
+        // Get stored JSON data
+        let data = {
+            let state_ref = state.borrow();
+            state_ref.json_data.clone()
+        };
+
+        let data = match data {
+            Some(d) => d,
+            None => return,
+        };
+
+        // Collapse all nodes
+        let viewer = JsonViewerLogic::new();
+        let nodes = match viewer.collapse_all(&data) {
+            Ok(n) => n,
+            Err(e) => {
+                tracing::error!("Failed to collapse all JSON nodes: {}", e);
+                return;
+            }
+        };
+
+        // Clear expanded paths
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.json_expanded_paths.clear();
+        }
+
+        // Convert to UI model
+        let tree_nodes: Vec<JsonTreeNode> = nodes
+            .iter()
+            .map(|n| JsonTreeNode {
+                id: n.id.clone().into(),
+                key: n.key.clone().into(),
+                value: n.value.clone().into(),
+                value_type: n.value_type.display_name().into(),
+                depth: n.depth as i32,
+                expandable: n.expandable,
+                expanded: n.expanded,
+                child_count: n.child_count as i32,
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let json_viewer = win.global::<JsonViewer>();
+            json_viewer.set_tree_nodes(ModelRc::from(Rc::new(VecModel::from(tree_nodes))));
+            json_viewer.set_total_nodes(nodes.len() as i32);
         }
     }
 
