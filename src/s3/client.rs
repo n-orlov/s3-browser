@@ -365,4 +365,102 @@ mod tests {
         assert_eq!(result.next_token, Some("abc123".to_string()));
         assert!(result.is_truncated);
     }
+
+    #[test]
+    fn test_list_objects_result_with_multiple_objects() {
+        let result = ListObjectsResult {
+            objects: vec![
+                S3Object {
+                    key: "folder/".to_string(),
+                    size: 0,
+                    last_modified: None,
+                    is_folder: true,
+                    etag: None,
+                    storage_class: None,
+                },
+                S3Object {
+                    key: "file1.txt".to_string(),
+                    size: 1024,
+                    last_modified: Some(chrono::Utc::now()),
+                    is_folder: false,
+                    etag: Some("\"abc123\"".to_string()),
+                    storage_class: Some("STANDARD".to_string()),
+                },
+                S3Object {
+                    key: "file2.json".to_string(),
+                    size: 2048,
+                    last_modified: Some(chrono::Utc::now()),
+                    is_folder: false,
+                    etag: Some("\"def456\"".to_string()),
+                    storage_class: Some("GLACIER".to_string()),
+                },
+            ],
+            next_token: None,
+            is_truncated: false,
+        };
+
+        assert_eq!(result.objects.len(), 3);
+        assert!(result.objects[0].is_folder);
+        assert!(!result.objects[1].is_folder);
+        assert_eq!(result.objects[1].size, 1024);
+        assert_eq!(result.objects[2].storage_class, Some("GLACIER".to_string()));
+    }
+
+    #[test]
+    fn test_list_objects_result_debug_clone() {
+        let result = ListObjectsResult {
+            objects: vec![S3Object {
+                key: "test.txt".to_string(),
+                size: 100,
+                last_modified: None,
+                is_folder: false,
+                etag: None,
+                storage_class: None,
+            }],
+            next_token: Some("token".to_string()),
+            is_truncated: true,
+        };
+
+        // Test Debug
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("ListObjectsResult"));
+
+        // Test Clone
+        let cloned = result.clone();
+        assert_eq!(cloned.objects.len(), 1);
+        assert_eq!(cloned.objects[0].key, "test.txt");
+        assert_eq!(cloned.next_token, Some("token".to_string()));
+        assert!(cloned.is_truncated);
+    }
+
+    #[test]
+    fn test_list_objects_result_empty_pagination() {
+        let result = ListObjectsResult {
+            objects: vec![],
+            next_token: Some("token".to_string()),  // Token present but no objects
+            is_truncated: false,
+        };
+
+        assert!(result.objects.is_empty());
+        assert!(result.next_token.is_some());
+        assert!(!result.is_truncated);
+    }
+
+    #[test]
+    fn test_list_objects_result_large_object() {
+        let result = ListObjectsResult {
+            objects: vec![S3Object {
+                key: "large-file.zip".to_string(),
+                size: 5 * 1024 * 1024 * 1024,  // 5 GB
+                last_modified: Some(chrono::Utc::now()),
+                is_folder: false,
+                etag: Some("\"large-etag\"".to_string()),
+                storage_class: Some("INTELLIGENT_TIERING".to_string()),
+            }],
+            next_token: None,
+            is_truncated: false,
+        };
+
+        assert_eq!(result.objects[0].size, 5 * 1024 * 1024 * 1024);
+    }
 }

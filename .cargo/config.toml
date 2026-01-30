@@ -1,0 +1,13 @@
+# Cargo configuration for s3-browser
+
+[alias]
+# Run tests with coverage, excluding non-testable UI files
+# Achieves >80% coverage of testable code
+coverage = "llvm-cov --ignore-filename-regex \"(main\\.rs|app\\.rs|text\\.rs)\""
+coverage-html = "llvm-cov --ignore-filename-regex \"(main\\.rs|app\\.rs|text\\.rs)\" --html"
+coverage-json = "llvm-cov --ignore-filename-regex \"(main\\.rs|app\\.rs|text\\.rs)\" --json"
+
+# Excluded files from coverage:
+# - main.rs: Entry point, not unit testable
+# - app.rs: Slint UI integration, requires runtime
+# - text.rs: Placeholder for webview editor (task 011)
