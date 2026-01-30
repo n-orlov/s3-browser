@@ -17,6 +17,7 @@ describe('FileToolbar', () => {
     onViewImage: vi.fn(),
     onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
+    onProperties: vi.fn(),
     disabled: false,
   };
 
@@ -618,6 +619,79 @@ describe('FileToolbar', () => {
 
       const copyButton = screen.getByText('Copy URL').closest('button');
       expect(copyButton).toBeDisabled();
+    });
+  });
+
+  describe('Properties button', () => {
+    it('disables Properties button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const propertiesButton = screen.getByTitle(/Select a file or folder to view properties/);
+      expect(propertiesButton).toBeDisabled();
+    });
+
+    it('enables Properties button when a file is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+        />
+      );
+
+      const propertiesButton = screen.getByTitle('View properties');
+      expect(propertiesButton).not.toBeDisabled();
+    });
+
+    it('enables Properties button when a folder is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'folder/', isPrefix: true }}
+        />
+      );
+
+      const propertiesButton = screen.getByTitle('View properties');
+      expect(propertiesButton).not.toBeDisabled();
+    });
+
+    it('calls onProperties when Properties button is clicked', () => {
+      const onProperties = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          onProperties={onProperties}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Properties'));
+      expect(onProperties).toHaveBeenCalled();
+    });
+
+    it('disables Properties button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const propertiesButton = screen.getByText('Properties').closest('button');
+      expect(propertiesButton).toBeDisabled();
+    });
+
+    it('disables Properties button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const propertiesButton = screen.getByTitle(/Select a file or folder to view properties/);
+      expect(propertiesButton).toBeDisabled();
     });
   });
 });

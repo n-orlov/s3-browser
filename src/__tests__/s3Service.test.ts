@@ -38,6 +38,9 @@ vi.mock('@aws-sdk/client-s3', () => {
     HeadObjectCommand: vi.fn().mockImplementation(function (input: unknown) {
       return { input, type: 'HeadObject' };
     }),
+    GetObjectTaggingCommand: vi.fn().mockImplementation(function (input: unknown) {
+      return { input, type: 'GetObjectTagging' };
+    }),
   };
 });
 
@@ -104,6 +107,7 @@ import {
   renameFile,
   copyFile,
   getFileSize,
+  getObjectMetadata,
 } from '../main/services/s3Service';
 import {
   S3Client,
@@ -1015,6 +1019,128 @@ describe('s3Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Not found');
+    });
+  });
+
+  describe('getObjectMetadata', () => {
+    beforeEach(() => {
+      (getProfile as Mock).mockReturnValue({
+        name: 'default',
+        accessKeyId: 'AKIATEST',
+        secretAccessKey: 'secretkey',
+        hasCredentials: true,
+      });
+    });
+
+    it('should return metadata for an object', async () => {
+      // First call: HeadObject
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 1234567,
+        ContentType: 'text/plain',
+        LastModified: new Date('2024-01-15T10:30:00Z'),
+        ETag: '"abc123def456"',
+        StorageClass: 'STANDARD',
+        VersionId: 'v123',
+        ServerSideEncryption: 'AES256',
+        Metadata: { 'custom-key': 'custom-value' },
+      });
+      // Second call: GetObjectTagging
+      mockSend.mockResolvedValueOnce({
+        TagSet: [
+          { Key: 'environment', Value: 'production' },
+          { Key: 'owner', Value: 'team-a' },
+        ],
+      });
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'folder/file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata!.key).toBe('folder/file.txt');
+      expect(result.metadata!.bucket).toBe('test-bucket');
+      expect(result.metadata!.s3Url).toBe('s3://test-bucket/folder/file.txt');
+      expect(result.metadata!.contentLength).toBe(1234567);
+      expect(result.metadata!.contentType).toBe('text/plain');
+      expect(result.metadata!.etag).toBe('abc123def456');
+      expect(result.metadata!.storageClass).toBe('STANDARD');
+      expect(result.metadata!.versionId).toBe('v123');
+      expect(result.metadata!.serverSideEncryption).toBe('AES256');
+      expect(result.metadata!.tags).toEqual({ environment: 'production', owner: 'team-a' });
+      expect(result.metadata!.customMetadata).toEqual({ 'custom-key': 'custom-value' });
+    });
+
+    it('should handle missing tags gracefully', async () => {
+      // First call: HeadObject
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 1000,
+        ContentType: 'application/json',
+      });
+      // Second call: GetObjectTagging fails (access denied)
+      mockSend.mockRejectedValueOnce(new Error('Access denied'));
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'file.json');
+
+      expect(result.success).toBe(true);
+      expect(result.metadata!.tags).toEqual({});
+      expect(result.metadata!.contentLength).toBe(1000);
+    });
+
+    it('should generate correct URLs', async () => {
+      mockSend.mockResolvedValueOnce({ ContentLength: 100 });
+      mockSend.mockResolvedValueOnce({ TagSet: [] });
+
+      const result = await getObjectMetadata('default', 'my-bucket', 'path/to/file.txt');
+
+      expect(result.metadata!.s3Url).toBe('s3://my-bucket/path/to/file.txt');
+      expect(result.metadata!.httpUrl).toBe('https://my-bucket.s3.amazonaws.com/path%2Fto%2Ffile.txt');
+    });
+
+    it('should return error on HeadObject failure', async () => {
+      mockSend.mockRejectedValue(new Error('Object not found'));
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'nonexistent.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Object not found');
+    });
+
+    it('should handle empty TagSet', async () => {
+      mockSend.mockResolvedValueOnce({ ContentLength: 500 });
+      mockSend.mockResolvedValueOnce({ TagSet: [] });
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.metadata!.tags).toEqual({});
+    });
+
+    it('should handle undefined TagSet', async () => {
+      mockSend.mockResolvedValueOnce({ ContentLength: 500 });
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.metadata!.tags).toEqual({});
+    });
+
+    it('should handle empty custom metadata', async () => {
+      mockSend.mockResolvedValueOnce({ ContentLength: 500, Metadata: {} });
+      mockSend.mockResolvedValueOnce({ TagSet: [] });
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.metadata!.customMetadata).toEqual({});
+    });
+
+    it('should strip quotes from ETag', async () => {
+      mockSend.mockResolvedValueOnce({ ETag: '"quoted-etag-value"' });
+      mockSend.mockResolvedValueOnce({ TagSet: [] });
+
+      const result = await getObjectMetadata('default', 'test-bucket', 'file.txt');
+
+      expect(result.metadata!.etag).toBe('quoted-etag-value');
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   DeleteObjectCommand,
   CopyObjectCommand,
   HeadObjectCommand,
+  GetObjectTaggingCommand,
   type S3ClientConfig,
   type Bucket,
   type _Object,
@@ -806,6 +807,110 @@ export async function downloadBinaryContent(
     const buffer = Buffer.concat(chunks);
 
     return { success: true, data: buffer };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Object metadata returned by getObjectMetadata
+ */
+export interface ObjectMetadata {
+  // Basic info
+  key: string;
+  bucket: string;
+  s3Url: string;
+  httpUrl: string;
+  // Head object metadata
+  contentLength?: number;
+  contentType?: string;
+  lastModified?: Date;
+  etag?: string;
+  storageClass?: string;
+  // Additional metadata
+  versionId?: string;
+  serverSideEncryption?: string;
+  contentEncoding?: string;
+  cacheControl?: string;
+  expires?: Date;
+  // Tags
+  tags: Record<string, string>;
+  // Custom metadata headers (x-amz-meta-*)
+  customMetadata: Record<string, string>;
+}
+
+/**
+ * Gets detailed metadata for an S3 object including tags
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key
+ */
+export async function getObjectMetadata(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> {
+  const client = getS3Client(profileName);
+
+  try {
+    // Get head object metadata
+    const headCommand = new HeadObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+    const headResponse = await client.send(headCommand);
+
+    // Get object tags
+    let tags: Record<string, string> = {};
+    try {
+      const taggingCommand = new GetObjectTaggingCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+      const taggingResponse = await client.send(taggingCommand);
+      if (taggingResponse.TagSet) {
+        tags = taggingResponse.TagSet.reduce((acc, tag) => {
+          if (tag.Key && tag.Value !== undefined) {
+            acc[tag.Key] = tag.Value;
+          }
+          return acc;
+        }, {} as Record<string, string>);
+      }
+    } catch {
+      // Tags access may be denied, continue without tags
+    }
+
+    // Extract custom metadata (x-amz-meta-* headers)
+    const customMetadata: Record<string, string> = {};
+    if (headResponse.Metadata) {
+      Object.entries(headResponse.Metadata).forEach(([k, v]) => {
+        if (v) {
+          customMetadata[k] = v;
+        }
+      });
+    }
+
+    const metadata: ObjectMetadata = {
+      key,
+      bucket,
+      s3Url: `s3://${bucket}/${key}`,
+      httpUrl: `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`,
+      contentLength: headResponse.ContentLength,
+      contentType: headResponse.ContentType,
+      lastModified: headResponse.LastModified,
+      etag: headResponse.ETag?.replace(/"/g, ''),
+      storageClass: headResponse.StorageClass,
+      versionId: headResponse.VersionId,
+      serverSideEncryption: headResponse.ServerSideEncryption,
+      contentEncoding: headResponse.ContentEncoding,
+      cacheControl: headResponse.CacheControl,
+      expires: headResponse.Expires,
+      tags,
+      customMetadata,
+    };
+
+    return { success: true, metadata };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return { success: false, error: message };
