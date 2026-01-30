@@ -14,6 +14,7 @@ describe('FileToolbar', () => {
     onEdit: vi.fn(),
     onViewParquet: vi.fn(),
     onViewImage: vi.fn(),
+    onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
     disabled: false,
   };
@@ -433,6 +434,83 @@ describe('FileToolbar', () => {
 
       const imageButton = screen.getByText('Image').closest('button');
       expect(imageButton).toBeDisabled();
+    });
+  });
+
+  describe('Copy URL button', () => {
+    it('disables Copy URL button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const copyButton = screen.getByTitle(/Select a file to copy URL/);
+      expect(copyButton).toBeDisabled();
+    });
+
+    it('disables Copy URL button when a folder is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'folder/', isPrefix: true }}
+        />
+      );
+
+      const copyButton = screen.getByTitle(/Select a file to copy URL/);
+      expect(copyButton).toBeDisabled();
+    });
+
+    it('enables Copy URL button when a file is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.json', isPrefix: false }}
+        />
+      );
+
+      const copyButton = screen.getByTitle('Copy S3 URL to clipboard');
+      expect(copyButton).not.toBeDisabled();
+    });
+
+    it('enables Copy URL button for any file type', () => {
+      const fileTypes = ['data.json', 'image.png', 'video.mp4', 'archive.zip', 'data.parquet'];
+
+      fileTypes.forEach((fileName) => {
+        const { unmount } = render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: fileName, isPrefix: false }}
+          />
+        );
+
+        const copyButton = screen.getByTitle('Copy S3 URL to clipboard');
+        expect(copyButton).not.toBeDisabled();
+        unmount();
+      });
+    });
+
+    it('calls onCopyUrl when Copy URL button is clicked', () => {
+      const onCopyUrl = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          onCopyUrl={onCopyUrl}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Copy URL'));
+      expect(onCopyUrl).toHaveBeenCalled();
+    });
+
+    it('disables Copy URL button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const copyButton = screen.getByText('Copy URL').closest('button');
+      expect(copyButton).toBeDisabled();
     });
   });
 });

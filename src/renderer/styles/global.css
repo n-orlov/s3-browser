@@ -646,6 +646,11 @@ body {
   color: var(--error);
 }
 
+.toolbar-btn-copy:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .toolbar-icon {
   font-size: 14px;
   font-weight: bold;
