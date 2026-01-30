@@ -49,6 +49,28 @@ struct AppState {
     json_file_name: Option<String>,
     /// Current expanded node paths in JSON viewer
     json_expanded_paths: Vec<String>,
+    /// Flag to cancel ongoing operations
+    cancel_requested: bool,
+    /// Keys pending deletion (for delete confirmation flow)
+    pending_delete_keys: Vec<String>,
+}
+
+/// Type of toast notification
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ToastType {
+    Info,
+    Success,
+    Error,
+}
+
+impl ToastType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ToastType::Info => "info",
+            ToastType::Success => "success",
+            ToastType::Error => "error",
+        }
+    }
 }
 
 /// Main application state
@@ -99,6 +121,8 @@ impl App {
             json_data: None,
             json_file_name: None,
             json_expanded_paths: Vec::new(),
+            cancel_requested: false,
+            pending_delete_keys: Vec::new(),
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -473,26 +497,23 @@ impl App {
             }
         });
 
-        // Set up delete callback
+        // Set up delete callback - shows confirmation dialog
         let state_clone = state.clone();
         let window_weak = window.as_weak();
         file_list.on_delete_clicked(move || {
-            let state = state_clone.clone();
-            let window_weak = window_weak.clone();
             if let Some(win) = window_weak.upgrade() {
-                let state_ref = state.borrow();
+                let mut state_ref = state_clone.borrow_mut();
                 if state_ref.selected_indices.is_empty() {
                     win.set_status_message("No files selected".into());
+                    win.set_is_error(true);
                     return;
                 }
 
-                let bucket = match &state_ref.current_bucket {
-                    Some(b) => b.clone(),
-                    None => {
-                        win.set_status_message("No bucket selected".into());
-                        return;
-                    }
-                };
+                if state_ref.current_bucket.is_none() {
+                    win.set_status_message("No bucket selected".into());
+                    win.set_is_error(true);
+                    return;
+                }
 
                 // Get selected file keys
                 let keys_to_delete: Vec<String> = state_ref.selected_indices
@@ -504,16 +525,48 @@ impl App {
 
                 if keys_to_delete.is_empty() {
                     win.set_status_message("No files selected (only folders)".into());
+                    win.set_is_error(true);
                     return;
                 }
 
-                let prefix = state_ref.current_prefix.clone();
+                // Store keys for later deletion and show confirmation dialog
+                let count = keys_to_delete.len() as i32;
+                state_ref.pending_delete_keys = keys_to_delete;
                 drop(state_ref);
 
-                // TODO: Add confirmation dialog before delete
-                // For now, proceed directly (PRD says confirmation needed)
+                // Show delete confirmation dialog
+                let file_list = win.global::<FileList>();
+                file_list.set_delete_count(count);
+                file_list.set_show_delete_confirm(true);
+            }
+        });
+
+        // Set up delete confirmed callback - actually performs the deletion
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_delete_confirmed(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            if let Some(win) = window_weak.upgrade() {
+                // Hide confirmation dialog
+                let file_list = win.global::<FileList>();
+                file_list.set_show_delete_confirm(false);
+
+                let (bucket, prefix, keys_to_delete) = {
+                    let mut state_ref = state.borrow_mut();
+                    let bucket = state_ref.current_bucket.clone().unwrap_or_default();
+                    let prefix = state_ref.current_prefix.clone();
+                    let keys = std::mem::take(&mut state_ref.pending_delete_keys);
+                    (bucket, prefix, keys)
+                };
+
+                if keys_to_delete.is_empty() {
+                    return;
+                }
+
                 let count = keys_to_delete.len();
                 win.set_status_message(format!("Deleting {} file(s)...", count).into());
+                win.set_is_error(false);
                 win.set_is_loading(true);
 
                 let state = state.clone();
@@ -521,6 +574,40 @@ impl App {
                 slint::spawn_local(async move {
                     Self::delete_files(state, window_weak, &bucket, &prefix, keys_to_delete).await;
                 }).unwrap();
+            }
+        });
+
+        // Set up delete cancelled callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_delete_cancelled(move || {
+            if let Some(win) = window_weak.upgrade() {
+                // Hide confirmation dialog and clear pending keys
+                let file_list = win.global::<FileList>();
+                file_list.set_show_delete_confirm(false);
+
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.pending_delete_keys.clear();
+            }
+        });
+
+        // Set up cancel loading callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_cancel_loading(move || {
+            if let Some(win) = window_weak.upgrade() {
+                // Set cancel flag in state
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.cancel_requested = true;
+                drop(state_ref);
+
+                win.set_is_loading(false);
+                win.set_status_message("Operation cancelled".into());
+                win.set_is_error(false);
+
+                let file_list = win.global::<FileList>();
+                file_list.set_is_loading(false);
+                file_list.set_loading_status("".into());
             }
         });
 
@@ -590,6 +677,7 @@ impl App {
 
                     tracing::info!("Refresh requested");
                     win.set_status_message("Refreshing...".into());
+                    win.set_is_error(false);
                     win.set_is_loading(true);
 
                     let state = state.clone();
@@ -599,7 +687,33 @@ impl App {
                     }).unwrap();
                 } else {
                     win.set_status_message("Select a bucket first".into());
+                    win.set_is_error(true);
                 }
+            }
+        });
+
+        // Set up cancel loading callback for main window
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        window.on_cancel_loading(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.cancel_requested = true;
+                drop(state_ref);
+
+                win.set_is_loading(false);
+                win.set_status_message("Operation cancelled".into());
+                win.set_is_error(false);
+            }
+        });
+
+        // Set up dismiss error callback
+        let window_weak = window.as_weak();
+        window.on_dismiss_error(move || {
+            if let Some(win) = window_weak.upgrade() {
+                win.set_show_error_dialog(false);
+                win.set_error_title("".into());
+                win.set_error_details("".into());
             }
         });
 
@@ -940,32 +1054,24 @@ impl App {
         if let Some(win) = window_weak.upgrade() {
             win.set_is_loading(false);
 
-            let msg = if success_count == files.len() {
-                if let Some(path) = last_downloaded_path {
+            if success_count == files.len() {
+                let msg = if let Some(path) = last_downloaded_path {
                     format!("Downloaded {} file(s) to {}", success_count, path.parent().unwrap_or(&downloads_dir).display())
                 } else {
                     format!("Downloaded {} file(s)", success_count)
-                }
+                };
+                Self::show_status(&win, &msg);
+                Self::show_toast(&win, &format!("Downloaded to {}", downloads_dir.display()), ToastType::Success);
+            } else if success_count > 0 {
+                let msg = format!("Downloaded {}/{} file(s). Some downloads failed.", success_count, files.len());
+                Self::show_error(&win, &msg);
+                Self::show_toast(&win, &msg, ToastType::Error);
             } else {
-                format!("Downloaded {}/{} file(s)", success_count, files.len())
-            };
-
-            win.set_status_message(msg.into());
-
-            // Show toast notification
-            let file_list = win.global::<FileList>();
-            file_list.set_toast_message(format!("Downloaded to {}", downloads_dir.display()).into());
-            file_list.set_show_toast(true);
-
-            // Hide toast after a delay
-            let window_weak2 = window_weak.clone();
-            slint::spawn_local(async move {
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                if let Some(win) = window_weak2.upgrade() {
-                    let file_list = win.global::<FileList>();
-                    file_list.set_show_toast(false);
-                }
-            }).unwrap();
+                let msg = "Download failed. Check your permissions and try again.";
+                Self::show_error(&win, msg);
+                Self::show_toast(&win, msg, ToastType::Error);
+            }
+            Self::schedule_toast_hide(window_weak, 4);
         }
     }
 
@@ -1049,13 +1155,18 @@ impl App {
                 Self::load_bucket_contents(state, window_weak.clone(), &bucket_owned, &prefix_owned).await;
 
                 if let Some(win) = window_weak.upgrade() {
-                    win.set_status_message(format!("Uploaded: {}", file_name).into());
+                    let msg = format!("Uploaded: {}", file_name);
+                    Self::show_status(&win, &msg);
+                    Self::show_toast(&win, &msg, ToastType::Success);
+                    Self::schedule_toast_hide(window_weak, 3);
                 }
             }
             Err(e) => {
                 if let Some(win) = window_weak.upgrade() {
-                    win.set_is_loading(false);
-                    win.set_status_message(format!("Upload failed: {}", e).into());
+                    let error_msg = Self::format_s3_error(&e);
+                    Self::show_error(&win, &format!("Upload failed: {}", error_msg));
+                    Self::show_toast(&win, "Upload failed", ToastType::Error);
+                    Self::schedule_toast_hide(window_weak, 5);
                 }
             }
         }
@@ -1107,18 +1218,24 @@ impl App {
                 Self::load_bucket_contents(state, window_weak.clone(), &bucket_owned, &prefix_owned).await;
 
                 if let Some(win) = window_weak.upgrade() {
-                    let msg = if failed.is_empty() {
-                        format!("Deleted {} file(s)", keys.len())
+                    if failed.is_empty() {
+                        let msg = format!("Deleted {} file(s)", keys.len());
+                        Self::show_status(&win, &msg);
+                        Self::show_toast(&win, &msg, ToastType::Success);
                     } else {
-                        format!("Deleted {}/{} file(s)", success_count, keys.len())
-                    };
-                    win.set_status_message(msg.into());
+                        let msg = format!("Deleted {}/{} file(s). Some files failed to delete.", success_count, keys.len());
+                        Self::show_error(&win, &msg);
+                        Self::show_toast(&win, &msg, ToastType::Error);
+                    }
+                    Self::schedule_toast_hide(window_weak, 4);
                 }
             }
             Err(e) => {
                 if let Some(win) = window_weak.upgrade() {
-                    win.set_is_loading(false);
-                    win.set_status_message(format!("Delete failed: {}", e).into());
+                    let error_msg = format!("Delete failed: {}", e);
+                    Self::show_error(&win, &error_msg);
+                    Self::show_toast(&win, &error_msg, ToastType::Error);
+                    Self::schedule_toast_hide(window_weak, 5);
                 }
             }
         }
@@ -1188,21 +1305,41 @@ impl App {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("Failed to list buckets: {}", e);
                         if let Some(win) = window_weak.upgrade() {
-                            win.set_is_loading(false);
-                            win.set_status_message(format!("Error: {}", e).into());
+                            Self::show_error(&win, &format!("Failed to list buckets: {}", e));
                         }
                     }
                 }
             }
             Err(e) => {
-                tracing::error!("Failed to create S3 client: {}", e);
                 if let Some(win) = window_weak.upgrade() {
-                    win.set_is_loading(false);
-                    win.set_status_message(format!("Error: {}", e).into());
+                    // Show more user-friendly error for credential issues
+                    let error_msg = Self::format_s3_error(&e);
+                    Self::show_error(&win, &error_msg);
                 }
             }
+        }
+    }
+
+    /// Format S3/AWS errors into user-friendly messages
+    fn format_s3_error(e: &anyhow::Error) -> String {
+        let error_str = e.to_string();
+
+        // Check for common error patterns and provide helpful messages
+        if error_str.contains("ExpiredToken") {
+            "Your AWS credentials have expired. Please refresh your credentials and try again.".to_string()
+        } else if error_str.contains("InvalidAccessKeyId") || error_str.contains("SignatureDoesNotMatch") {
+            "Invalid AWS credentials. Please check your AWS profile configuration.".to_string()
+        } else if error_str.contains("AccessDenied") {
+            "Access denied. You don't have permission to perform this operation.".to_string()
+        } else if error_str.contains("NoSuchBucket") {
+            "The specified bucket does not exist.".to_string()
+        } else if error_str.contains("NoSuchKey") {
+            "The specified object does not exist.".to_string()
+        } else if error_str.contains("connection") || error_str.contains("timeout") {
+            "Network error. Please check your internet connection and try again.".to_string()
+        } else {
+            format!("Error: {}", error_str)
         }
     }
 
@@ -1393,6 +1530,64 @@ impl App {
 
         // Load the bucket contents at the appropriate prefix
         Self::load_bucket_contents(state, window_weak, &s3_url.bucket, &prefix).await;
+    }
+
+    /// Show an error message in the status bar with error styling
+    fn show_error(win: &MainWindow, message: &str) {
+        win.set_status_message(message.into());
+        win.set_is_error(true);
+        win.set_is_loading(false);
+        tracing::error!("{}", message);
+    }
+
+    /// Show a status message (not an error) in the status bar
+    fn show_status(win: &MainWindow, message: &str) {
+        win.set_status_message(message.into());
+        win.set_is_error(false);
+    }
+
+    /// Show an error dialog for critical failures
+    fn show_error_dialog(win: &MainWindow, title: &str, details: &str) {
+        win.set_error_title(title.into());
+        win.set_error_details(details.into());
+        win.set_show_error_dialog(true);
+        win.set_is_loading(false);
+        tracing::error!("{}: {}", title, details);
+    }
+
+    /// Show a toast notification with specified type
+    fn show_toast(win: &MainWindow, message: &str, toast_type: ToastType) {
+        let file_list = win.global::<FileList>();
+        file_list.set_toast_message(message.into());
+        file_list.set_toast_type(toast_type.as_str().into());
+        file_list.set_show_toast(true);
+    }
+
+    /// Hide toast notification after a delay
+    fn schedule_toast_hide(window_weak: Weak<MainWindow>, delay_secs: u64) {
+        slint::spawn_local(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
+            if let Some(win) = window_weak.upgrade() {
+                let file_list = win.global::<FileList>();
+                file_list.set_show_toast(false);
+            }
+        }).unwrap();
+    }
+
+    /// Set loading status message in file list
+    fn set_loading_status(win: &MainWindow, message: &str) {
+        let file_list = win.global::<FileList>();
+        file_list.set_loading_status(message.into());
+    }
+
+    /// Check if operation was cancelled
+    fn is_cancelled(state: &Rc<RefCell<AppState>>) -> bool {
+        state.borrow().cancel_requested
+    }
+
+    /// Reset cancel flag before starting a new operation
+    fn reset_cancel(state: &Rc<RefCell<AppState>>) {
+        state.borrow_mut().cancel_requested = false;
     }
 
     /// Convert S3Object to FileItem for UI
@@ -2378,5 +2573,78 @@ mod tests {
     fn test_get_parent_prefix_root_file() {
         // File at root level
         assert_eq!(App::get_parent_prefix("file.txt"), "");
+    }
+
+    #[test]
+    fn test_toast_type_as_str() {
+        assert_eq!(ToastType::Info.as_str(), "info");
+        assert_eq!(ToastType::Success.as_str(), "success");
+        assert_eq!(ToastType::Error.as_str(), "error");
+    }
+
+    #[test]
+    fn test_format_s3_error_expired_token() {
+        let err = anyhow::anyhow!("ExpiredToken: security token has expired");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("expired"));
+        assert!(formatted.contains("refresh"));
+    }
+
+    #[test]
+    fn test_format_s3_error_invalid_access_key() {
+        let err = anyhow::anyhow!("InvalidAccessKeyId: The AWS access key ID is invalid");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Invalid AWS credentials"));
+    }
+
+    #[test]
+    fn test_format_s3_error_signature_mismatch() {
+        let err = anyhow::anyhow!("SignatureDoesNotMatch: The signature does not match");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Invalid AWS credentials"));
+    }
+
+    #[test]
+    fn test_format_s3_error_access_denied() {
+        let err = anyhow::anyhow!("AccessDenied: User does not have permission");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Access denied"));
+        assert!(formatted.contains("permission"));
+    }
+
+    #[test]
+    fn test_format_s3_error_no_such_bucket() {
+        let err = anyhow::anyhow!("NoSuchBucket: The specified bucket does not exist");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("bucket does not exist"));
+    }
+
+    #[test]
+    fn test_format_s3_error_no_such_key() {
+        let err = anyhow::anyhow!("NoSuchKey: The specified key does not exist");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("object does not exist"));
+    }
+
+    #[test]
+    fn test_format_s3_error_connection() {
+        let err = anyhow::anyhow!("connection error: failed to connect");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Network error"));
+    }
+
+    #[test]
+    fn test_format_s3_error_timeout() {
+        let err = anyhow::anyhow!("timeout: request timed out after 30 seconds");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Network error"));
+    }
+
+    #[test]
+    fn test_format_s3_error_generic() {
+        let err = anyhow::anyhow!("Some other unknown error occurred");
+        let formatted = App::format_s3_error(&err);
+        assert!(formatted.contains("Error:"));
+        assert!(formatted.contains("Some other unknown error"));
     }
 }
