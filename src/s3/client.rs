@@ -18,6 +18,21 @@ pub struct ListObjectsResult {
     pub is_truncated: bool,
 }
 
+/// Configuration for S3 client
+#[derive(Debug, Clone, Default)]
+pub struct S3ClientConfig {
+    /// Custom endpoint URL (for MinIO, LocalStack, etc.)
+    pub endpoint_url: Option<String>,
+    /// Force path-style addressing (required for MinIO)
+    pub force_path_style: bool,
+    /// AWS region
+    pub region: Option<String>,
+    /// Access key ID (for testing with MinIO)
+    pub access_key_id: Option<String>,
+    /// Secret access key (for testing with MinIO)
+    pub secret_access_key: Option<String>,
+}
+
 /// S3 client wrapper with high-level operations
 pub struct S3Client {
     client: Client,
@@ -48,6 +63,55 @@ impl S3Client {
             client,
             current_region,
         })
+    }
+
+    /// Create a new S3 client with custom configuration
+    ///
+    /// This is useful for testing with MinIO or LocalStack.
+    pub async fn with_config(config: S3ClientConfig) -> Result<Self> {
+        use aws_sdk_s3::config::{BehaviorVersion, Builder, Credentials, Region};
+
+        let region = config.region.clone().unwrap_or_else(|| "us-east-1".to_string());
+
+        let mut builder = Builder::new()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new(region.clone()))
+            .force_path_style(config.force_path_style);
+
+        if let Some(endpoint) = &config.endpoint_url {
+            builder = builder.endpoint_url(endpoint);
+        }
+
+        if let (Some(access_key), Some(secret_key)) = (&config.access_key_id, &config.secret_access_key) {
+            let credentials = Credentials::new(
+                access_key,
+                secret_key,
+                None, // session token
+                None, // expiry
+                "test-credentials",
+            );
+            builder = builder.credentials_provider(credentials);
+        }
+
+        let s3_config = builder.build();
+        let client = Client::from_conf(s3_config);
+
+        Ok(Self {
+            client,
+            current_region: region,
+        })
+    }
+
+    /// Create a bucket (for testing purposes)
+    pub async fn create_bucket(&self, bucket: &str) -> Result<()> {
+        self.client
+            .create_bucket()
+            .bucket(bucket)
+            .send()
+            .await
+            .with_context(|| format!("Failed to create bucket '{}'", bucket))?;
+
+        Ok(())
     }
 
     /// List all accessible buckets
@@ -223,6 +287,9 @@ impl S3Client {
     }
 
     /// Delete multiple objects at once
+    ///
+    /// Note: This uses the S3 DeleteObjects API which works with AWS S3 but may have
+    /// compatibility issues with MinIO (requires Content-MD5 header).
     pub async fn delete_objects(&self, bucket: &str, keys: &[&str]) -> Result<Vec<String>> {
         use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 
