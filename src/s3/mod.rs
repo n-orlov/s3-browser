@@ -10,6 +10,6 @@ pub mod credentials;
 pub mod types;
 
 // Re-export commonly used types
-pub use client::{ListObjectsResult, S3Client};
+pub use client::{ListObjectsResult, S3Client, S3ClientConfig};
 pub use credentials::{AwsProfile, ProfileManager, ProfileType};
 pub use types::{Bucket, S3Object, S3Url};
