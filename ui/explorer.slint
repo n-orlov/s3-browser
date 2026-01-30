@@ -1,7 +1,9 @@
 // Explorer component - bucket tree and file list
 
 import { VerticalBox, HorizontalBox, ListView, LineEdit, ScrollView } from "std-widgets.slint";
-import { FileList } from "file_list.slint";
+import { FileListComponent, FileItem } from "file_list.slint";
+
+export { FileItem }
 
 export struct BucketItem {
     name: string,
@@ -9,16 +11,33 @@ export struct BucketItem {
     is-selected: bool,
 }
 
-export component Explorer inherits HorizontalBox {
-    // Properties
+export component ExplorerComponent inherits HorizontalBox {
+    // Bucket tree properties
     in-out property <[BucketItem]> buckets: [];
     in-out property <string> bucket-filter: "";
     in-out property <int> selected-bucket-index: -1;
     in-out property <string> current-prefix: "";
 
-    // Callbacks
+    // File list properties (passed through to FileListComponent)
+    in-out property <[FileItem]> files: [];
+    in-out property <string> file-current-path: "";
+    in-out property <bool> file-is-loading: false;
+    in-out property <string> file-prefix-filter: "";
+    in-out property <string> file-search-filter: "";
+
+    // Bucket tree callbacks
     callback bucket-selected(int);
     callback bucket-filter-changed(string);
+
+    // File list callbacks
+    callback file-selected(int);
+    callback file-double-clicked(int);
+    callback prefix-filter-changed(string);
+    callback search-filter-changed(string);
+    callback navigate-up();
+    callback copy-url-clicked();
+    callback download-clicked();
+    callback delete-clicked();
 
     // Left panel - bucket tree
     VerticalBox {
@@ -79,7 +98,37 @@ export component Explorer inherits HorizontalBox {
     }
 
     // Right panel - file list
-    FileList {
+    FileListComponent {
         horizontal-stretch: 1;
+        files: root.files;
+        current-path: root.file-current-path;
+        is-loading: root.file-is-loading;
+        prefix-filter: root.file-prefix-filter;
+        search-filter: root.file-search-filter;
+
+        file-selected(index) => {
+            root.file-selected(index);
+        }
+        file-double-clicked(index) => {
+            root.file-double-clicked(index);
+        }
+        prefix-filter-changed(text) => {
+            root.prefix-filter-changed(text);
+        }
+        search-filter-changed(text) => {
+            root.search-filter-changed(text);
+        }
+        navigate-up() => {
+            root.navigate-up();
+        }
+        copy-url-clicked() => {
+            root.copy-url-clicked();
+        }
+        download-clicked() => {
+            root.download-clicked();
+        }
+        delete-clicked() => {
+            root.delete-clicked();
+        }
     }
 }

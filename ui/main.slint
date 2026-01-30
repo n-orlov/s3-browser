@@ -1,7 +1,40 @@
 // S3 Browser Main Window
 
 import { Button, VerticalBox, HorizontalBox, ListView, ComboBox, LineEdit, StandardButton } from "std-widgets.slint";
-import { Explorer } from "explorer.slint";
+import { ExplorerComponent, BucketItem } from "explorer.slint";
+import { FileItem } from "file_list.slint";
+
+// Re-export structs for Rust access
+export { BucketItem, FileItem }
+
+// Global state for Explorer - allows Rust to access explorer data
+export global Explorer {
+    in-out property <[BucketItem]> buckets: [];
+    in-out property <string> bucket-filter: "";
+    in-out property <int> selected-bucket-index: -1;
+    in-out property <string> current-prefix: "";
+
+    callback bucket-selected(int);
+    callback bucket-filter-changed(string);
+}
+
+// Global state for FileList - allows Rust to access file list data
+export global FileList {
+    in-out property <[FileItem]> files: [];
+    in-out property <string> prefix-filter: "";
+    in-out property <string> search-filter: "";
+    in-out property <string> current-path: "";
+    in-out property <bool> is-loading: false;
+
+    callback file-selected(int);
+    callback file-double-clicked(int);
+    callback prefix-filter-changed(string);
+    callback search-filter-changed(string);
+    callback navigate-up();
+    callback copy-url-clicked();
+    callback download-clicked();
+    callback delete-clicked();
+}
 
 export component MainWindow inherits Window {
     title: "S3 Browser";
@@ -75,8 +108,51 @@ export component MainWindow inherits Window {
         }
 
         // Main content
-        Explorer {
+        explorer := ExplorerComponent {
             vertical-stretch: 1;
+            buckets: Explorer.buckets;
+            bucket-filter: Explorer.bucket-filter;
+            selected-bucket-index: Explorer.selected-bucket-index;
+            current-prefix: Explorer.current-prefix;
+
+            bucket-selected(index) => {
+                Explorer.bucket-selected(index);
+            }
+            bucket-filter-changed(text) => {
+                Explorer.bucket-filter-changed(text);
+            }
+
+            // Pass file list state to embedded file list
+            files: FileList.files;
+            file-current-path: FileList.current-path;
+            file-is-loading: FileList.is-loading;
+            file-prefix-filter: FileList.prefix-filter;
+            file-search-filter: FileList.search-filter;
+
+            file-selected(index) => {
+                FileList.file-selected(index);
+            }
+            file-double-clicked(index) => {
+                FileList.file-double-clicked(index);
+            }
+            prefix-filter-changed(text) => {
+                FileList.prefix-filter-changed(text);
+            }
+            search-filter-changed(text) => {
+                FileList.search-filter-changed(text);
+            }
+            navigate-up() => {
+                FileList.navigate-up();
+            }
+            copy-url-clicked() => {
+                FileList.copy-url-clicked();
+            }
+            download-clicked() => {
+                FileList.download-clicked();
+            }
+            delete-clicked() => {
+                FileList.delete-clicked();
+            }
         }
 
         // Status bar
