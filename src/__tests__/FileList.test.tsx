@@ -815,4 +815,265 @@ describe('FileList', () => {
       });
     });
   });
+
+  describe('pending file selection (URL navigation)', () => {
+    it('selects file when found in initial load', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+      const targetFile = { key: 'prefix/target.txt', size: 100, isPrefix: false };
+
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: [
+            targetFile,
+            { key: 'prefix/other.txt', size: 200, isPrefix: false },
+          ],
+          prefixes: [],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: 'prefix/',
+          keyCount: 2,
+        },
+      });
+
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="prefix/"
+          onNavigate={vi.fn()}
+          onSelectFile={onSelectFile}
+          selectedFile={null}
+          pendingFileSelection="prefix/target.txt"
+          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
+        />
+      );
+
+      await waitFor(() => {
+        expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ key: 'prefix/target.txt' }));
+        expect(onPendingFileSelectionHandled).toHaveBeenCalled();
+      });
+    });
+
+    it('continues loading more pages to find file', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+      const targetFile = { key: 'prefix/target.txt', size: 100, isPrefix: false };
+
+      // First page - file not found
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [
+            { key: 'prefix/file1.txt', size: 100, isPrefix: false },
+          ],
+          prefixes: [],
+          continuationToken: 'next-token',
+          isTruncated: true,
+          prefix: 'prefix/',
+          keyCount: 1,
+        },
+      });
+
+      // Second page - file found
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [targetFile],
+          prefixes: [],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: 'prefix/',
+          keyCount: 1,
+        },
+      });
+
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="prefix/"
+          onNavigate={vi.fn()}
+          onSelectFile={onSelectFile}
+          selectedFile={null}
+          pendingFileSelection="prefix/target.txt"
+          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
+        />
+      );
+
+      // Wait for file search to complete
+      await waitFor(() => {
+        expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ key: 'prefix/target.txt' }));
+      }, { timeout: 3000 });
+
+      expect(onPendingFileSelectionHandled).toHaveBeenCalled();
+      // Should have called listObjects twice
+      expect(mockElectronAPI.s3.listObjects).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows search progress overlay while searching', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+
+      // First page returns immediately, but has more
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [{ key: 'prefix/file1.txt', size: 100, isPrefix: false }],
+          prefixes: [],
+          continuationToken: 'next-token',
+          isTruncated: true,
+          prefix: 'prefix/',
+          keyCount: 1,
+        },
+      });
+
+      // Second page takes time
+      mockElectronAPI.s3.listObjects.mockImplementationOnce(
+        () => new Promise((resolve) =>
+          setTimeout(() => resolve({
+            success: true,
+            result: {
+              objects: [{ key: 'prefix/target.txt', size: 100, isPrefix: false }],
+              prefixes: [],
+              continuationToken: undefined,
+              isTruncated: false,
+              prefix: 'prefix/',
+              keyCount: 1,
+            },
+          }), 100)
+        )
+      );
+
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="prefix/"
+          onNavigate={vi.fn()}
+          onSelectFile={onSelectFile}
+          selectedFile={null}
+          pendingFileSelection="prefix/target.txt"
+          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
+        />
+      );
+
+      // Should show search progress overlay
+      await waitFor(() => {
+        expect(screen.getByText('Searching for file...')).toBeInTheDocument();
+        expect(screen.getByText('Cancel')).toBeInTheDocument();
+      });
+
+      // Wait for search to complete
+      await waitFor(() => {
+        expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ key: 'prefix/target.txt' }));
+      }, { timeout: 3000 });
+    });
+
+    it('cancels search when cancel button clicked', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+
+      // First page - file not found, more available
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [{ key: 'prefix/file1.txt', size: 100, isPrefix: false }],
+          prefixes: [],
+          continuationToken: 'next-token',
+          isTruncated: true,
+          prefix: 'prefix/',
+          keyCount: 1,
+        },
+      });
+
+      // Second page never completes (simulating slow load)
+      mockElectronAPI.s3.listObjects.mockImplementationOnce(
+        () => new Promise((resolve) =>
+          setTimeout(() => resolve({
+            success: true,
+            result: {
+              objects: [{ key: 'prefix/target.txt', size: 100, isPrefix: false }],
+              prefixes: [],
+              continuationToken: undefined,
+              isTruncated: false,
+              prefix: 'prefix/',
+              keyCount: 1,
+            },
+          }), 5000) // Very slow
+        )
+      );
+
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="prefix/"
+          onNavigate={vi.fn()}
+          onSelectFile={onSelectFile}
+          selectedFile={null}
+          pendingFileSelection="prefix/target.txt"
+          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
+        />
+      );
+
+      // Wait for search progress to show
+      await waitFor(() => {
+        expect(screen.getByText('Cancel')).toBeInTheDocument();
+      });
+
+      // Click cancel
+      fireEvent.click(screen.getByText('Cancel'));
+
+      // Should clear pending selection
+      await waitFor(() => {
+        expect(onPendingFileSelectionHandled).toHaveBeenCalled();
+      });
+
+      // Should hide the overlay
+      await waitFor(() => {
+        expect(screen.queryByText('Searching for file...')).not.toBeInTheDocument();
+      });
+    });
+
+    it('clears pending selection if file not found after all pages loaded', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+
+      // Only one page, file not there
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: [{ key: 'prefix/other.txt', size: 100, isPrefix: false }],
+          prefixes: [],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: 'prefix/',
+          keyCount: 1,
+        },
+      });
+
+      render(
+        <FileList
+          currentProfile="test-profile"
+          selectedBucket="my-bucket"
+          currentPrefix="prefix/"
+          onNavigate={vi.fn()}
+          onSelectFile={onSelectFile}
+          selectedFile={null}
+          pendingFileSelection="prefix/nonexistent.txt"
+          onPendingFileSelectionHandled={onPendingFileSelectionHandled}
+        />
+      );
+
+      // Should clear pending selection since file not found
+      await waitFor(() => {
+        expect(onPendingFileSelectionHandled).toHaveBeenCalled();
+      });
+
+      // File should not be selected
+      expect(onSelectFile).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'prefix/nonexistent.txt' }));
+    });
+  });
 });

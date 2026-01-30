@@ -16,6 +16,14 @@ export interface S3Object {
   isPrefix: boolean;
 }
 
+/** State for tracking file search progress during URL navigation */
+interface FileSearchState {
+  isSearching: boolean;
+  targetKey: string;
+  loadedCount: number;
+  cancelled: boolean;
+}
+
 export interface FileListProps {
   currentProfile: string | null;
   selectedBucket: string | null;
@@ -116,9 +124,18 @@ function FileList({
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // State for file search during URL navigation
+  const [fileSearchState, setFileSearchState] = useState<FileSearchState>({
+    isSearching: false,
+    targetKey: '',
+    loadedCount: 0,
+    cancelled: false,
+  });
+
   const continuationTokenRef = useRef<string | undefined>(undefined);
   const listContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   const loadObjects = useCallback(
     async (reset = true) => {
@@ -178,17 +195,73 @@ function FileList({
     onSelectFile(null); // Clear selection on navigation
   }, [selectedBucket, currentPrefix, loadObjects, onSelectFile]);
 
-  // Handle pending file selection after items are loaded
+  // Cancel file search
+  const cancelFileSearch = useCallback(() => {
+    setFileSearchState((prev) => ({ ...prev, cancelled: true, isSearching: false }));
+    onPendingFileSelectionHandled?.();
+  }, [onPendingFileSelectionHandled]);
+
+  // Scroll to a specific file row
+  const scrollToFile = useCallback((key: string) => {
+    const rowElement = rowRefs.current.get(key);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Add a brief highlight effect
+      rowElement.classList.add('highlight-found');
+      setTimeout(() => rowElement.classList.remove('highlight-found'), 2000);
+    }
+  }, []);
+
+  // Handle pending file selection - search through all pages if needed
   useEffect(() => {
-    if (pendingFileSelection && items.length > 0 && !loading) {
-      const fileToSelect = items.find((item) => item.key === pendingFileSelection);
-      if (fileToSelect) {
-        onSelectFile(fileToSelect);
-      }
-      // Clear the pending selection regardless of whether we found the file
+    // Skip if no pending selection, still loading, or search was cancelled
+    if (!pendingFileSelection || loading || fileSearchState.cancelled) {
+      return;
+    }
+
+    // Check if file is in currently loaded items
+    const fileToSelect = items.find((item) => item.key === pendingFileSelection);
+
+    if (fileToSelect) {
+      // File found! Select it and scroll to it
+      onSelectFile(fileToSelect);
+      setFileSearchState({ isSearching: false, targetKey: '', loadedCount: 0, cancelled: false });
+      onPendingFileSelectionHandled?.();
+
+      // Scroll to the file after a brief delay to let the DOM update
+      setTimeout(() => scrollToFile(fileToSelect.key), 100);
+      return;
+    }
+
+    // File not found yet - check if we need to load more
+    if (hasMore && !loadingMore) {
+      // Start or continue searching
+      setFileSearchState({
+        isSearching: true,
+        targetKey: pendingFileSelection,
+        loadedCount: items.length,
+        cancelled: false,
+      });
+
+      // Load more items to continue searching
+      loadObjects(false);
+    } else if (!hasMore) {
+      // No more items to load, file not found
+      setFileSearchState({ isSearching: false, targetKey: '', loadedCount: 0, cancelled: false });
       onPendingFileSelectionHandled?.();
     }
-  }, [pendingFileSelection, items, loading, onSelectFile, onPendingFileSelectionHandled]);
+  }, [
+    pendingFileSelection,
+    items,
+    loading,
+    loadingMore,
+    hasMore,
+    fileSearchState.cancelled,
+    onSelectFile,
+    onPendingFileSelectionHandled,
+    loadObjects,
+    scrollToFile,
+  ]);
 
   // Compute filtered and sorted items
   const displayedItems = useMemo(() => {
@@ -368,6 +441,30 @@ function FileList({
           <div className="drop-message">Drop files here to upload</div>
         </div>
       )}
+      {/* File search progress overlay */}
+      {fileSearchState.isSearching && (
+        <div className="file-search-overlay">
+          <div className="file-search-progress">
+            <span className="loading-spinner"></span>
+            <div className="file-search-info">
+              <span className="file-search-title">Searching for file...</span>
+              <span className="file-search-detail">
+                Loaded {fileSearchState.loadedCount} items
+              </span>
+              <span className="file-search-target" title={fileSearchState.targetKey}>
+                {fileSearchState.targetKey.split('/').pop()}
+              </span>
+            </div>
+            <button
+              className="file-search-cancel"
+              onClick={cancelFileSearch}
+              title="Cancel search"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {/* Breadcrumb / current path */}
       <div className="file-list-toolbar">
         <div className="breadcrumb">
@@ -462,6 +559,13 @@ function FileList({
                 return (
                   <tr
                     key={item.key}
+                    ref={(el) => {
+                      if (el) {
+                        rowRefs.current.set(item.key, el);
+                      } else {
+                        rowRefs.current.delete(item.key);
+                      }
+                    }}
                     className={`file-row ${item.isPrefix ? 'folder' : 'file'} ${isSelected ? 'selected' : ''}`}
                     onClick={() => handleItemClick(item)}
                     onDoubleClick={() => handleItemDoubleClick(item)}
