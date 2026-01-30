@@ -1,0 +1,244 @@
+// Parquet Viewer Dialog
+// Displays parquet file data in a tabular format with lazy loading
+
+import { VerticalBox, HorizontalBox, ScrollView, Button } from "std-widgets.slint";
+
+// Column definition for the table
+export struct ParquetColumn {
+    name: string,
+    data-type: string,
+    width: length,
+}
+
+// Cell data for the table
+export struct ParquetCell {
+    value: string,
+}
+
+// Row of cells
+export struct ParquetRow {
+    cells: [ParquetCell],
+}
+
+export component ParquetViewerDialog inherits Rectangle {
+    // Properties
+    in-out property <string> file-name: "";
+    in-out property <[ParquetColumn]> columns: [];
+    in-out property <[ParquetRow]> rows: [];
+    in-out property <int> total-rows: 0;
+    in-out property <int> loaded-rows: 0;
+    in-out property <bool> is-loading: false;
+    in-out property <bool> dialog-visible: false;
+
+    // Callbacks
+    callback close-clicked();
+    callback load-more-clicked();
+
+    // Dialog background - only visible when dialog is shown
+    background: dialog-visible ? #00000080 : transparent;
+
+    // Only show when dialog-visible
+    if dialog-visible: Rectangle {
+        width: 100%;
+        height: 100%;
+
+        TouchArea {
+            // Clicking background closes dialog
+            clicked => {
+                close-clicked();
+            }
+        }
+
+        // Dialog content
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(parent.width - 40px, 1000px);
+            height: min(parent.height - 40px, 700px);
+            background: white;
+            border-radius: 8px;
+            drop-shadow-blur: 20px;
+            drop-shadow-color: #00000040;
+
+            TouchArea {
+                // Prevent clicks from closing when clicking dialog content
+            }
+
+            VerticalBox {
+                padding: 16px;
+                spacing: 12px;
+
+                // Header
+                HorizontalBox {
+                    height: 32px;
+
+                    Text {
+                        text: "Parquet Viewer: " + file-name;
+                        font-size: 16px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    // Row count info
+                    Text {
+                        text: loaded-rows == total-rows
+                            ? "\{total-rows} rows"
+                            : "\{loaded-rows} of \{total-rows} rows";
+                        font-size: 12px;
+                        color: #666666;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        width: 16px;
+                    }
+
+                    Button {
+                        text: "×";
+                        width: 32px;
+                        clicked => {
+                            close-clicked();
+                        }
+                    }
+                }
+
+                // Column headers
+                Rectangle {
+                    height: 32px;
+                    background: #f0f0f0;
+                    border-radius: 4px;
+
+                    HorizontalBox {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+
+                        // Row number column
+                        Rectangle {
+                            width: 60px;
+                            Text {
+                                text: "#";
+                                font-size: 12px;
+                                font-weight: 600;
+                                color: #666666;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        for col in columns: Rectangle {
+                            width: max(col.width, 80px);
+
+                            VerticalBox {
+                                spacing: 2px;
+                                alignment: center;
+
+                                Text {
+                                    text: col.name;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    text: col.data-type;
+                                    font-size: 10px;
+                                    color: #888888;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Table content
+                ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalBox {
+                        spacing: 0px;
+
+                        for row[row-idx] in rows: Rectangle {
+                            height: 28px;
+                            background: mod(row-idx, 2) == 0 ? #ffffff : #fafafa;
+
+                            HorizontalBox {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+
+                                // Row number
+                                Rectangle {
+                                    width: 60px;
+                                    Text {
+                                        text: "\{row-idx + 1}";
+                                        font-size: 12px;
+                                        color: #888888;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                // Cell values - match column widths
+                                for cell[col-idx] in row.cells: Rectangle {
+                                    width: max(columns[col-idx].width, 80px);
+
+                                    Text {
+                                        text: cell.value;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Load more button if there are more rows
+                        if loaded-rows < total-rows: Rectangle {
+                            height: 40px;
+                            background: #f5f5f5;
+
+                            HorizontalBox {
+                                padding: 8px;
+                                alignment: center;
+
+                                if is-loading: Text {
+                                    text: "Loading...";
+                                    font-size: 12px;
+                                    color: #666666;
+                                    vertical-alignment: center;
+                                }
+
+                                if !is-loading: Button {
+                                    text: "Load more (\{total-rows - loaded-rows} remaining)";
+                                    clicked => {
+                                        load-more-clicked();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer
+                HorizontalBox {
+                    height: 32px;
+                    spacing: 8px;
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    Button {
+                        text: "Close";
+                        clicked => {
+                            close-clicked();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
