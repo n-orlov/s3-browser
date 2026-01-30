@@ -1143,4 +1143,118 @@ describe('s3Service', () => {
       expect(result.metadata!.etag).toBe('quoted-etag-value');
     });
   });
+
+  describe('createEmptyFile', () => {
+    it('should create an empty file with correct content type', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const { createEmptyFile } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createEmptyFile('default', 'test-bucket', 'test.txt');
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'test.txt',
+          Body: '',
+          ContentType: 'text/plain',
+        }),
+      }));
+    });
+
+    it('should create an empty JSON file with correct content type', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const { createEmptyFile } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createEmptyFile('default', 'test-bucket', 'data.json');
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({
+          ContentType: 'application/json',
+        }),
+      }));
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Access Denied'));
+
+      const { createEmptyFile } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createEmptyFile('default', 'test-bucket', 'test.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Access Denied');
+    });
+  });
+
+  describe('createFolder', () => {
+    it('should create a folder with trailing slash', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const { createFolder } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createFolder('default', 'test-bucket', 'my-folder');
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'my-folder/',
+          Body: '',
+          ContentType: 'application/x-directory',
+        }),
+      }));
+    });
+
+    it('should not duplicate trailing slash if already present', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const { createFolder } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createFolder('default', 'test-bucket', 'my-folder/');
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({
+          Key: 'my-folder/',
+        }),
+      }));
+    });
+
+    it('should create a nested folder', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const { createFolder } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createFolder('default', 'test-bucket', 'parent/child');
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({
+          Key: 'parent/child/',
+        }),
+      }));
+    });
+
+    it('should return error on failure', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Permission denied'));
+
+      const { createFolder } = await import('../main/services/s3Service');
+      clearS3Client();
+
+      const result = await createFolder('default', 'test-bucket', 'my-folder');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Permission denied');
+    });
+  });
 });

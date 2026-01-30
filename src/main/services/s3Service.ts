@@ -841,6 +841,71 @@ export interface ObjectMetadata {
 }
 
 /**
+ * Creates an empty file in S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param key - The S3 object key for the new file
+ */
+export async function createEmptyFile(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    const contentType = getContentType(key);
+
+    const putCommand = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: '',
+      ContentType: contentType,
+    });
+
+    await client.send(putCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Creates a folder (empty object ending with /) in S3
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param prefix - The prefix for the folder (should end with /)
+ */
+export async function createFolder(
+  profileName: string,
+  bucket: string,
+  prefix: string
+): Promise<FileOperationResult> {
+  const client = getS3Client(profileName);
+
+  try {
+    // Ensure the prefix ends with /
+    const folderKey = prefix.endsWith('/') ? prefix : `${prefix}/`;
+
+    const putCommand = new PutObjectCommand({
+      Bucket: bucket,
+      Key: folderKey,
+      Body: '',
+      ContentType: 'application/x-directory',
+    });
+
+    await client.send(putCommand);
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+/**
  * Gets detailed metadata for an S3 object including tags
  * @param profileName - The AWS profile name to use
  * @param bucket - The S3 bucket name

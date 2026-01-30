@@ -18,6 +18,8 @@ describe('FileToolbar', () => {
     onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
     onProperties: vi.fn(),
+    onNewFile: vi.fn(),
+    onNewFolder: vi.fn(),
     disabled: false,
   };
 
@@ -692,6 +694,92 @@ describe('FileToolbar', () => {
 
       const propertiesButton = screen.getByTitle(/Select a file or folder to view properties/);
       expect(propertiesButton).toBeDisabled();
+    });
+  });
+
+  describe('New File button', () => {
+    it('disables New File button when no bucket is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedBucket={null} />);
+
+      const newFileButton = screen.getByTitle('Create new empty file');
+      expect(newFileButton).toBeDisabled();
+    });
+
+    it('enables New File button when a bucket is selected', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      const newFileButton = screen.getByTitle('Create new empty file');
+      expect(newFileButton).not.toBeDisabled();
+    });
+
+    it('calls onNewFile when New File button is clicked', () => {
+      const onNewFile = vi.fn();
+      render(<FileToolbar {...defaultProps} onNewFile={onNewFile} />);
+
+      fireEvent.click(screen.getByText('New File'));
+      expect(onNewFile).toHaveBeenCalled();
+    });
+
+    it('disables New File button when toolbar is disabled', () => {
+      render(<FileToolbar {...defaultProps} disabled={true} />);
+
+      const newFileButton = screen.getByText('New File').closest('button');
+      expect(newFileButton).toBeDisabled();
+    });
+
+    it('enables New File button regardless of file selection', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+        />
+      );
+
+      const newFileButton = screen.getByTitle('Create new empty file');
+      expect(newFileButton).not.toBeDisabled();
+    });
+  });
+
+  describe('New Folder button', () => {
+    it('disables New Folder button when no bucket is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedBucket={null} />);
+
+      const newFolderButton = screen.getByTitle('Create new folder');
+      expect(newFolderButton).toBeDisabled();
+    });
+
+    it('enables New Folder button when a bucket is selected', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      const newFolderButton = screen.getByTitle('Create new folder');
+      expect(newFolderButton).not.toBeDisabled();
+    });
+
+    it('calls onNewFolder when New Folder button is clicked', () => {
+      const onNewFolder = vi.fn();
+      render(<FileToolbar {...defaultProps} onNewFolder={onNewFolder} />);
+
+      fireEvent.click(screen.getByText('New Folder'));
+      expect(onNewFolder).toHaveBeenCalled();
+    });
+
+    it('disables New Folder button when toolbar is disabled', () => {
+      render(<FileToolbar {...defaultProps} disabled={true} />);
+
+      const newFolderButton = screen.getByText('New Folder').closest('button');
+      expect(newFolderButton).toBeDisabled();
+    });
+
+    it('enables New Folder button regardless of file selection', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'file.txt', isPrefix: false }}
+        />
+      );
+
+      const newFolderButton = screen.getByTitle('Create new folder');
+      expect(newFolderButton).not.toBeDisabled();
     });
   });
 });

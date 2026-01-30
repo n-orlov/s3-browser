@@ -19,6 +19,8 @@ export interface FileToolbarProps {
   onCopyUrl: () => void;
   onRefresh: () => void;
   onProperties: () => void;
+  onNewFile: () => void;
+  onNewFolder: () => void;
   disabled?: boolean;
 }
 
@@ -75,6 +77,8 @@ function FileToolbar({
   onCopyUrl,
   onRefresh,
   onProperties,
+  onNewFile,
+  onNewFolder,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
   const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
@@ -93,11 +97,29 @@ function FileToolbar({
     <div className="file-toolbar">
       <button
         className="toolbar-btn"
+        onClick={onNewFile}
+        disabled={disabled || !selectedBucket}
+        title="Create new empty file"
+      >
+        <span className="toolbar-icon">+F</span>
+        <span className="toolbar-label">New File</span>
+      </button>
+      <button
+        className="toolbar-btn"
+        onClick={onNewFolder}
+        disabled={disabled || !selectedBucket}
+        title="Create new folder"
+      >
+        <span className="toolbar-icon">+D</span>
+        <span className="toolbar-label">New Folder</span>
+      </button>
+      <button
+        className="toolbar-btn"
         onClick={onUpload}
         disabled={disabled || !selectedBucket}
         title="Upload files"
       >
-        <span className="toolbar-icon">+</span>
+        <span className="toolbar-icon">U</span>
         <span className="toolbar-label">Upload</span>
       </button>
       <button
