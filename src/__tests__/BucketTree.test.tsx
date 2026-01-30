@@ -248,4 +248,206 @@ describe('BucketTree', () => {
       });
     });
   });
+
+  describe('bucket filter', () => {
+    beforeEach(() => {
+      mockElectronAPI.s3.listBuckets.mockResolvedValue({
+        success: true,
+        buckets: [
+          { name: 'my-production-bucket', creationDate: new Date() },
+          { name: 'my-staging-bucket', creationDate: new Date() },
+          { name: 'data-lake-raw', creationDate: new Date() },
+          { name: 'data-lake-processed', creationDate: new Date() },
+          { name: 'logs-archive', creationDate: new Date() },
+        ],
+      });
+    });
+
+    it('renders filter input when buckets are loaded', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Filter buckets (contains)...')).toBeInTheDocument();
+      });
+    });
+
+    it('shows total bucket count initially', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('5 buckets')).toBeInTheDocument();
+      });
+    });
+
+    it('filters buckets using case-insensitive contains logic', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'production' } });
+
+      // Only production bucket should be visible
+      expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      expect(screen.queryByText('my-staging-bucket')).not.toBeInTheDocument();
+      expect(screen.queryByText('data-lake-raw')).not.toBeInTheDocument();
+    });
+
+    it('filter is case-insensitive', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+
+      // Test uppercase filter
+      fireEvent.change(filterInput, { target: { value: 'PRODUCTION' } });
+      expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+
+      // Test mixed case filter
+      fireEvent.change(filterInput, { target: { value: 'ProDuCtiOn' } });
+      expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+    });
+
+    it('shows filtered count when filter is active', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('5 buckets')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'data-lake' } });
+
+      expect(screen.getByText('2 of 5 buckets')).toBeInTheDocument();
+    });
+
+    it('shows clear button when filter has text', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      // No clear button initially
+      expect(screen.queryByRole('button', { name: 'Clear filter' })).not.toBeInTheDocument();
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'staging' } });
+
+      // Clear button should appear
+      expect(screen.getByRole('button', { name: 'Clear filter' })).toBeInTheDocument();
+    });
+
+    it('clears filter when clear button is clicked', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'staging' } });
+
+      // Only staging bucket visible
+      expect(screen.queryByText('my-production-bucket')).not.toBeInTheDocument();
+      expect(screen.getByText('my-staging-bucket')).toBeInTheDocument();
+
+      // Click clear
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+
+      // All buckets visible again
+      expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      expect(screen.getByText('my-staging-bucket')).toBeInTheDocument();
+      expect(screen.getByText('data-lake-raw')).toBeInTheDocument();
+    });
+
+    it('shows "No matching buckets" when filter matches nothing', async () => {
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'nonexistent' } });
+
+      expect(screen.getByText('No matching buckets')).toBeInTheDocument();
+      expect(screen.getByText('0 of 5 buckets')).toBeInTheDocument();
+    });
+
+    it('can still select filtered buckets', async () => {
+      const onSelectBucket = vi.fn();
+
+      render(
+        <BucketTree
+          currentProfile="test-profile"
+          selectedBucket={null}
+          onSelectBucket={onSelectBucket}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('my-production-bucket')).toBeInTheDocument();
+      });
+
+      const filterInput = screen.getByPlaceholderText('Filter buckets (contains)...');
+      fireEvent.change(filterInput, { target: { value: 'staging' } });
+
+      fireEvent.click(screen.getByText('my-staging-bucket'));
+      expect(onSelectBucket).toHaveBeenCalledWith('my-staging-bucket');
+    });
+  });
 });
