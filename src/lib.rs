@@ -4,6 +4,7 @@
 //! The public modules can be used for testing and extension.
 
 pub mod s3;
+pub mod settings;
 pub mod viewers;
 
 // Note: app and ui modules are not exported as they depend on Slint

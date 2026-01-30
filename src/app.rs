@@ -11,6 +11,7 @@ use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
+use crate::settings::Settings;
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -23,6 +24,8 @@ struct AppState {
     all_objects: Vec<S3Object>,
     /// Selected file indices
     selected_indices: HashSet<usize>,
+    /// Persistent settings
+    settings: Settings,
 }
 
 /// Main application state
@@ -47,6 +50,12 @@ impl App {
         let profile_model = Rc::new(VecModel::from(profile_names));
         window.set_profiles(ModelRc::from(profile_model.clone()));
 
+        // Load persistent settings
+        let settings = Settings::load().unwrap_or_else(|e| {
+            tracing::warn!("Failed to load settings, using defaults: {}", e);
+            Settings::default()
+        });
+
         // Initialize state
         let state = Rc::new(RefCell::new(AppState {
             profile_manager,
@@ -57,6 +66,7 @@ impl App {
             continuation_token: None,
             all_objects: Vec::new(),
             selected_indices: HashSet::new(),
+            settings,
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -466,7 +476,43 @@ impl App {
             }
         });
 
-        window.set_status_message("Select a profile to connect to AWS".into());
+        // Restore last session if settings are available
+        {
+            let state_ref = state.borrow();
+            let last_profile = state_ref.settings.last_profile.clone();
+            let last_bucket = state_ref.settings.last_bucket.clone();
+            let last_prefix = state_ref.settings.last_prefix.clone();
+            drop(state_ref);
+
+            if let Some(profile_name) = last_profile {
+                // Find profile index
+                let profile_names = {
+                    let state_ref = state.borrow();
+                    state_ref.profile_manager.profile_names()
+                };
+
+                if let Some(profile_idx) = profile_names.iter().position(|p| p == &profile_name) {
+                    tracing::info!("Restoring last session: profile={}", profile_name);
+
+                    // Set the profile selection in UI
+                    window.set_current_profile_index(profile_idx as i32);
+                    window.set_status_message(format!("Restoring session: {}...", profile_name).into());
+                    window.set_is_loading(true);
+
+                    // Spawn async task to restore the session
+                    let state = state.clone();
+                    let window_weak = window.as_weak();
+                    slint::spawn_local(async move {
+                        Self::restore_session(state, window_weak, profile_name, last_bucket, last_prefix).await;
+                    }).unwrap();
+                } else {
+                    tracing::warn!("Last profile '{}' not found, starting fresh", profile_name);
+                    window.set_status_message("Select a profile to connect to AWS".into());
+                }
+            } else {
+                window.set_status_message("Select a profile to connect to AWS".into());
+            }
+        }
 
         Ok(Self {
             window,
@@ -795,7 +841,7 @@ impl App {
 
                         let bucket_count = bucket_items.len();
 
-                        // Update state
+                        // Update state and save settings
                         {
                             let mut state_ref = state.borrow_mut();
                             state_ref.s3_client = Some(client);
@@ -803,6 +849,13 @@ impl App {
                             state_ref.current_bucket = None;
                             state_ref.current_prefix = String::new();
                             state_ref.selected_indices.clear();
+
+                            // Save profile to settings
+                            state_ref.settings.set_profile(Some(profile_name));
+                            state_ref.settings.set_location(None, None);
+                            if let Err(e) = state_ref.settings.save() {
+                                tracing::warn!("Failed to save settings: {}", e);
+                            }
                         }
 
                         // Update UI
@@ -836,6 +889,52 @@ impl App {
                 if let Some(win) = window_weak.upgrade() {
                     win.set_is_loading(false);
                     win.set_status_message(format!("Error: {}", e).into());
+                }
+            }
+        }
+    }
+
+    /// Restore a previous session from saved settings
+    async fn restore_session(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        profile_name: String,
+        last_bucket: Option<String>,
+        last_prefix: Option<String>,
+    ) {
+        // First, load the profile and buckets
+        Self::load_profile_and_buckets(state.clone(), window_weak.clone(), &profile_name).await;
+
+        // If we have a last bucket, try to navigate to it
+        if let Some(bucket) = last_bucket {
+            // Find the bucket in the list and select it
+            if let Some(win) = window_weak.upgrade() {
+                let explorer = win.global::<Explorer>();
+                let buckets = explorer.get_buckets();
+
+                // Find bucket index
+                let mut bucket_idx: Option<usize> = None;
+                for i in 0..buckets.row_count() {
+                    if let Some(b) = buckets.row_data(i) {
+                        if b.name.to_string() == bucket {
+                            bucket_idx = Some(i);
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(idx) = bucket_idx {
+                    tracing::info!("Restoring bucket: {} (index {})", bucket, idx);
+                    explorer.set_selected_bucket_index(idx as i32);
+
+                    // Now load the bucket contents at the last prefix
+                    let prefix = last_prefix.unwrap_or_default();
+                    win.set_status_message(format!("Restoring location: s3://{}/{}...", bucket, prefix).into());
+                    win.set_is_loading(true);
+
+                    Self::load_bucket_contents(state, window_weak, &bucket, &prefix).await;
+                } else {
+                    tracing::warn!("Last bucket '{}' not found in bucket list", bucket);
                 }
             }
         }
@@ -891,7 +990,7 @@ impl App {
                 let count = file_items.len();
                 let has_more = result.is_truncated;
 
-                // Update state
+                // Update state and save settings
                 {
                     let mut state_ref = state.borrow_mut();
                     state_ref.current_bucket = Some(bucket.to_string());
@@ -899,6 +998,15 @@ impl App {
                     state_ref.continuation_token = result.next_token;
                     state_ref.all_objects = result.objects;
                     state_ref.selected_indices.clear();
+
+                    // Save location to settings
+                    state_ref.settings.set_location(
+                        Some(bucket),
+                        if prefix.is_empty() { None } else { Some(prefix) }
+                    );
+                    if let Err(e) = state_ref.settings.save() {
+                        tracing::warn!("Failed to save settings: {}", e);
+                    }
                 }
 
                 // Update UI
