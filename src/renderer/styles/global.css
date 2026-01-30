@@ -303,6 +303,73 @@ body {
   white-space: nowrap;
 }
 
+/* Bucket Filter */
+.bucket-filter {
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.bucket-filter-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 8px;
+  transition: border-color 0.15s ease;
+}
+
+.bucket-filter-wrapper:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.bucket-filter-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.bucket-filter-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 0;
+  outline: none;
+  min-width: 0;
+}
+
+.bucket-filter-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.bucket-filter-clear {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.bucket-filter-clear:hover {
+  background-color: var(--border);
+  color: var(--text-primary);
+}
+
+.bucket-filter-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  padding-left: 2px;
+}
+
 /* File List Styles */
 .file-list-container {
   height: 100%;

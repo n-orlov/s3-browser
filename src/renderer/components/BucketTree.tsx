@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 export interface S3Bucket {
   name: string;
@@ -26,6 +26,7 @@ function BucketTree({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
+  const [filterText, setFilterText] = useState('');
 
   const loadBuckets = useCallback(async () => {
     if (!currentProfile) {
@@ -72,6 +73,23 @@ function BucketTree({
     onSelectBucket(bucketName);
   };
 
+  // Filter buckets using case-insensitive contains logic
+  const filteredNodes = useMemo(() => {
+    if (!filterText.trim()) {
+      return treeNodes;
+    }
+    const lowerFilter = filterText.toLowerCase();
+    return treeNodes.filter((node) => node.name.toLowerCase().includes(lowerFilter));
+  }, [treeNodes, filterText]);
+
+  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilterText(e.target.value);
+  };
+
+  const handleClearFilter = () => {
+    setFilterText('');
+  };
+
   if (!currentProfile) {
     return (
       <div className="bucket-tree">
@@ -115,8 +133,40 @@ function BucketTree({
 
   return (
     <div className="bucket-tree">
+      <div className="bucket-filter">
+        <div className="bucket-filter-wrapper">
+          <span className="bucket-filter-icon">🔍</span>
+          <input
+            type="text"
+            className="bucket-filter-input"
+            placeholder="Filter buckets (contains)..."
+            value={filterText}
+            onChange={handleFilterChange}
+            aria-label="Filter buckets"
+          />
+          {filterText && (
+            <button
+              className="bucket-filter-clear"
+              onClick={handleClearFilter}
+              aria-label="Clear filter"
+              title="Clear filter"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        <div className="bucket-filter-hint">
+          {filterText ? (
+            <span>
+              {filteredNodes.length} of {treeNodes.length} buckets
+            </span>
+          ) : (
+            <span>{treeNodes.length} buckets</span>
+          )}
+        </div>
+      </div>
       <ul className="bucket-list" role="tree">
-        {treeNodes.map((node) => (
+        {filteredNodes.map((node) => (
           <li
             key={node.name}
             className={`bucket-item ${selectedBucket === node.name ? 'selected' : ''}`}
@@ -138,6 +188,9 @@ function BucketTree({
           </li>
         ))}
       </ul>
+      {filteredNodes.length === 0 && filterText && (
+        <p className="bucket-tree-placeholder">No matching buckets</p>
+      )}
     </div>
   );
 }
