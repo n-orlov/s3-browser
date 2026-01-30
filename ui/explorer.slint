@@ -24,6 +24,9 @@ export component ExplorerComponent inherits HorizontalBox {
     in-out property <bool> file-is-loading: false;
     in-out property <string> file-prefix-filter: "";
     in-out property <string> file-search-filter: "";
+    in-out property <int> file-selection-count: 0;
+    in-out property <string> file-toast-message: "";
+    in-out property <bool> file-show-toast: false;
 
     // Bucket tree callbacks
     callback bucket-selected(int);
@@ -31,13 +34,16 @@ export component ExplorerComponent inherits HorizontalBox {
 
     // File list callbacks
     callback file-selected(int);
+    callback file-selected-with-ctrl(int, bool);
     callback file-double-clicked(int);
     callback prefix-filter-changed(string);
     callback search-filter-changed(string);
     callback navigate-up();
     callback copy-url-clicked();
     callback download-clicked();
+    callback upload-clicked();
     callback delete-clicked();
+    callback rename-clicked();
 
     // Left panel - bucket tree
     VerticalBox {
@@ -105,9 +111,15 @@ export component ExplorerComponent inherits HorizontalBox {
         is-loading: root.file-is-loading;
         prefix-filter: root.file-prefix-filter;
         search-filter: root.file-search-filter;
+        selection-count: root.file-selection-count;
+        toast-message: root.file-toast-message;
+        show-toast: root.file-show-toast;
 
         file-selected(index) => {
             root.file-selected(index);
+        }
+        file-selected-with-ctrl(index, ctrl) => {
+            root.file-selected-with-ctrl(index, ctrl);
         }
         file-double-clicked(index) => {
             root.file-double-clicked(index);
@@ -127,8 +139,14 @@ export component ExplorerComponent inherits HorizontalBox {
         download-clicked() => {
             root.download-clicked();
         }
+        upload-clicked() => {
+            root.upload-clicked();
+        }
         delete-clicked() => {
             root.delete-clicked();
+        }
+        rename-clicked() => {
+            root.rename-clicked();
         }
     }
 }

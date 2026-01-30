@@ -1,8 +1,11 @@
 //! Application state and logic
 
 use anyhow::Result;
+use copypasta::{ClipboardContext, ClipboardProvider};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 use std::cell::RefCell;
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
 use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList};
 use crate::s3::credentials::ProfileManager;
@@ -18,6 +21,8 @@ struct AppState {
     current_prefix: String,
     continuation_token: Option<String>,
     all_objects: Vec<S3Object>,
+    /// Selected file indices
+    selected_indices: HashSet<usize>,
 }
 
 /// Main application state
@@ -51,6 +56,7 @@ impl App {
             current_prefix: String::new(),
             continuation_token: None,
             all_objects: Vec::new(),
+            selected_indices: HashSet::new(),
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -62,6 +68,7 @@ impl App {
         let file_list = window.global::<FileList>();
         file_list.set_files(ModelRc::from(Rc::new(VecModel::<FileItem>::default())));
         file_list.set_current_path("".into());
+        file_list.set_selection_count(0);
 
         // Set up profile change callback
         let state_clone = state.clone();
@@ -196,18 +203,18 @@ impl App {
             }
         });
 
-        // Set up file selection callback
+        // Set up file selection callback (single click without modifier)
+        let state_clone = state.clone();
         let window_weak = window.as_weak();
         file_list.on_file_selected(move |index| {
-            if let Some(win) = window_weak.upgrade() {
-                let file_list_global = win.global::<FileList>();
-                let files = file_list_global.get_files();
-                // Update selection state
-                // For now just log - multi-select will be added later
-                if let Some(file) = files.row_data(index as usize) {
-                    tracing::debug!("File selected: {} (index {})", file.name, index);
-                }
-            }
+            Self::handle_file_selection(state_clone.clone(), window_weak.clone(), index as usize, false);
+        });
+
+        // Set up file selection with Ctrl callback (multi-select)
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_file_selected_with_ctrl(move |index, ctrl_held| {
+            Self::handle_file_selection(state_clone.clone(), window_weak.clone(), index as usize, ctrl_held);
         });
 
         // Set up copy URL callback
@@ -217,29 +224,191 @@ impl App {
             if let Some(win) = window_weak.upgrade() {
                 let state_ref = state_clone.borrow();
                 if let Some(bucket) = &state_ref.current_bucket {
-                    let current_path = format!("s3://{}/{}", bucket, state_ref.current_prefix);
-                    tracing::info!("Copy URL: {}", current_path);
-                    win.set_status_message(format!("Copied: {}", current_path).into());
-                    // TODO: Actually copy to clipboard using copypasta crate
+                    // Get selected file keys
+                    let selected_keys: Vec<String> = state_ref.selected_indices
+                        .iter()
+                        .filter_map(|&idx| state_ref.all_objects.get(idx))
+                        .map(|obj| format!("s3://{}/{}", bucket, obj.key))
+                        .collect();
+
+                    if selected_keys.is_empty() {
+                        win.set_status_message("No files selected".into());
+                        return;
+                    }
+
+                    let urls = selected_keys.join("\n");
+
+                    // Copy to clipboard
+                    match ClipboardContext::new() {
+                        Ok(mut ctx) => {
+                            if ctx.set_contents(urls.clone()).is_ok() {
+                                let msg = if selected_keys.len() == 1 {
+                                    format!("Copied: {}", selected_keys[0])
+                                } else {
+                                    format!("Copied {} URLs to clipboard", selected_keys.len())
+                                };
+                                win.set_status_message(msg.into());
+                            } else {
+                                win.set_status_message("Failed to copy to clipboard".into());
+                            }
+                        }
+                        Err(_) => {
+                            // Clipboard not available (common in headless/WSL)
+                            win.set_status_message(format!("URL: {}", urls).into());
+                        }
+                    }
                 }
             }
         });
 
-        // Set up download callback (placeholder)
+        // Set up download callback
+        let state_clone = state.clone();
         let window_weak = window.as_weak();
         file_list.on_download_clicked(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
             if let Some(win) = window_weak.upgrade() {
-                win.set_status_message("Download: Select a file first".into());
-                // TODO: Implement actual download
+                let state_ref = state.borrow();
+                if state_ref.selected_indices.is_empty() {
+                    win.set_status_message("No files selected".into());
+                    return;
+                }
+
+                let bucket = match &state_ref.current_bucket {
+                    Some(b) => b.clone(),
+                    None => {
+                        win.set_status_message("No bucket selected".into());
+                        return;
+                    }
+                };
+
+                // Get selected file keys (excluding folders)
+                let files_to_download: Vec<(String, String)> = state_ref.selected_indices
+                    .iter()
+                    .filter_map(|&idx| state_ref.all_objects.get(idx))
+                    .filter(|obj| !obj.is_folder)
+                    .map(|obj| (obj.key.clone(), obj.display_name().to_string()))
+                    .collect();
+
+                if files_to_download.is_empty() {
+                    win.set_status_message("No files selected (only folders)".into());
+                    return;
+                }
+
+                drop(state_ref);
+
+                let count = files_to_download.len();
+                win.set_status_message(format!("Downloading {} file(s)...", count).into());
+                win.set_is_loading(true);
+
+                let state = state.clone();
+                let window_weak = window_weak.clone();
+                slint::spawn_local(async move {
+                    Self::download_files(state, window_weak, &bucket, files_to_download).await;
+                }).unwrap();
             }
         });
 
-        // Set up delete callback (placeholder)
+        // Set up upload callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_upload_clicked(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            if let Some(win) = window_weak.upgrade() {
+                let state_ref = state.borrow();
+                let bucket = match &state_ref.current_bucket {
+                    Some(b) => b.clone(),
+                    None => {
+                        win.set_status_message("Select a bucket first".into());
+                        return;
+                    }
+                };
+                let prefix = state_ref.current_prefix.clone();
+                drop(state_ref);
+
+                // Use native file dialog
+                let state = state.clone();
+                let window_weak = window_weak.clone();
+                slint::spawn_local(async move {
+                    Self::upload_file_dialog(state, window_weak, &bucket, &prefix).await;
+                }).unwrap();
+            }
+        });
+
+        // Set up delete callback
+        let state_clone = state.clone();
         let window_weak = window.as_weak();
         file_list.on_delete_clicked(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
             if let Some(win) = window_weak.upgrade() {
-                win.set_status_message("Delete: Select a file first".into());
-                // TODO: Implement actual delete with confirmation
+                let state_ref = state.borrow();
+                if state_ref.selected_indices.is_empty() {
+                    win.set_status_message("No files selected".into());
+                    return;
+                }
+
+                let bucket = match &state_ref.current_bucket {
+                    Some(b) => b.clone(),
+                    None => {
+                        win.set_status_message("No bucket selected".into());
+                        return;
+                    }
+                };
+
+                // Get selected file keys
+                let keys_to_delete: Vec<String> = state_ref.selected_indices
+                    .iter()
+                    .filter_map(|&idx| state_ref.all_objects.get(idx))
+                    .filter(|obj| !obj.is_folder)  // Don't delete folders directly
+                    .map(|obj| obj.key.clone())
+                    .collect();
+
+                if keys_to_delete.is_empty() {
+                    win.set_status_message("No files selected (only folders)".into());
+                    return;
+                }
+
+                let prefix = state_ref.current_prefix.clone();
+                drop(state_ref);
+
+                // TODO: Add confirmation dialog before delete
+                // For now, proceed directly (PRD says confirmation needed)
+                let count = keys_to_delete.len();
+                win.set_status_message(format!("Deleting {} file(s)...", count).into());
+                win.set_is_loading(true);
+
+                let state = state.clone();
+                let window_weak = window_weak.clone();
+                slint::spawn_local(async move {
+                    Self::delete_files(state, window_weak, &bucket, &prefix, keys_to_delete).await;
+                }).unwrap();
+            }
+        });
+
+        // Set up rename callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        file_list.on_rename_clicked(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let state_ref = state_clone.borrow();
+                if state_ref.selected_indices.len() != 1 {
+                    win.set_status_message("Select exactly one file to rename".into());
+                    return;
+                }
+
+                // Get selected file
+                let idx = *state_ref.selected_indices.iter().next().unwrap();
+                if let Some(obj) = state_ref.all_objects.get(idx) {
+                    if obj.is_folder {
+                        win.set_status_message("Cannot rename folders".into());
+                        return;
+                    }
+                    // TODO: Show rename dialog and implement rename
+                    // For now, show message that rename is selected
+                    win.set_status_message(format!("Rename: {} (dialog not yet implemented)", obj.display_name()).into());
+                }
             }
         });
 
@@ -305,6 +474,298 @@ impl App {
         })
     }
 
+    /// Handle file selection (single or multi-select)
+    fn handle_file_selection(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        index: usize,
+        ctrl_held: bool,
+    ) {
+        if let Some(win) = window_weak.upgrade() {
+            let file_list = win.global::<FileList>();
+            let mut state_ref = state.borrow_mut();
+
+            if ctrl_held {
+                // Toggle selection for this item
+                if state_ref.selected_indices.contains(&index) {
+                    state_ref.selected_indices.remove(&index);
+                } else {
+                    state_ref.selected_indices.insert(index);
+                }
+            } else {
+                // Clear selection and select only this item
+                state_ref.selected_indices.clear();
+                state_ref.selected_indices.insert(index);
+            }
+
+            let selected_count = state_ref.selected_indices.len();
+            let selected_indices = state_ref.selected_indices.clone();
+            drop(state_ref);
+
+            // Update UI to reflect selection
+            Self::update_file_selection_ui(&file_list, &selected_indices);
+            file_list.set_selection_count(selected_count as i32);
+
+            tracing::debug!("Selection: {} items", selected_count);
+        }
+    }
+
+    /// Update the file list UI to show selected items
+    fn update_file_selection_ui(file_list: &FileList, selected_indices: &HashSet<usize>) {
+        let files = file_list.get_files();
+        let count = files.row_count();
+
+        for i in 0..count {
+            if let Some(mut file) = files.row_data(i) {
+                let should_be_selected = selected_indices.contains(&i);
+                if file.is_selected != should_be_selected {
+                    file.is_selected = should_be_selected;
+                    files.set_row_data(i, file);
+                }
+            }
+        }
+    }
+
+    /// Download files to the Downloads folder
+    async fn download_files(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        files: Vec<(String, String)>,  // (key, display_name)
+    ) {
+        // Get Downloads directory
+        let downloads_dir = dirs::download_dir().unwrap_or_else(|| PathBuf::from("."));
+
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        let mut success_count = 0;
+        let mut last_downloaded_path = None;
+
+        for (key, display_name) in &files {
+            match client.get_object(bucket, key).await {
+                Ok(data) => {
+                    let file_path = downloads_dir.join(display_name);
+                    match std::fs::write(&file_path, data) {
+                        Ok(_) => {
+                            success_count += 1;
+                            last_downloaded_path = Some(file_path);
+                            tracing::info!("Downloaded: {}", display_name);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to write {}: {}", display_name, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to download {}: {}", key, e);
+                }
+            }
+        }
+
+        if let Some(win) = window_weak.upgrade() {
+            win.set_is_loading(false);
+
+            let msg = if success_count == files.len() {
+                if let Some(path) = last_downloaded_path {
+                    format!("Downloaded {} file(s) to {}", success_count, path.parent().unwrap_or(&downloads_dir).display())
+                } else {
+                    format!("Downloaded {} file(s)", success_count)
+                }
+            } else {
+                format!("Downloaded {}/{} file(s)", success_count, files.len())
+            };
+
+            win.set_status_message(msg.into());
+
+            // Show toast notification
+            let file_list = win.global::<FileList>();
+            file_list.set_toast_message(format!("Downloaded to {}", downloads_dir.display()).into());
+            file_list.set_show_toast(true);
+
+            // Hide toast after a delay
+            let window_weak2 = window_weak.clone();
+            slint::spawn_local(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                if let Some(win) = window_weak2.upgrade() {
+                    let file_list = win.global::<FileList>();
+                    file_list.set_show_toast(false);
+                }
+            }).unwrap();
+        }
+    }
+
+    /// Open file dialog and upload selected file
+    async fn upload_file_dialog(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        prefix: &str,
+    ) {
+        // Use rfd for native file dialog
+        let file_result = rfd::AsyncFileDialog::new()
+            .set_title("Select file to upload")
+            .pick_file()
+            .await;
+
+        let file_handle = match file_result {
+            Some(f) => f,
+            None => {
+                // User cancelled
+                return;
+            }
+        };
+
+        let file_path = file_handle.path().to_path_buf();
+        let file_name = file_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+
+        if let Some(win) = window_weak.upgrade() {
+            win.set_status_message(format!("Uploading {}...", file_name).into());
+            win.set_is_loading(true);
+        }
+
+        // Read file contents
+        let data = match tokio::fs::read(&file_path).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to read file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Upload to S3
+        let key = if prefix.is_empty() {
+            file_name.clone()
+        } else {
+            format!("{}{}", prefix, file_name)
+        };
+
+        let bucket_owned = bucket.to_string();
+        let prefix_owned = prefix.to_string();
+
+        match client.put_object(&bucket_owned, &key, data).await {
+            Ok(_) => {
+                tracing::info!("Uploaded: {}", key);
+                // Refresh the file list
+                Self::load_bucket_contents(state, window_weak.clone(), &bucket_owned, &prefix_owned).await;
+
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_status_message(format!("Uploaded: {}", file_name).into());
+                }
+            }
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Upload failed: {}", e).into());
+                }
+            }
+        }
+    }
+
+    /// Delete selected files
+    async fn delete_files(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        prefix: &str,
+        keys: Vec<String>,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+        let bucket_owned = bucket.to_string();
+        let prefix_owned = prefix.to_string();
+
+        match client.delete_objects(&bucket_owned, &key_refs).await {
+            Ok(failed) => {
+                let success_count = keys.len() - failed.len();
+                tracing::info!("Deleted {} files", success_count);
+
+                // Clear selection
+                {
+                    let mut state_ref = state.borrow_mut();
+                    state_ref.selected_indices.clear();
+                }
+
+                // Refresh the file list
+                Self::load_bucket_contents(state, window_weak.clone(), &bucket_owned, &prefix_owned).await;
+
+                if let Some(win) = window_weak.upgrade() {
+                    let msg = if failed.is_empty() {
+                        format!("Deleted {} file(s)", keys.len())
+                    } else {
+                        format!("Deleted {}/{} file(s)", success_count, keys.len())
+                    };
+                    win.set_status_message(msg.into());
+                }
+            }
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Delete failed: {}", e).into());
+                }
+            }
+        }
+    }
+
     /// Load profile and fetch buckets
     async fn load_profile_and_buckets(
         state: Rc<RefCell<AppState>>,
@@ -341,6 +802,7 @@ impl App {
                             state_ref.current_profile = Some(profile_name.to_string());
                             state_ref.current_bucket = None;
                             state_ref.current_prefix = String::new();
+                            state_ref.selected_indices.clear();
                         }
 
                         // Update UI
@@ -354,6 +816,7 @@ impl App {
                             let file_list = win.global::<FileList>();
                             file_list.set_files(ModelRc::from(Rc::new(VecModel::<FileItem>::default())));
                             file_list.set_current_path("".into());
+                            file_list.set_selection_count(0);
 
                             win.set_is_loading(false);
                             win.set_status_message(format!("Loaded {} buckets", bucket_count).into());
@@ -435,6 +898,7 @@ impl App {
                     state_ref.current_prefix = prefix.to_string();
                     state_ref.continuation_token = result.next_token;
                     state_ref.all_objects = result.objects;
+                    state_ref.selected_indices.clear();
                 }
 
                 // Update UI
@@ -442,6 +906,7 @@ impl App {
                     let file_list = win.global::<FileList>();
                     let file_model = Rc::new(VecModel::from(file_items));
                     file_list.set_files(ModelRc::from(file_model));
+                    file_list.set_selection_count(0);
 
                     let path = if prefix.is_empty() {
                         format!("s3://{}/", bucket)
