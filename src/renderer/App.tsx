@@ -18,6 +18,27 @@ import { useFileOperations } from './hooks/useFileOperations';
 
 function App(): React.ReactElement {
   const { currentProfile, profileRestored } = useAwsProfiles();
+  const { toasts, addToast, removeToast } = useToasts();
+
+  // Callback for when download completes - shows toast with action to reveal file
+  const handleDownloadComplete = useCallback(
+    ({ fileName, localPath }: { fileName: string; localPath: string }) => {
+      addToast({
+        type: 'success',
+        title: 'Download Complete',
+        message: fileName,
+        duration: 8000, // Longer duration for user to click the action
+        action: {
+          label: 'Show in folder',
+          onClick: () => {
+            window.electronAPI.s3.showFileInFolder(localPath);
+          },
+        },
+      });
+    },
+    [addToast]
+  );
+
   const {
     operations,
     isLoading,
@@ -26,8 +47,7 @@ function App(): React.ReactElement {
     deleteFile,
     renameFile,
     dismissOperation,
-  } = useFileOperations();
-  const { toasts, addToast, removeToast } = useToasts();
+  } = useFileOperations({ onDownloadComplete: handleDownloadComplete });
 
   // Navigation state
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);

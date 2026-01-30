@@ -116,6 +116,42 @@ describe('ToastContainer', () => {
     expect(container.querySelector('.toast-icon-success')).toBeInTheDocument();
     expect(container.querySelector('.toast-icon-error')).toBeInTheDocument();
   });
+
+  it('renders action button when action is provided', () => {
+    const mockAction = vi.fn();
+    const toast = createTestToast({
+      action: { label: 'Show in folder', onClick: mockAction },
+    });
+
+    render(<ToastContainer toasts={[toast]} onDismiss={mockOnDismiss} />);
+
+    const actionButton = screen.getByRole('button', { name: /show in folder/i });
+    expect(actionButton).toBeInTheDocument();
+  });
+
+  it('calls action onClick when action button clicked', () => {
+    const mockAction = vi.fn();
+    const toast = createTestToast({
+      action: { label: 'Show in folder', onClick: mockAction },
+    });
+
+    render(<ToastContainer toasts={[toast]} onDismiss={mockOnDismiss} />);
+
+    const actionButton = screen.getByRole('button', { name: /show in folder/i });
+    fireEvent.click(actionButton);
+
+    expect(mockAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render action button when action is not provided', () => {
+    const toast = createTestToast(); // No action
+
+    render(<ToastContainer toasts={[toast]} onDismiss={mockOnDismiss} />);
+
+    expect(screen.queryByRole('button', { name: /show in folder/i })).not.toBeInTheDocument();
+    // Should still have dismiss button
+    expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+  });
 });
 
 describe('useToasts hook', () => {
