@@ -7,10 +7,35 @@ import { mockElectronAPI } from './setup';
 vi.mock('hyparquet', () => ({
   parquetMetadataAsync: vi.fn(),
   parquetRead: vi.fn(),
+  parquetSchema: vi.fn(),
 }));
 
 // Import the mocked functions
-import { parquetMetadataAsync, parquetRead } from 'hyparquet';
+import { parquetMetadataAsync, parquetRead, parquetSchema } from 'hyparquet';
+
+// Helper to create schema tree structure that parquetSchema returns
+function createSchemaTree(columns: string[]) {
+  return {
+    element: { name: 'root' },
+    children: columns.map(name => ({ element: { name } })),
+  };
+}
+
+// Helper to convert column-oriented data to row objects (as parquetRead with rowFormat:'object' returns)
+function columnDataToRows(columnData: Record<string, unknown[]>): Record<string, unknown>[] {
+  const columns = Object.keys(columnData);
+  if (columns.length === 0) return [];
+  const numRows = columnData[columns[0]]?.length || 0;
+  const rows: Record<string, unknown>[] = [];
+  for (let i = 0; i < numRows; i++) {
+    const row: Record<string, unknown> = {};
+    for (const col of columns) {
+      row[col] = columnData[col]?.[i];
+    }
+    rows.push(row);
+  }
+  return rows;
+}
 
 describe('ParquetViewer', () => {
   const defaultProps = {
@@ -46,12 +71,16 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col1' }, { name: 'col2' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col1', 'col2'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             col1: ['a', 'b', 'c'],
             col2: [1, 2, 3],
-          });
+          }));
         }
       );
 
@@ -93,9 +122,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree([])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({});
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete([]);
         }
       );
 
@@ -169,9 +202,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col1' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col1'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({ col1: ['a', 'b'] });
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({ col1: ['a', 'b'] }));
         }
       );
     });
@@ -222,12 +259,16 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'name' }, { name: 'age' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['name', 'age'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             name: ['Alice', 'Bob'],
             age: [30, 25],
-          });
+          }));
         }
       );
 
@@ -249,11 +290,15 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'value' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['value'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             value: ['test1', 'test2'],
-          });
+          }));
         }
       );
 
@@ -275,11 +320,15 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             col: ['a', 'b', 'c'],
-          });
+          }));
         }
       );
 
@@ -294,7 +343,7 @@ describe('ParquetViewer', () => {
   });
 
   describe('data type handling', () => {
-    it('formats null values as empty string', async () => {
+    it('formats null values as "null"', async () => {
       mockElectronAPI.s3.downloadBinaryContent.mockResolvedValue({
         success: true,
         data: new Uint8Array([]),
@@ -304,20 +353,26 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             col: [null, undefined],
-          });
+          }));
         }
       );
 
       render(<ParquetViewer {...defaultProps} />);
 
       await waitFor(() => {
-        // Table should be rendered with empty cells for null/undefined
+        // Table should be rendered with "null" for null values
         const table = screen.getByRole('table');
         expect(table).toBeInTheDocument();
+        // null is now shown as "null" text
+        expect(screen.getByText('null')).toBeInTheDocument();
       });
     });
 
@@ -331,11 +386,15 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             col: [{ key: 'value' }],
-          });
+          }));
         }
       );
 
@@ -356,11 +415,15 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             col: [BigInt('9007199254740993')],
-          });
+          }));
         }
       );
 
@@ -383,11 +446,15 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'name' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['name'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({
             name: ['Alice', 'Bob', 'Charlie'],
-          });
+          }));
         }
       );
     });
@@ -462,9 +529,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree([])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({});
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete([]);
         }
       );
 
@@ -485,9 +556,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree([])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({});
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete([]);
         }
       );
 
@@ -514,12 +589,16 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'id' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['id'])
+      );
+
       // Create 150 rows to exceed initial load of 100
       const ids = Array.from({ length: 150 }, (_, i) => i + 1);
 
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({ id: ids });
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({ id: ids }));
         }
       );
 
@@ -541,9 +620,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'col' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['col'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({ col: ['a', 'b', 'c'] });
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({ col: ['a', 'b', 'c'] }));
         }
       );
 
@@ -586,9 +669,13 @@ describe('ParquetViewer', () => {
         schema: [{ name: 'root' }, { name: 'id' }],
       });
 
+      (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(
+        createSchemaTree(['id'])
+      );
+
       (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
-        async ({ onComplete }: { onComplete: (data: Record<string, unknown[]>) => void }) => {
-          onComplete({ id: [1, 2] });
+        async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+          onComplete(columnDataToRows({ id: [1, 2] }));
         }
       );
 

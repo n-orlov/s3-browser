@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { parquetMetadataAsync, parquetRead } from 'hyparquet';
+import { parquetMetadataAsync, parquetRead, parquetSchema } from 'hyparquet';
 
 export interface ParquetViewerProps {
   bucket: string;
@@ -37,10 +37,30 @@ const ROWS_PER_BATCH = 100;
 
 /**
  * Format a value for display in the table
+ * Shows null explicitly for better visibility, JSONifies complex types
  */
 function formatCellValue(value: unknown): string {
-  if (value === null || value === undefined) {
+  if (value === null) {
+    return 'null';
+  }
+  if (value === undefined) {
     return '';
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0]; // Show just the date part
+  }
+  if (Array.isArray(value)) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[Array]';
+    }
   }
   if (typeof value === 'object') {
     try {
@@ -48,9 +68,6 @@ function formatCellValue(value: unknown): string {
     } catch {
       return '[Object]';
     }
-  }
-  if (typeof value === 'bigint') {
-    return value.toString();
   }
   return String(value);
 }
@@ -134,52 +151,40 @@ function ParquetViewer({
         const uint8Data = new Uint8Array(arrayBuffer);
         uint8Data.set(result.data);
 
-        // Get metadata first to understand schema
-        // IMPORTANT: hyparquet's slice callback expects ArrayBuffer, not Uint8Array
-        // Using Uint8Array.slice() returns a Uint8Array which causes DataView errors
-        const metadata = await parquetMetadataAsync({
-          byteLength: arrayBuffer.byteLength,
-          slice: (start: number, end?: number) => {
-            // Return ArrayBuffer slice, not Uint8Array slice
-            return Promise.resolve(arrayBuffer.slice(start, end));
-          },
-        });
-
-        // Extract column names from schema
-        const columnNames: string[] = [];
-        if (metadata.schema && metadata.schema.length > 1) {
-          // First element is root, rest are columns
-          for (let i = 1; i < metadata.schema.length; i++) {
-            const col = metadata.schema[i];
-            if (col.name) {
-              columnNames.push(col.name);
-            }
-          }
-        }
-
-        // Read all data from parquet file
         // Create an AsyncBuffer wrapper for hyparquet
         // hyparquet expects an object with byteLength and slice that returns Promise<ArrayBuffer>
+        // IMPORTANT: hyparquet's slice callback expects ArrayBuffer, not Uint8Array
+        // Using Uint8Array.slice() returns a Uint8Array which causes DataView errors
         const asyncBuffer = {
           byteLength: arrayBuffer.byteLength,
           slice: (start: number, end?: number) => Promise.resolve(arrayBuffer.slice(start, end)),
         };
 
-        const rows: unknown[][] = [];
+        // Get metadata to understand schema structure
+        const metadata = await parquetMetadataAsync(asyncBuffer);
+
+        // Get top-level column names from the schema tree
+        // parquetSchema returns a tree structure where children are the top-level columns
+        // This correctly handles nested types (arrays, structs) by returning only the parent column names
+        const schemaTree = parquetSchema(metadata);
+        const columnNames = schemaTree.children.map(c => c.element.name);
+
+        // Read all data from parquet file using rowFormat: 'object'
+        // This returns an array of row objects with column names as keys
+        // which correctly handles nested/complex types (arrays, structs)
+        const rowObjects: Record<string, unknown>[] = [];
         await parquetRead({
           file: asyncBuffer,
-          onComplete: (readData: Record<string, unknown[]>) => {
-            // Convert column-oriented data to row-oriented
-            const numRows = Object.values(readData)[0]?.length || 0;
-            for (let i = 0; i < numRows; i++) {
-              const row: unknown[] = [];
-              for (const colName of columnNames) {
-                row.push(readData[colName]?.[i]);
-              }
-              rows.push(row);
-            }
+          rowFormat: 'object',
+          onComplete: (data: Record<string, unknown>[]) => {
+            rowObjects.push(...data);
           },
         });
+
+        // Convert row objects to row arrays using schema column order
+        const rows: unknown[][] = rowObjects.map(rowObj =>
+          columnNames.map(colName => rowObj[colName])
+        );
 
         if (!mounted) return;
 
