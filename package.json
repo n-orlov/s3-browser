@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "EST-5962",
