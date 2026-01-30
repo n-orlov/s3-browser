@@ -1,3 +1,6 @@
+// Windows: Hide console window when running as GUI application
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! S3 Browser Desktop Application
 //!
 //! A lightweight, cross-platform desktop application for viewing and managing
