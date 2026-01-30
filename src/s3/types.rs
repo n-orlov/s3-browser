@@ -119,6 +119,8 @@ impl S3Url {
 mod tests {
     use super::*;
 
+    // S3Url parsing tests
+
     #[test]
     fn test_s3_url_parse_s3_scheme() {
         let url = S3Url::parse("s3://my-bucket/path/to/file.txt").unwrap();
@@ -134,10 +136,53 @@ mod tests {
     }
 
     #[test]
+    fn test_s3_url_parse_s3_with_trailing_slash() {
+        let url = S3Url::parse("s3://my-bucket/").unwrap();
+        assert_eq!(url.bucket, "my-bucket");
+        assert_eq!(url.key, "");
+    }
+
+    #[test]
+    fn test_s3_url_parse_s3_deep_path() {
+        let url = S3Url::parse("s3://bucket/a/b/c/d/e/f.txt").unwrap();
+        assert_eq!(url.bucket, "bucket");
+        assert_eq!(url.key, "a/b/c/d/e/f.txt");
+    }
+
+    #[test]
     fn test_s3_url_parse_https_virtual_hosted() {
         let url = S3Url::parse("https://my-bucket.s3.eu-west-1.amazonaws.com/path/to/file.txt").unwrap();
         assert_eq!(url.bucket, "my-bucket");
         assert_eq!(url.key, "path/to/file.txt");
+    }
+
+    #[test]
+    fn test_s3_url_parse_https_virtual_hosted_us_east_1() {
+        let url = S3Url::parse("https://my-bucket.s3.us-east-1.amazonaws.com/file.txt").unwrap();
+        assert_eq!(url.bucket, "my-bucket");
+        assert_eq!(url.key, "file.txt");
+    }
+
+    #[test]
+    fn test_s3_url_parse_https_path_style() {
+        let url = S3Url::parse("https://s3.eu-west-1.amazonaws.com/my-bucket/path/to/file.txt").unwrap();
+        assert_eq!(url.bucket, "my-bucket");
+        assert_eq!(url.key, "path/to/file.txt");
+    }
+
+    #[test]
+    fn test_s3_url_parse_http() {
+        let url = S3Url::parse("http://my-bucket.s3.us-east-1.amazonaws.com/file.txt").unwrap();
+        assert_eq!(url.bucket, "my-bucket");
+        assert_eq!(url.key, "file.txt");
+    }
+
+    #[test]
+    fn test_s3_url_parse_invalid() {
+        assert!(S3Url::parse("https://example.com/file.txt").is_none());
+        assert!(S3Url::parse("ftp://bucket/key").is_none());
+        assert!(S3Url::parse("not-a-url").is_none());
+        assert!(S3Url::parse("").is_none());
     }
 
     #[test]
@@ -148,6 +193,17 @@ mod tests {
         };
         assert_eq!(url.to_s3_url(), "s3://test-bucket/folder/file.txt");
     }
+
+    #[test]
+    fn test_s3_url_to_s3_url_bucket_only() {
+        let url = S3Url {
+            bucket: "test-bucket".to_string(),
+            key: String::new(),
+        };
+        assert_eq!(url.to_s3_url(), "s3://test-bucket");
+    }
+
+    // S3Object tests
 
     #[test]
     fn test_s3_object_display_name() {
@@ -163,6 +219,32 @@ mod tests {
     }
 
     #[test]
+    fn test_s3_object_display_name_root() {
+        let obj = S3Object {
+            key: "myfile.txt".to_string(),
+            size: 1024,
+            last_modified: None,
+            is_folder: false,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.display_name(), "myfile.txt");
+    }
+
+    #[test]
+    fn test_s3_object_display_name_folder() {
+        let obj = S3Object {
+            key: "path/to/folder/".to_string(),
+            size: 0,
+            last_modified: None,
+            is_folder: true,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.display_name(), "folder");
+    }
+
+    #[test]
     fn test_s3_object_size_string() {
         let obj = S3Object {
             key: "file.txt".to_string(),
@@ -173,5 +255,94 @@ mod tests {
             storage_class: None,
         };
         assert_eq!(obj.size_string(), "1.50 KB");
+    }
+
+    #[test]
+    fn test_s3_object_size_string_bytes() {
+        let obj = S3Object {
+            key: "file.txt".to_string(),
+            size: 100,
+            last_modified: None,
+            is_folder: false,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.size_string(), "100 B");
+    }
+
+    #[test]
+    fn test_s3_object_size_string_mb() {
+        let obj = S3Object {
+            key: "file.txt".to_string(),
+            size: 5 * 1024 * 1024,
+            last_modified: None,
+            is_folder: false,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.size_string(), "5.00 MB");
+    }
+
+    #[test]
+    fn test_s3_object_size_string_gb() {
+        let obj = S3Object {
+            key: "file.txt".to_string(),
+            size: 2 * 1024 * 1024 * 1024,
+            last_modified: None,
+            is_folder: false,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.size_string(), "2.00 GB");
+    }
+
+    #[test]
+    fn test_s3_object_size_string_tb() {
+        let obj = S3Object {
+            key: "file.txt".to_string(),
+            size: 3 * 1024 * 1024 * 1024 * 1024,
+            last_modified: None,
+            is_folder: false,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.size_string(), "3.00 TB");
+    }
+
+    #[test]
+    fn test_s3_object_size_string_folder() {
+        let obj = S3Object {
+            key: "folder/".to_string(),
+            size: 0,
+            last_modified: None,
+            is_folder: true,
+            etag: None,
+            storage_class: None,
+        };
+        assert_eq!(obj.size_string(), "-");
+    }
+
+    // Bucket tests
+
+    #[test]
+    fn test_bucket_default() {
+        let bucket = Bucket {
+            name: "test-bucket".to_string(),
+            creation_date: None,
+            region: None,
+        };
+        assert_eq!(bucket.name, "test-bucket");
+        assert!(bucket.creation_date.is_none());
+        assert!(bucket.region.is_none());
+    }
+
+    #[test]
+    fn test_bucket_with_region() {
+        let bucket = Bucket {
+            name: "test-bucket".to_string(),
+            creation_date: None,
+            region: Some("eu-west-1".to_string()),
+        };
+        assert_eq!(bucket.region, Some("eu-west-1".to_string()));
     }
 }

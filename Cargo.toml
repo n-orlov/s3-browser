@@ -65,6 +65,10 @@ opt-level = 3
 lto = true
 strip = true
 
+[lib]
+name = "s3_browser"
+path = "src/lib.rs"
+
 [[bin]]
 name = "s3-browser"
 path = "src/main.rs"
