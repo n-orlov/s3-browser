@@ -11,7 +11,7 @@ export struct FileItem {
     is-selected: bool,
 }
 
-export component FileList inherits VerticalBox {
+export component FileListComponent inherits VerticalBox {
     // Properties
     in-out property <[FileItem]> files: [];
     in-out property <string> prefix-filter: "";
