@@ -7,12 +7,13 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell};
+use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
 use crate::settings::Settings;
 use crate::viewers::parquet::ParquetViewer as ParquetViewerLogic;
+use crate::viewers::csv::CsvViewer as CsvViewerLogic;
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -31,6 +32,10 @@ struct AppState {
     parquet_data: Option<Vec<u8>>,
     /// Current parquet file name
     parquet_file_name: Option<String>,
+    /// Current CSV file data for lazy loading
+    csv_data: Option<Vec<u8>>,
+    /// Current CSV file name
+    csv_file_name: Option<String>,
 }
 
 /// Main application state
@@ -74,6 +79,8 @@ impl App {
             settings,
             parquet_data: None,
             parquet_file_name: None,
+            csv_data: None,
+            csv_file_name: None,
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -183,11 +190,12 @@ impl App {
                             }).unwrap();
                         }
                     } else {
-                        // Check if it's a parquet file
+                        // Check file type and open appropriate viewer
                         let file_name = file.name.to_string();
                         let file_key = file.key.to_string();
+                        let file_name_lower = file_name.to_lowercase();
 
-                        if file_name.ends_with(".parquet") || file_name.ends_with(".pq") {
+                        if file_name_lower.ends_with(".parquet") || file_name_lower.ends_with(".pq") {
                             tracing::info!("Opening parquet file: {}", file_key);
 
                             let state_ref = state.borrow();
@@ -202,6 +210,23 @@ impl App {
                                 let window_weak = window_weak.clone();
                                 slint::spawn_local(async move {
                                     Self::open_parquet_file(state, window_weak, &bucket, &file_key, &file_name).await;
+                                }).unwrap();
+                            }
+                        } else if file_name_lower.ends_with(".csv") || file_name_lower.ends_with(".tsv") {
+                            tracing::info!("Opening CSV file: {}", file_key);
+
+                            let state_ref = state.borrow();
+                            if let Some(bucket) = &state_ref.current_bucket {
+                                let bucket = bucket.clone();
+                                drop(state_ref);
+
+                                win.set_status_message(format!("Loading CSV file: {}...", file_name).into());
+                                win.set_is_loading(true);
+
+                                let state = state.clone();
+                                let window_weak = window_weak.clone();
+                                slint::spawn_local(async move {
+                                    Self::open_csv_file(state, window_weak, &bucket, &file_key, &file_name).await;
                                 }).unwrap();
                             }
                         } else {
@@ -536,6 +561,40 @@ impl App {
 
                 slint::spawn_local(async move {
                     Self::load_more_parquet_rows(state, window_weak).await;
+                }).unwrap();
+            }
+        });
+
+        // Set up CSV Viewer callbacks
+        let csv_viewer = window.global::<CsvViewer>();
+
+        // Close callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        csv_viewer.on_close_requested(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let csv_viewer = win.global::<CsvViewer>();
+                csv_viewer.set_dialog_visible(false);
+
+                // Clear CSV data from state
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.csv_data = None;
+                state_ref.csv_file_name = None;
+            }
+        });
+
+        // Load more callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        csv_viewer.on_load_more_requested(move || {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            if let Some(win) = window_weak.upgrade() {
+                let csv_viewer = win.global::<CsvViewer>();
+                csv_viewer.set_is_loading(true);
+
+                slint::spawn_local(async move {
+                    Self::load_more_csv_rows(state, window_weak).await;
                 }).unwrap();
             }
         });
@@ -1351,6 +1410,194 @@ impl App {
                 "Loaded {} rows (total: {}) for {}",
                 parquet_data.loaded_rows,
                 parquet_data.total_rows,
+                file_name.unwrap_or_default()
+            );
+        }
+    }
+
+    /// Open a CSV file in the viewer
+    async fn open_csv_file(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        key: &str,
+        file_name: &str,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Download the CSV file
+        let data = match client.get_object(bucket, key).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to download CSV file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Parse the CSV file with auto-detected delimiter
+        let viewer = CsvViewerLogic::new();
+        let csv_data = match viewer.read_bytes_auto(&data) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to parse CSV file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Store the raw data for load-more functionality
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.csv_data = Some(data);
+            state_ref.csv_file_name = Some(file_name.to_string());
+        }
+
+        // Convert to UI model
+        let columns: Vec<CsvColumn> = csv_data.columns
+            .iter()
+            .map(|c| {
+                // Calculate column width based on name length (min 80px, max 200px)
+                let width = (c.name.len() as f32 * 10.0).max(80.0).min(200.0);
+                CsvColumn {
+                    name: c.name.clone().into(),
+                    width,
+                }
+            })
+            .collect();
+
+        let rows: Vec<CsvRow> = csv_data.rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<CsvCell> = row
+                    .iter()
+                    .map(|v| CsvCell { value: v.clone().into() })
+                    .collect();
+                CsvRow {
+                    cells: ModelRc::from(Rc::new(VecModel::from(cells))),
+                }
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let csv_viewer = win.global::<CsvViewer>();
+
+            csv_viewer.set_file_name(file_name.into());
+            csv_viewer.set_columns(ModelRc::from(Rc::new(VecModel::from(columns))));
+            csv_viewer.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+            csv_viewer.set_total_rows(csv_data.total_rows as i32);
+            csv_viewer.set_loaded_rows(csv_data.loaded_rows as i32);
+            csv_viewer.set_has_more(csv_data.has_more);
+            csv_viewer.set_is_loading(false);
+            csv_viewer.set_dialog_visible(true);
+
+            win.set_is_loading(false);
+            let row_info = if csv_data.has_more {
+                format!("{}+", csv_data.total_rows)
+            } else {
+                csv_data.total_rows.to_string()
+            };
+            win.set_status_message(format!("Opened: {} ({} rows)", file_name, row_info).into());
+        }
+    }
+
+    /// Load more rows from the current CSV file
+    async fn load_more_csv_rows(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+    ) {
+        // Get stored CSV data and current loaded count
+        let (data, current_loaded, file_name) = {
+            let state_ref = state.borrow();
+            let data = state_ref.csv_data.clone();
+            let file_name = state_ref.csv_file_name.clone();
+
+            if let Some(win) = window_weak.upgrade() {
+                let csv_viewer = win.global::<CsvViewer>();
+                (data, csv_viewer.get_loaded_rows() as usize, file_name)
+            } else {
+                return;
+            }
+        };
+
+        let data = match data {
+            Some(d) => d,
+            None => {
+                if let Some(win) = window_weak.upgrade() {
+                    let csv_viewer = win.global::<CsvViewer>();
+                    csv_viewer.set_is_loading(false);
+                }
+                return;
+            }
+        };
+
+        // Parse more rows
+        let viewer = CsvViewerLogic::new();
+        let new_limit = current_loaded + 1000; // Load 1000 more rows
+
+        let csv_data = match viewer.read_bytes_auto_with_limit(&data, new_limit) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::error!("Failed to load more CSV rows: {}", e);
+                if let Some(win) = window_weak.upgrade() {
+                    let csv_viewer = win.global::<CsvViewer>();
+                    csv_viewer.set_is_loading(false);
+                }
+                return;
+            }
+        };
+
+        // Convert rows to UI model
+        let rows: Vec<CsvRow> = csv_data.rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<CsvCell> = row
+                    .iter()
+                    .map(|v| CsvCell { value: v.clone().into() })
+                    .collect();
+                CsvRow {
+                    cells: ModelRc::from(Rc::new(VecModel::from(cells))),
+                }
+            })
+            .collect();
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let csv_viewer = win.global::<CsvViewer>();
+
+            csv_viewer.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+            csv_viewer.set_loaded_rows(csv_data.loaded_rows as i32);
+            csv_viewer.set_total_rows(csv_data.total_rows as i32);
+            csv_viewer.set_has_more(csv_data.has_more);
+            csv_viewer.set_is_loading(false);
+
+            tracing::info!(
+                "Loaded {} rows (total: {}{}) for {}",
+                csv_data.loaded_rows,
+                csv_data.total_rows,
+                if csv_data.has_more { "+" } else { "" },
                 file_name.unwrap_or_default()
             );
         }
