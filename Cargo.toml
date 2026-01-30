@@ -82,3 +82,14 @@ path = "src/lib.rs"
 [[bin]]
 name = "s3-browser"
 path = "src/main.rs"
+
+# Coverage configuration
+# Run: cargo llvm-cov --ignore-filename-regex "(main\.rs|app\.rs|text\.rs)"
+# Excluded files:
+# - main.rs: Entry point, not unit testable
+# - app.rs: Slint UI integration, requires runtime
+# - text.rs: Placeholder for webview editor (task 011)
+
+[alias]
+# Quick alias would be: cargo coverage
+# But aliases need to be in .cargo/config.toml

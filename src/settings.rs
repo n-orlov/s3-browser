@@ -97,25 +97,7 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     use tempfile::TempDir;
-
-    // Helper to set up a temp home directory for tests
-    fn with_temp_home<F>(test: F)
-    where
-        F: FnOnce(),
-    {
-        let temp_dir = TempDir::new().unwrap();
-        let old_home = env::var("HOME").ok();
-        env::set_var("HOME", temp_dir.path());
-
-        test();
-
-        // Restore original HOME
-        if let Some(home) = old_home {
-            env::set_var("HOME", home);
-        }
-    }
 
     #[test]
     fn test_settings_default() {
@@ -145,6 +127,19 @@ mod tests {
     }
 
     #[test]
+    fn test_settings_set_location_none() {
+        let mut settings = Settings {
+            last_profile: Some("test".to_string()),
+            last_bucket: Some("bucket".to_string()),
+            last_prefix: Some("prefix/".to_string()),
+        };
+
+        settings.set_location(None, None);
+        assert!(settings.last_bucket.is_none());
+        assert!(settings.last_prefix.is_none());
+    }
+
+    #[test]
     fn test_settings_serialization() {
         let settings = Settings {
             last_profile: Some("production".to_string()),
@@ -158,6 +153,20 @@ mod tests {
         assert_eq!(parsed.last_profile, settings.last_profile);
         assert_eq!(parsed.last_bucket, settings.last_bucket);
         assert_eq!(parsed.last_prefix, settings.last_prefix);
+    }
+
+    #[test]
+    fn test_settings_pretty_serialization() {
+        let settings = Settings {
+            last_profile: Some("test".to_string()),
+            last_bucket: None,
+            last_prefix: None,
+        };
+
+        let json = serde_json::to_string_pretty(&settings).unwrap();
+        assert!(json.contains('\n'));  // Pretty print has newlines
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.last_profile, settings.last_profile);
     }
 
     #[test]
@@ -179,5 +188,110 @@ mod tests {
         assert!(settings.last_profile.is_none());
         assert!(settings.last_bucket.is_none());
         assert!(settings.last_prefix.is_none());
+    }
+
+    #[test]
+    fn test_settings_unknown_fields() {
+        // Settings should ignore unknown fields in JSON
+        let json = r#"{"last_profile": "test", "unknown_field": "value"}"#;
+        let settings: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.last_profile, Some("test".to_string()));
+    }
+
+    #[test]
+    fn test_settings_save_and_load_temp_dir() {
+        // Use a temp directory and save settings
+        let temp_dir = TempDir::new().unwrap();
+        let config_dir = temp_dir.path().join("s3-browser-test");
+        fs::create_dir_all(&config_dir).unwrap();
+        let settings_path = config_dir.join("settings.json");
+
+        // Create settings and save manually
+        let settings = Settings {
+            last_profile: Some("test-profile".to_string()),
+            last_bucket: Some("test-bucket".to_string()),
+            last_prefix: Some("test/prefix/".to_string()),
+        };
+
+        let contents = serde_json::to_string_pretty(&settings).unwrap();
+        fs::write(&settings_path, &contents).unwrap();
+
+        // Read back and verify
+        let loaded_contents = fs::read_to_string(&settings_path).unwrap();
+        let loaded: Settings = serde_json::from_str(&loaded_contents).unwrap();
+
+        assert_eq!(loaded.last_profile, settings.last_profile);
+        assert_eq!(loaded.last_bucket, settings.last_bucket);
+        assert_eq!(loaded.last_prefix, settings.last_prefix);
+    }
+
+    #[test]
+    fn test_settings_load_invalid_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_dir = temp_dir.path().join("s3-browser-test2");
+        fs::create_dir_all(&config_dir).unwrap();
+        let settings_path = config_dir.join("settings.json");
+
+        // Write invalid JSON
+        fs::write(&settings_path, "not valid json").unwrap();
+
+        // Attempting to parse should fail
+        let contents = fs::read_to_string(&settings_path).unwrap();
+        let result: Result<Settings, _> = serde_json::from_str(&contents);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_settings_clone() {
+        let settings = Settings {
+            last_profile: Some("clone-test".to_string()),
+            last_bucket: Some("bucket".to_string()),
+            last_prefix: Some("prefix/".to_string()),
+        };
+
+        let cloned = settings.clone();
+        assert_eq!(cloned.last_profile, settings.last_profile);
+        assert_eq!(cloned.last_bucket, settings.last_bucket);
+        assert_eq!(cloned.last_prefix, settings.last_prefix);
+    }
+
+    #[test]
+    fn test_settings_debug() {
+        let settings = Settings::default();
+        let debug_str = format!("{:?}", settings);
+        assert!(debug_str.contains("Settings"));
+    }
+
+    #[test]
+    fn test_settings_special_characters() {
+        // Test settings with special characters that need JSON escaping
+        let settings = Settings {
+            last_profile: Some("profile-with-\"quotes\"".to_string()),
+            last_bucket: Some("bucket/with/slashes".to_string()),
+            last_prefix: Some("prefix with spaces/and\nnewlines".to_string()),
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.last_profile, settings.last_profile);
+        assert_eq!(parsed.last_bucket, settings.last_bucket);
+        assert_eq!(parsed.last_prefix, settings.last_prefix);
+    }
+
+    #[test]
+    fn test_settings_unicode() {
+        let settings = Settings {
+            last_profile: Some("プロファイル".to_string()),  // Japanese
+            last_bucket: Some("桶".to_string()),             // Chinese character for bucket
+            last_prefix: Some("путь/".to_string()),          // Russian for "path"
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.last_profile, settings.last_profile);
+        assert_eq!(parsed.last_bucket, settings.last_bucket);
+        assert_eq!(parsed.last_prefix, settings.last_prefix);
     }
 }
