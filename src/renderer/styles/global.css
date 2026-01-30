@@ -695,6 +695,89 @@ body {
   font-weight: 600;
 }
 
+/* File Search Overlay (for URL navigation to file) */
+.file-search-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(24, 24, 37, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+}
+
+.file-search-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 28px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.file-search-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-search-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-search-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.file-search-target {
+  font-size: 12px;
+  color: var(--accent);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-search-cancel {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.file-search-cancel:hover {
+  background-color: var(--border);
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Highlight animation for found file */
+.file-row.highlight-found {
+  animation: highlight-pulse 2s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    background-color: transparent;
+  }
+  10%, 30% {
+    background-color: rgba(137, 180, 250, 0.4);
+  }
+  50% {
+    background-color: rgba(137, 180, 250, 0.2);
+  }
+}
+
 /* Dialogs */
 .dialog-overlay {
   position: fixed;
