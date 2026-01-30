@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell, ImageViewer};
+use crate::{MainWindow, BucketItem, FileItem, Explorer, FileList, ParquetViewer, ParquetColumn, ParquetRow, ParquetCell, CsvViewer, CsvColumn, CsvRow, CsvCell, ImageViewer, TextEditor};
 use crate::s3::credentials::ProfileManager;
 use crate::s3::client::S3Client;
 use crate::s3::types::S3Object;
@@ -15,6 +15,7 @@ use crate::settings::Settings;
 use crate::viewers::parquet::ParquetViewer as ParquetViewerLogic;
 use crate::viewers::csv::CsvViewer as CsvViewerLogic;
 use crate::viewers::image::{ImageViewer as ImageViewerLogic, ImageType, format_file_size};
+use crate::viewers::text::{TextEditor as TextEditorLogic, is_text_file};
 
 /// Shared application state that can be accessed from callbacks
 struct AppState {
@@ -37,6 +38,10 @@ struct AppState {
     csv_data: Option<Vec<u8>>,
     /// Current CSV file name
     csv_file_name: Option<String>,
+    /// Current text file key (for saving back)
+    text_file_key: Option<String>,
+    /// Original text content (for detecting modifications)
+    text_original_content: Option<String>,
 }
 
 /// Main application state
@@ -82,6 +87,8 @@ impl App {
             parquet_file_name: None,
             csv_data: None,
             csv_file_name: None,
+            text_file_key: None,
+            text_original_content: None,
         }));
 
         // Set initial empty bucket list - will be populated when profile selected
@@ -246,6 +253,24 @@ impl App {
                                 let window_weak = window_weak.clone();
                                 slint::spawn_local(async move {
                                     Self::open_image_file(state, window_weak, &bucket, &file_key, &file_name).await;
+                                }).unwrap();
+                            }
+                        } else if is_text_file(&file_name_lower) {
+                            // Text files (JSON, YAML, TXT, etc.)
+                            tracing::info!("Opening text file: {}", file_key);
+
+                            let state_ref = state.borrow();
+                            if let Some(bucket) = &state_ref.current_bucket {
+                                let bucket = bucket.clone();
+                                drop(state_ref);
+
+                                win.set_status_message(format!("Loading text file: {}...", file_name).into());
+                                win.set_is_loading(true);
+
+                                let state = state.clone();
+                                let window_weak = window_weak.clone();
+                                slint::spawn_local(async move {
+                                    Self::open_text_file(state, window_weak, &bucket, &file_key, &file_name).await;
                                 }).unwrap();
                             }
                         } else {
@@ -627,6 +652,55 @@ impl App {
             if let Some(win) = window_weak.upgrade() {
                 let image_viewer = win.global::<ImageViewer>();
                 image_viewer.set_dialog_visible(false);
+            }
+        });
+
+        // Set up Text Editor callbacks
+        let text_editor = window.global::<TextEditor>();
+
+        // Close callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        text_editor.on_close_requested(move || {
+            if let Some(win) = window_weak.upgrade() {
+                let text_editor = win.global::<TextEditor>();
+                text_editor.set_dialog_visible(false);
+
+                // Clear text editor state
+                let mut state_ref = state_clone.borrow_mut();
+                state_ref.text_file_key = None;
+                state_ref.text_original_content = None;
+            }
+        });
+
+        // Save callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        text_editor.on_save_requested(move |content| {
+            let state = state_clone.clone();
+            let window_weak = window_weak.clone();
+            let content_str = content.to_string();
+
+            slint::spawn_local(async move {
+                Self::save_text_file(state, window_weak, content_str).await;
+            }).unwrap();
+        });
+
+        // Content changed callback
+        let state_clone = state.clone();
+        let window_weak = window.as_weak();
+        text_editor.on_content_changed(move |content| {
+            if let Some(win) = window_weak.upgrade() {
+                let text_editor = win.global::<TextEditor>();
+                let state_ref = state_clone.borrow();
+
+                // Check if content differs from original
+                let is_modified = state_ref.text_original_content
+                    .as_ref()
+                    .map(|orig| orig != content.as_str())
+                    .unwrap_or(false);
+
+                text_editor.set_is_modified(is_modified);
             }
         });
 
@@ -1730,6 +1804,184 @@ impl App {
                 "Opened: {} ({}×{} {})",
                 file_name, img_data.width, img_data.height, format_name
             ).into());
+        }
+    }
+
+    /// Open a text file in the editor (JSON, YAML, TXT, etc.)
+    async fn open_text_file(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        bucket: &str,
+        key: &str,
+        file_name: &str,
+    ) {
+        // Get the current profile name to recreate client
+        let profile_name: Option<String>;
+        {
+            let state_ref = state.borrow();
+            profile_name = state_ref.current_profile.clone();
+        }
+
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Download the text file
+        let data = match client.get_object(bucket, key).await {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to download text file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Parse the text file
+        let editor = TextEditorLogic::new();
+        let text_data = match editor.load_bytes(&data, file_name) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_is_loading(false);
+                    win.set_status_message(format!("Failed to load text file: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Store the file key and original content for saving
+        {
+            let mut state_ref = state.borrow_mut();
+            state_ref.text_file_key = Some(key.to_string());
+            state_ref.text_original_content = Some(text_data.content.clone());
+        }
+
+        // Update UI
+        if let Some(win) = window_weak.upgrade() {
+            let text_editor = win.global::<TextEditor>();
+
+            text_editor.set_file_name(file_name.into());
+            text_editor.set_content(text_data.content.clone().into());
+            text_editor.set_syntax_type(text_data.syntax.display_name().into());
+            text_editor.set_file_size(TextEditorLogic::format_file_size(text_data.file_size).into());
+            text_editor.set_line_count(text_data.line_count as i32);
+            text_editor.set_read_only(text_data.read_only);
+            text_editor.set_is_loading(false);
+            text_editor.set_is_saving(false);
+            text_editor.set_is_modified(false);
+            text_editor.set_dialog_visible(true);
+
+            win.set_is_loading(false);
+            win.set_status_message(format!(
+                "Opened: {} ({} lines, {})",
+                file_name, text_data.line_count, text_data.syntax.display_name()
+            ).into());
+        }
+    }
+
+    /// Save text file content back to S3
+    async fn save_text_file(
+        state: Rc<RefCell<AppState>>,
+        window_weak: Weak<MainWindow>,
+        content: String,
+    ) {
+        // Get the file key and bucket from state
+        let (bucket, key, profile_name) = {
+            let state_ref = state.borrow();
+            let bucket = state_ref.current_bucket.clone();
+            let key = state_ref.text_file_key.clone();
+            let profile = state_ref.current_profile.clone();
+            (bucket, key, profile)
+        };
+
+        let bucket = match bucket {
+            Some(b) => b,
+            None => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_status_message("No bucket selected".into());
+                }
+                return;
+            }
+        };
+
+        let key = match key {
+            Some(k) => k,
+            None => {
+                if let Some(win) = window_weak.upgrade() {
+                    win.set_status_message("No file to save".into());
+                }
+                return;
+            }
+        };
+
+        // Set saving state
+        if let Some(win) = window_weak.upgrade() {
+            let text_editor = win.global::<TextEditor>();
+            text_editor.set_is_saving(true);
+        }
+
+        // Prepare content for saving
+        let editor = TextEditorLogic::new();
+        if let Err(e) = editor.validate_content(&content) {
+            if let Some(win) = window_weak.upgrade() {
+                let text_editor = win.global::<TextEditor>();
+                text_editor.set_is_saving(false);
+                win.set_status_message(format!("Cannot save: {}", e).into());
+            }
+            return;
+        }
+
+        let data = editor.prepare_for_save(&content);
+
+        // Create S3 client
+        let profile_opt = profile_name.as_deref().filter(|p| *p != "default");
+        let client = match S3Client::new(profile_opt).await {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    let text_editor = win.global::<TextEditor>();
+                    text_editor.set_is_saving(false);
+                    win.set_status_message(format!("Error: {}", e).into());
+                }
+                return;
+            }
+        };
+
+        // Upload to S3
+        match client.put_object(&bucket, &key, data).await {
+            Ok(_) => {
+                tracing::info!("Saved text file: {}", key);
+
+                // Update original content to current (no longer modified)
+                {
+                    let mut state_ref = state.borrow_mut();
+                    state_ref.text_original_content = Some(content);
+                }
+
+                if let Some(win) = window_weak.upgrade() {
+                    let text_editor = win.global::<TextEditor>();
+                    text_editor.set_is_saving(false);
+                    text_editor.set_is_modified(false);
+                    win.set_status_message(format!("Saved: {}", key).into());
+                }
+            }
+            Err(e) => {
+                if let Some(win) = window_weak.upgrade() {
+                    let text_editor = win.global::<TextEditor>();
+                    text_editor.set_is_saving(false);
+                    win.set_status_message(format!("Save failed: {}", e).into());
+                }
+            }
         }
     }
 

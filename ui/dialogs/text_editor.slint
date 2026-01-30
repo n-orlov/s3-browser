@@ -1,0 +1,199 @@
+// Text Editor Dialog
+// Provides editing capability for text files (JSON, YAML, TXT, etc.)
+
+import { Button, HorizontalBox, VerticalBox, ScrollView, LineEdit } from "std-widgets.slint";
+
+export component TextEditorDialog inherits Rectangle {
+    // Properties
+    in property <string> file-name: "";
+    in-out property <string> content: "";
+    in property <string> syntax-type: "Plain Text";
+    in property <string> file-size: "";
+    in property <int> line-count: 0;
+    in property <bool> read-only: false;
+    in property <bool> is-loading: false;
+    in property <bool> is-saving: false;
+    in property <bool> dialog-visible: false;
+    in property <bool> is-modified: false;
+
+    // Callbacks
+    callback close-clicked();
+    callback save-clicked(string);
+    callback content-changed(string);
+
+    // Only show when visible
+    visible: dialog-visible;
+
+    // Semi-transparent overlay background
+    background: #000000aa;
+    width: 100%;
+    height: 100%;
+
+    // Dialog container
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 40px, 1200px);
+        height: min(parent.height - 40px, 900px);
+        background: white;
+        border-radius: 8px;
+
+        // Drop shadow effect
+        drop-shadow-blur: 20px;
+        drop-shadow-color: #00000066;
+        drop-shadow-offset-x: 0;
+        drop-shadow-offset-y: 4px;
+
+        VerticalBox {
+            padding: 16px;
+            spacing: 12px;
+
+            // Header
+            HorizontalBox {
+                height: 32px;
+                spacing: 8px;
+
+                Text {
+                    text: file-name + (is-modified ? " *" : "");
+                    font-size: 16px;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                if !read-only && !is-loading: Button {
+                    text: is-saving ? "Saving..." : "Save";
+                    enabled: is-modified && !is-saving;
+                    clicked => {
+                        // Use the content property which is kept in sync
+                        save-clicked(content);
+                    }
+                }
+
+                Button {
+                    text: "✕";
+                    width: 32px;
+                    clicked => {
+                        close-clicked();
+                    }
+                }
+            }
+
+            // Info bar
+            HorizontalBox {
+                height: 24px;
+                spacing: 16px;
+
+                Text {
+                    text: syntax-type;
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: line-count > 0 ? "\{line-count} lines" : "";
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: file-size;
+                    color: #666666;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                if read-only: Rectangle {
+                    width: 70px;
+                    height: 20px;
+                    background: #ffeeee;
+                    border-radius: 4px;
+
+                    Text {
+                        text: "Read Only";
+                        color: #cc0000;
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+            }
+
+            // Editor area
+            Rectangle {
+                vertical-stretch: 1;
+                background: #1e1e1e;
+                border-radius: 4px;
+
+                if is-loading: VerticalBox {
+                    alignment: center;
+
+                    Text {
+                        text: "Loading file...";
+                        color: #cccccc;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                if !is-loading: ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+
+                    TextInput {
+                        x: 8px;
+                        y: 8px;
+                        width: parent.width - 16px;
+                        text <=> content;
+                        font-family: "monospace";
+                        font-size: 14px;
+                        color: #d4d4d4;
+                        selection-background-color: #264f78;
+                        selection-foreground-color: #ffffff;
+                        read-only: root.read-only;
+
+                        edited => {
+                            content-changed(self.text);
+                        }
+                    }
+                }
+            }
+
+            // Footer with keyboard shortcuts hint
+            HorizontalBox {
+                height: 20px;
+
+                Text {
+                    text: read-only ? "Read-only mode (file too large for editing)" : "Ctrl+S to save";
+                    color: #999999;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                if is-modified: Text {
+                    text: "Unsaved changes";
+                    color: #ff9900;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // Click outside to close (disabled to prevent accidental data loss)
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        // Don't close on outside click for editor - user must use close button
+    }
+}
