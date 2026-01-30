@@ -80,6 +80,7 @@ const mockElectronAPI = {
     uploadFile: vi.fn(() => Promise.resolve({ success: true })),
     uploadFiles: vi.fn(() => Promise.resolve({ success: true, results: [] })),
     deleteFile: vi.fn(() => Promise.resolve({ success: true })),
+    deleteFiles: vi.fn(() => Promise.resolve({ success: true, results: [], deletedCount: 0, failedCount: 0 })),
     renameFile: vi.fn(() => Promise.resolve({ success: true })),
     copyFile: vi.fn(() => Promise.resolve({ success: true })),
     uploadContent: vi.fn(() => Promise.resolve({ success: true })),
