@@ -17,6 +17,7 @@ export interface FileToolbarProps {
   onViewParquet: () => void;
   onViewCsv: () => void;
   onViewJson: () => void;
+  onViewYaml: () => void;
   onViewImage: () => void;
   onCopyUrl: () => void;
   onRefresh: () => void;
@@ -69,6 +70,14 @@ function isCsvFile(key: string): boolean {
 function isJsonFile(key: string): boolean {
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
   return ext === 'json';
+}
+
+/**
+ * Determine if a file is a YAML file
+ */
+function isYamlFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  return ext === 'yaml' || ext === 'yml';
 }
 
 /**
@@ -142,6 +151,14 @@ const Icons = {
       <path d="M20 18c0 1.1-.9 2-2 2h-2" />
       <path d="M4 12h4" />
       <path d="M16 12h4" />
+    </svg>
+  ),
+  yaml: (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14,2 14,8 20,8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="12" y2="17" />
     </svg>
   ),
   image: (
@@ -223,6 +240,7 @@ function FileToolbar({
   onViewParquet,
   onViewCsv,
   onViewJson,
+  onViewYaml,
   onViewImage,
   onCopyUrl,
   onRefresh,
@@ -239,6 +257,7 @@ function FileToolbar({
   const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
   const canViewCsv = hasSelection && !hasMultipleSelection && isCsvFile(selectedFile!.key);
   const canViewJson = hasSelection && !hasMultipleSelection && isJsonFile(selectedFile!.key);
+  const canViewYaml = hasSelection && !hasMultipleSelection && isYamlFile(selectedFile!.key);
   const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
   // Delete is allowed for any number of files selected (but not folders)
   const canDelete = selectedCount > 0;
@@ -294,6 +313,12 @@ function FileToolbar({
         title={canViewJson ? 'View JSON file' : 'Select a JSON file to view'}
         onClick={onViewJson}
         disabled={disabled || !canViewJson}
+      />
+      <ToolbarButton
+        icon={Icons.yaml}
+        title={canViewYaml ? 'View YAML file' : 'Select a YAML file to view'}
+        onClick={onViewYaml}
+        disabled={disabled || !canViewYaml}
       />
       <ToolbarButton
         icon={Icons.image}

@@ -15,6 +15,7 @@ import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
 import CsvViewer from './components/CsvViewer';
 import JsonViewer from './components/JsonViewer';
+import YamlViewer from './components/YamlViewer';
 import ImagePreview from './components/ImagePreview';
 import StatusBar from './components/StatusBar';
 import { ToastContainer, useToasts } from './components/Toast';
@@ -68,6 +69,7 @@ function App(): React.ReactElement {
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
   const [isCsvViewerOpen, setIsCsvViewerOpen] = useState(false);
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
+  const [isYamlViewerOpen, setIsYamlViewerOpen] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
@@ -278,6 +280,15 @@ function App(): React.ReactElement {
     setIsJsonViewerOpen(false);
   }, []);
 
+  const handleViewYaml = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsYamlViewerOpen(true);
+  }, [selectedFile]);
+
+  const handleYamlViewerClose = useCallback(() => {
+    setIsYamlViewerOpen(false);
+  }, []);
+
   const handleViewImage = useCallback(() => {
     if (!selectedFile || selectedFile.isPrefix) return;
     setIsImagePreviewOpen(true);
@@ -477,6 +488,7 @@ function App(): React.ReactElement {
             onViewParquet={handleViewParquet}
             onViewCsv={handleViewCsv}
             onViewJson={handleViewJson}
+            onViewYaml={handleViewYaml}
             onViewImage={handleViewImage}
             onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
@@ -584,6 +596,17 @@ function App(): React.ReactElement {
           fileName={selectedFile.key.split('/').pop() || selectedFile.key}
           fileSize={selectedFile.size}
           onClose={handleJsonViewerClose}
+        />
+      )}
+
+      {/* YAML Viewer */}
+      {isYamlViewerOpen && selectedBucket && selectedFile && (
+        <YamlViewer
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          fileSize={selectedFile.size}
+          onClose={handleYamlViewerClose}
         />
       )}
 

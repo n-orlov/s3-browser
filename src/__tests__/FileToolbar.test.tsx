@@ -16,6 +16,7 @@ describe('FileToolbar', () => {
     onViewParquet: vi.fn(),
     onViewCsv: vi.fn(),
     onViewJson: vi.fn(),
+    onViewYaml: vi.fn(),
     onViewImage: vi.fn(),
     onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
@@ -875,13 +876,98 @@ describe('FileToolbar', () => {
     });
   });
 
+  describe('YAML button', () => {
+    it('disables YAML button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const yamlButton = getButtonByTitle(/Select a YAML file to view/);
+      expect(yamlButton).toBeDisabled();
+    });
+
+    it('disables YAML button for non-YAML files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'document.txt', isPrefix: false }}
+        />
+      );
+
+      const yamlButton = getButtonByTitle(/Select a YAML file to view/);
+      expect(yamlButton).toBeDisabled();
+    });
+
+    it('enables YAML button for .yaml files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.yaml', isPrefix: false }}
+        />
+      );
+
+      const yamlButton = getButtonByTitle('View YAML file');
+      expect(yamlButton).not.toBeDisabled();
+    });
+
+    it('enables YAML button for .yml files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.yml', isPrefix: false }}
+        />
+      );
+
+      const yamlButton = getButtonByTitle('View YAML file');
+      expect(yamlButton).not.toBeDisabled();
+    });
+
+    it('calls onViewYaml when YAML button is clicked', () => {
+      const onViewYaml = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.yaml', isPrefix: false }}
+          onViewYaml={onViewYaml}
+        />
+      );
+
+      fireEvent.click(getButtonByTitle('View YAML file'));
+      expect(onViewYaml).toHaveBeenCalled();
+    });
+
+    it('disables YAML button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.yaml', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const yamlButton = getButtonByTitle('View YAML file');
+      expect(yamlButton).toBeDisabled();
+    });
+
+    it('disables YAML button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.yaml', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const yamlButton = getButtonByTitle(/Select a YAML file to view/);
+      expect(yamlButton).toBeDisabled();
+    });
+  });
+
   describe('icon-only toolbar', () => {
     it('renders all buttons as icon-only with correct class', () => {
       render(<FileToolbar {...defaultProps} />);
 
       // All toolbar buttons should have the icon-only class
       const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
-      expect(buttons.length).toBe(14); // All 14 toolbar buttons (including JSON)
+      expect(buttons.length).toBe(15); // All 15 toolbar buttons (including JSON and YAML)
     });
 
     it('all buttons have aria-label for accessibility', () => {
