@@ -28,6 +28,30 @@ export interface FileToolbarProps {
 }
 
 /**
+ * Get the base extension of a file, looking past .gz if present
+ * e.g., 'data.json.gz' -> 'json', 'data.csv' -> 'csv'
+ */
+function getBaseExtension(key: string): string {
+  const lowerKey = key.toLowerCase();
+
+  // If it ends with .gz, get the extension before .gz
+  if (lowerKey.endsWith('.gz')) {
+    const withoutGz = key.slice(0, -3);
+    return withoutGz.split('.').pop()?.toLowerCase() ?? '';
+  }
+
+  // Otherwise just get the last extension
+  return key.split('.').pop()?.toLowerCase() ?? '';
+}
+
+/**
+ * Check if a file is gzip compressed
+ */
+function isGzipFile(key: string): boolean {
+  return key.toLowerCase().endsWith('.gz');
+}
+
+/**
  * Determine if a file can be edited in the text editor.
  * Any file can be edited (opened as text), not just known text formats.
  * Binary files will show as text (may appear as garbage) but won't crash.
@@ -43,30 +67,31 @@ function isEditableFile(_key: string): boolean {
  */
 function isParquetFile(key: string): boolean {
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  // Parquet files are not supported with .gz compression
   return ext === 'parquet';
 }
 
 /**
- * Determine if a file is a CSV file
+ * Determine if a file is a CSV file (including .csv.gz)
  */
 function isCsvFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const ext = getBaseExtension(key);
   return ext === 'csv' || ext === 'tsv';
 }
 
 /**
- * Determine if a file is a JSON file
+ * Determine if a file is a JSON file (including .json.gz)
  */
 function isJsonFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const ext = getBaseExtension(key);
   return ext === 'json';
 }
 
 /**
- * Determine if a file is a YAML file
+ * Determine if a file is a YAML file (including .yaml.gz, .yml.gz)
  */
 function isYamlFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const ext = getBaseExtension(key);
   return ext === 'yaml' || ext === 'yml';
 }
 

@@ -30,6 +30,7 @@ import {
   type ObjectMetadata,
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
+import { isGzipFile, decompressGzip, compressGzip } from '../services/gzipUtils';
 
 // Abort controllers for cancellable operations
 const abortControllers = new Map<string, AbortController>();
@@ -374,11 +375,27 @@ export function registerS3Ipc(): void {
   );
 
   // Upload content directly (for editor save)
+  // Automatically compresses content for .gz files
   ipcMain.handle(
     's3:upload-content',
     async (_event, bucket: string, key: string, content: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
+
+        // For .gz files, compress content before upload
+        if (isGzipFile(key)) {
+          try {
+            const compressedBuffer = await compressGzip(content);
+            return await uploadContent(profileName, bucket, key, compressedBuffer);
+          } catch (compressError) {
+            const message = compressError instanceof Error
+              ? compressError.message
+              : 'Failed to compress file';
+            return { success: false, error: `Gzip compression failed: ${message}` };
+          }
+        }
+
+        // For non-gz files, use regular upload
         return await uploadContent(profileName, bucket, key, content);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -388,11 +405,32 @@ export function registerS3Ipc(): void {
   );
 
   // Download content directly (for editor load)
+  // Automatically decompresses .gz files
   ipcMain.handle(
     's3:download-content',
     async (_event, bucket: string, key: string): Promise<{ success: boolean; content?: string; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
+
+        // For .gz files, download as binary and decompress
+        if (isGzipFile(key)) {
+          const result = await downloadBinaryContent(profileName, bucket, key);
+          if (!result.success || !result.data) {
+            return { success: false, error: result.error || 'Failed to download file' };
+          }
+
+          try {
+            const content = await decompressGzip(result.data);
+            return { success: true, content };
+          } catch (decompressError) {
+            const message = decompressError instanceof Error
+              ? decompressError.message
+              : 'Failed to decompress file';
+            return { success: false, error: `Gzip decompression failed: ${message}` };
+          }
+        }
+
+        // For non-gz files, use the regular download
         return await downloadContent(profileName, bucket, key);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';

@@ -11,10 +11,28 @@ export interface TextEditorProps {
 }
 
 /**
+ * Get the base extension of a file, looking past .gz if present
+ * e.g., 'data.json.gz' -> 'json', 'data.csv' -> 'csv'
+ */
+function getBaseExtension(key: string): string {
+  const lowerKey = key.toLowerCase();
+
+  // If it ends with .gz, get the extension before .gz
+  if (lowerKey.endsWith('.gz')) {
+    const withoutGz = key.slice(0, -3);
+    return withoutGz.split('.').pop()?.toLowerCase() ?? '';
+  }
+
+  // Otherwise just get the last extension
+  return key.split('.').pop()?.toLowerCase() ?? '';
+}
+
+/**
  * Determine Monaco language from file extension
+ * Handles .gz files by looking at the extension before .gz
  */
 function getLanguageFromKey(key: string): string {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const ext = getBaseExtension(key);
   const languageMap: Record<string, string> = {
     // JSON
     json: 'json',
