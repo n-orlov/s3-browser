@@ -13,6 +13,7 @@ import NewItemDialog, { type NewItemType } from './components/NewItemDialog';
 import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
+import CsvViewer from './components/CsvViewer';
 import ImagePreview from './components/ImagePreview';
 import StatusBar from './components/StatusBar';
 import { ToastContainer, useToasts } from './components/Toast';
@@ -64,6 +65,7 @@ function App(): React.ReactElement {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
+  const [isCsvViewerOpen, setIsCsvViewerOpen] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
@@ -254,6 +256,15 @@ function App(): React.ReactElement {
 
   const handleParquetViewerClose = useCallback(() => {
     setIsParquetViewerOpen(false);
+  }, []);
+
+  const handleViewCsv = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsCsvViewerOpen(true);
+  }, [selectedFile]);
+
+  const handleCsvViewerClose = useCallback(() => {
+    setIsCsvViewerOpen(false);
   }, []);
 
   const handleViewImage = useCallback(() => {
@@ -453,6 +464,7 @@ function App(): React.ReactElement {
             onRename={handleRename}
             onEdit={handleEdit}
             onViewParquet={handleViewParquet}
+            onViewCsv={handleViewCsv}
             onViewImage={handleViewImage}
             onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
@@ -538,6 +550,17 @@ function App(): React.ReactElement {
           fileName={selectedFile.key.split('/').pop() || selectedFile.key}
           fileSize={selectedFile.size}
           onClose={handleParquetViewerClose}
+        />
+      )}
+
+      {/* CSV Viewer */}
+      {isCsvViewerOpen && selectedBucket && selectedFile && (
+        <CsvViewer
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          fileSize={selectedFile.size}
+          onClose={handleCsvViewerClose}
         />
       )}
 

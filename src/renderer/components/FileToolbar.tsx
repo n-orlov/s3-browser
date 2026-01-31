@@ -15,6 +15,7 @@ export interface FileToolbarProps {
   onRename: () => void;
   onEdit: () => void;
   onViewParquet: () => void;
+  onViewCsv: () => void;
   onViewImage: () => void;
   onCopyUrl: () => void;
   onRefresh: () => void;
@@ -51,6 +52,14 @@ function isEditableFile(key: string): boolean {
 function isParquetFile(key: string): boolean {
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
   return ext === 'parquet';
+}
+
+/**
+ * Determine if a file is a CSV file
+ */
+function isCsvFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  return ext === 'csv' || ext === 'tsv';
 }
 
 /**
@@ -106,6 +115,14 @@ const Icons = {
       <line x1="3" y1="15" x2="21" y2="15" />
       <line x1="9" y1="3" x2="9" y2="21" />
       <line x1="15" y1="3" x2="15" y2="21" />
+    </svg>
+  ),
+  csv: (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14,2 14,8 20,8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="16" y2="17" />
     </svg>
   ),
   image: (
@@ -185,6 +202,7 @@ function FileToolbar({
   onRename,
   onEdit,
   onViewParquet,
+  onViewCsv,
   onViewImage,
   onCopyUrl,
   onRefresh,
@@ -199,6 +217,7 @@ function FileToolbar({
   const hasMultipleSelection = selectedCount > 1;
   const canEdit = hasSelection && !hasMultipleSelection && isEditableFile(selectedFile!.key);
   const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
+  const canViewCsv = hasSelection && !hasMultipleSelection && isCsvFile(selectedFile!.key);
   const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
   // Delete is allowed for any number of files selected (but not folders)
   const canDelete = selectedCount > 0;
@@ -242,6 +261,12 @@ function FileToolbar({
         title={canViewParquet ? 'View parquet file' : 'Select a parquet file to view'}
         onClick={onViewParquet}
         disabled={disabled || !canViewParquet}
+      />
+      <ToolbarButton
+        icon={Icons.csv}
+        title={canViewCsv ? 'View CSV file' : 'Select a CSV file to view'}
+        onClick={onViewCsv}
+        disabled={disabled || !canViewCsv}
       />
       <ToolbarButton
         icon={Icons.image}

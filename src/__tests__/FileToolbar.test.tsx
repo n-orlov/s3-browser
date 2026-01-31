@@ -14,6 +14,7 @@ describe('FileToolbar', () => {
     onRename: vi.fn(),
     onEdit: vi.fn(),
     onViewParquet: vi.fn(),
+    onViewCsv: vi.fn(),
     onViewImage: vi.fn(),
     onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
@@ -794,7 +795,7 @@ describe('FileToolbar', () => {
 
       // All toolbar buttons should have the icon-only class
       const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
-      expect(buttons.length).toBe(12); // All 12 toolbar buttons
+      expect(buttons.length).toBe(13); // All 13 toolbar buttons
     });
 
     it('all buttons have aria-label for accessibility', () => {
