@@ -33,7 +33,7 @@ describe('FileToolbar', () => {
     it('disables Edit button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const editButton = getButtonByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a file to edit/);
       expect(editButton).toBeDisabled();
     });
 
@@ -45,20 +45,26 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a file to edit/);
       expect(editButton).toBeDisabled();
     });
 
-    it('disables Edit button for non-editable file types', () => {
-      render(
-        <FileToolbar
-          {...defaultProps}
-          selectedFile={{ key: 'image.png', isPrefix: false }}
-        />
-      );
+    it('enables Edit button for any file type (universal text editing)', () => {
+      // Any file can be edited as text - including previously "non-editable" types
+      const anyFileTypes = ['image.png', 'video.mp4', 'archive.zip', 'data.parquet', 'binary.exe'];
 
-      const editButton = getButtonByTitle(/Select a text file to edit/);
-      expect(editButton).toBeDisabled();
+      anyFileTypes.forEach((fileName) => {
+        const { unmount } = render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: fileName, isPrefix: false }}
+          />
+        );
+
+        const editButton = getButtonByTitle('Edit file as text');
+        expect(editButton).not.toBeDisabled();
+        unmount();
+      });
     });
 
     it('enables Edit button for JSON files', () => {
@@ -69,7 +75,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit file as text');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -81,7 +87,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit file as text');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -93,7 +99,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit file as text');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -105,7 +111,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit file as text');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -120,7 +126,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = getButtonByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit file as text');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -137,7 +143,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = getButtonByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit file as text');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -154,7 +160,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = getButtonByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit file as text');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -170,7 +176,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(getButtonByTitle('Edit selected file'));
+      fireEvent.click(getButtonByTitle('Edit file as text'));
       expect(onEdit).toHaveBeenCalled();
     });
 
@@ -183,7 +189,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit file as text');
       expect(editButton).toBeDisabled();
     });
   });
@@ -524,7 +530,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = getButtonByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a file to edit/);
       expect(editButton).toBeDisabled();
     });
 
