@@ -23,11 +23,14 @@ describe('FileToolbar', () => {
     disabled: false,
   };
 
+  // Helper to get button by its tooltip (title attribute)
+  const getButtonByTitle = (title: string | RegExp) => screen.getByTitle(title);
+
   describe('Edit button', () => {
     it('disables Edit button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const editButton = screen.getByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a text file to edit/);
       expect(editButton).toBeDisabled();
     });
 
@@ -39,7 +42,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a text file to edit/);
       expect(editButton).toBeDisabled();
     });
 
@@ -51,7 +54,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a text file to edit/);
       expect(editButton).toBeDisabled();
     });
 
@@ -63,7 +66,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit selected file');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -75,7 +78,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit selected file');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -87,7 +90,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit selected file');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -99,7 +102,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle('Edit selected file');
+      const editButton = getButtonByTitle('Edit selected file');
       expect(editButton).not.toBeDisabled();
     });
 
@@ -114,7 +117,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = screen.getByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit selected file');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -131,7 +134,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = screen.getByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit selected file');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -148,7 +151,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const editButton = screen.getByTitle('Edit selected file');
+        const editButton = getButtonByTitle('Edit selected file');
         expect(editButton).not.toBeDisabled();
         unmount();
       });
@@ -164,7 +167,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(screen.getByText('Edit'));
+      fireEvent.click(getButtonByTitle('Edit selected file'));
       expect(onEdit).toHaveBeenCalled();
     });
 
@@ -177,7 +180,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByText('Edit').closest('button');
+      const editButton = getButtonByTitle('Edit selected file');
       expect(editButton).toBeDisabled();
     });
   });
@@ -186,14 +189,14 @@ describe('FileToolbar', () => {
     it('enables Upload button when bucket is selected', () => {
       render(<FileToolbar {...defaultProps} />);
 
-      const uploadButton = screen.getByTitle('Upload files');
+      const uploadButton = getButtonByTitle('Upload files');
       expect(uploadButton).not.toBeDisabled();
     });
 
     it('disables Download button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const downloadButton = screen.getByTitle('Download selected file');
+      const downloadButton = getButtonByTitle('Download selected file');
       expect(downloadButton).toBeDisabled();
     });
 
@@ -206,21 +209,21 @@ describe('FileToolbar', () => {
         />
       );
 
-      const downloadButton = screen.getByTitle('Download selected file');
+      const downloadButton = getButtonByTitle('Download selected file');
       expect(downloadButton).not.toBeDisabled();
     });
 
     it('disables Rename button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const renameButton = screen.getByTitle('Rename selected file');
+      const renameButton = getButtonByTitle('Rename selected file');
       expect(renameButton).toBeDisabled();
     });
 
     it('disables Delete button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const deleteButton = screen.getByTitle('Delete selected file');
+      const deleteButton = getButtonByTitle('Delete selected file');
       expect(deleteButton).toBeDisabled();
     });
 
@@ -228,7 +231,7 @@ describe('FileToolbar', () => {
       const onRefresh = vi.fn();
       render(<FileToolbar {...defaultProps} onRefresh={onRefresh} />);
 
-      fireEvent.click(screen.getByText('Refresh'));
+      fireEvent.click(getButtonByTitle('Refresh file list'));
       expect(onRefresh).toHaveBeenCalled();
     });
   });
@@ -237,7 +240,7 @@ describe('FileToolbar', () => {
     it('disables Parquet button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      const parquetButton = getButtonByTitle(/Select a parquet file to view/);
       expect(parquetButton).toBeDisabled();
     });
 
@@ -249,7 +252,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      const parquetButton = getButtonByTitle(/Select a parquet file to view/);
       expect(parquetButton).toBeDisabled();
     });
 
@@ -261,7 +264,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      const parquetButton = getButtonByTitle(/Select a parquet file to view/);
       expect(parquetButton).toBeDisabled();
     });
 
@@ -273,7 +276,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const parquetButton = screen.getByTitle('View parquet file');
+      const parquetButton = getButtonByTitle('View parquet file');
       expect(parquetButton).not.toBeDisabled();
     });
 
@@ -287,7 +290,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(screen.getByText('Parquet'));
+      fireEvent.click(getButtonByTitle('View parquet file'));
       expect(onViewParquet).toHaveBeenCalled();
     });
 
@@ -300,7 +303,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const parquetButton = screen.getByText('Parquet').closest('button');
+      const parquetButton = getButtonByTitle('View parquet file');
       expect(parquetButton).toBeDisabled();
     });
   });
@@ -309,7 +312,7 @@ describe('FileToolbar', () => {
     it('disables Image button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      const imageButton = getButtonByTitle(/Select an image file to preview/);
       expect(imageButton).toBeDisabled();
     });
 
@@ -321,7 +324,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      const imageButton = getButtonByTitle(/Select an image file to preview/);
       expect(imageButton).toBeDisabled();
     });
 
@@ -333,7 +336,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      const imageButton = getButtonByTitle(/Select an image file to preview/);
       expect(imageButton).toBeDisabled();
     });
 
@@ -345,7 +348,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle('Preview image');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).not.toBeDisabled();
     });
 
@@ -357,7 +360,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle('Preview image');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).not.toBeDisabled();
     });
 
@@ -369,7 +372,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle('Preview image');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).not.toBeDisabled();
     });
 
@@ -381,7 +384,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle('Preview image');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).not.toBeDisabled();
     });
 
@@ -393,7 +396,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle('Preview image');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).not.toBeDisabled();
     });
 
@@ -408,7 +411,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const imageButton = screen.getByTitle('Preview image');
+        const imageButton = getButtonByTitle('Preview image');
         expect(imageButton).not.toBeDisabled();
         unmount();
       });
@@ -424,7 +427,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(screen.getByText('Image'));
+      fireEvent.click(getButtonByTitle('Preview image'));
       expect(onViewImage).toHaveBeenCalled();
     });
 
@@ -437,7 +440,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByText('Image').closest('button');
+      const imageButton = getButtonByTitle('Preview image');
       expect(imageButton).toBeDisabled();
     });
   });
@@ -452,7 +455,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const downloadButton = screen.getByTitle(/Download not available for multiple files/);
+      const downloadButton = getButtonByTitle(/Download not available for multiple files/);
       expect(downloadButton).toBeDisabled();
     });
 
@@ -465,7 +468,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const renameButton = screen.getByTitle(/Rename not available for multiple files/);
+      const renameButton = getButtonByTitle(/Rename not available for multiple files/);
       expect(renameButton).toBeDisabled();
     });
 
@@ -478,7 +481,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const copyButton = screen.getByTitle(/Copy URL not available for multiple files/);
+      const copyButton = getButtonByTitle(/Copy URL not available for multiple files/);
       expect(copyButton).toBeDisabled();
     });
 
@@ -491,11 +494,11 @@ describe('FileToolbar', () => {
         />
       );
 
-      const deleteButton = screen.getByTitle(/Delete 3 files/);
+      const deleteButton = getButtonByTitle(/Delete 3 files/);
       expect(deleteButton).not.toBeDisabled();
     });
 
-    it('shows file count on Delete button when multiple files selected', () => {
+    it('shows badge on Delete button when multiple files selected', () => {
       render(
         <FileToolbar
           {...defaultProps}
@@ -504,7 +507,9 @@ describe('FileToolbar', () => {
         />
       );
 
-      expect(screen.getByText('Delete (5)')).toBeInTheDocument();
+      const badge = screen.getByText('5');
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveClass('toolbar-badge');
     });
 
     it('disables Edit button when multiple files are selected', () => {
@@ -516,7 +521,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const editButton = screen.getByTitle(/Select a text file to edit/);
+      const editButton = getButtonByTitle(/Select a text file to edit/);
       expect(editButton).toBeDisabled();
     });
 
@@ -529,7 +534,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const parquetButton = screen.getByTitle(/Select a parquet file to view/);
+      const parquetButton = getButtonByTitle(/Select a parquet file to view/);
       expect(parquetButton).toBeDisabled();
     });
 
@@ -542,7 +547,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const imageButton = screen.getByTitle(/Select an image file to preview/);
+      const imageButton = getButtonByTitle(/Select an image file to preview/);
       expect(imageButton).toBeDisabled();
     });
   });
@@ -551,7 +556,7 @@ describe('FileToolbar', () => {
     it('disables Copy URL button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const copyButton = screen.getByTitle(/Select a file to copy URL/);
+      const copyButton = getButtonByTitle(/Select a file to copy URL/);
       expect(copyButton).toBeDisabled();
     });
 
@@ -563,7 +568,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const copyButton = screen.getByTitle(/Select a file to copy URL/);
+      const copyButton = getButtonByTitle(/Select a file to copy URL/);
       expect(copyButton).toBeDisabled();
     });
 
@@ -575,7 +580,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const copyButton = screen.getByTitle('Copy S3 URL to clipboard');
+      const copyButton = getButtonByTitle('Copy S3 URL to clipboard');
       expect(copyButton).not.toBeDisabled();
     });
 
@@ -590,7 +595,7 @@ describe('FileToolbar', () => {
           />
         );
 
-        const copyButton = screen.getByTitle('Copy S3 URL to clipboard');
+        const copyButton = getButtonByTitle('Copy S3 URL to clipboard');
         expect(copyButton).not.toBeDisabled();
         unmount();
       });
@@ -606,7 +611,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(screen.getByText('Copy URL'));
+      fireEvent.click(getButtonByTitle('Copy S3 URL to clipboard'));
       expect(onCopyUrl).toHaveBeenCalled();
     });
 
@@ -619,7 +624,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const copyButton = screen.getByText('Copy URL').closest('button');
+      const copyButton = getButtonByTitle('Copy S3 URL to clipboard');
       expect(copyButton).toBeDisabled();
     });
   });
@@ -628,7 +633,7 @@ describe('FileToolbar', () => {
     it('disables Properties button when no file is selected', () => {
       render(<FileToolbar {...defaultProps} selectedFile={null} />);
 
-      const propertiesButton = screen.getByTitle(/Select a file or folder to view properties/);
+      const propertiesButton = getButtonByTitle(/Select a file or folder to view properties/);
       expect(propertiesButton).toBeDisabled();
     });
 
@@ -640,7 +645,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const propertiesButton = screen.getByTitle('View properties');
+      const propertiesButton = getButtonByTitle('View properties');
       expect(propertiesButton).not.toBeDisabled();
     });
 
@@ -652,7 +657,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const propertiesButton = screen.getByTitle('View properties');
+      const propertiesButton = getButtonByTitle('View properties');
       expect(propertiesButton).not.toBeDisabled();
     });
 
@@ -666,7 +671,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      fireEvent.click(screen.getByText('Properties'));
+      fireEvent.click(getButtonByTitle('View properties'));
       expect(onProperties).toHaveBeenCalled();
     });
 
@@ -679,7 +684,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const propertiesButton = screen.getByText('Properties').closest('button');
+      const propertiesButton = getButtonByTitle('View properties');
       expect(propertiesButton).toBeDisabled();
     });
 
@@ -692,7 +697,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const propertiesButton = screen.getByTitle(/Select a file or folder to view properties/);
+      const propertiesButton = getButtonByTitle(/Select a file or folder to view properties/);
       expect(propertiesButton).toBeDisabled();
     });
   });
@@ -701,14 +706,14 @@ describe('FileToolbar', () => {
     it('disables New File button when no bucket is selected', () => {
       render(<FileToolbar {...defaultProps} selectedBucket={null} />);
 
-      const newFileButton = screen.getByTitle('Create new empty file');
+      const newFileButton = getButtonByTitle('Create new empty file');
       expect(newFileButton).toBeDisabled();
     });
 
     it('enables New File button when a bucket is selected', () => {
       render(<FileToolbar {...defaultProps} />);
 
-      const newFileButton = screen.getByTitle('Create new empty file');
+      const newFileButton = getButtonByTitle('Create new empty file');
       expect(newFileButton).not.toBeDisabled();
     });
 
@@ -716,14 +721,14 @@ describe('FileToolbar', () => {
       const onNewFile = vi.fn();
       render(<FileToolbar {...defaultProps} onNewFile={onNewFile} />);
 
-      fireEvent.click(screen.getByText('New File'));
+      fireEvent.click(getButtonByTitle('Create new empty file'));
       expect(onNewFile).toHaveBeenCalled();
     });
 
     it('disables New File button when toolbar is disabled', () => {
       render(<FileToolbar {...defaultProps} disabled={true} />);
 
-      const newFileButton = screen.getByText('New File').closest('button');
+      const newFileButton = getButtonByTitle('Create new empty file');
       expect(newFileButton).toBeDisabled();
     });
 
@@ -735,7 +740,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const newFileButton = screen.getByTitle('Create new empty file');
+      const newFileButton = getButtonByTitle('Create new empty file');
       expect(newFileButton).not.toBeDisabled();
     });
   });
@@ -744,14 +749,14 @@ describe('FileToolbar', () => {
     it('disables New Folder button when no bucket is selected', () => {
       render(<FileToolbar {...defaultProps} selectedBucket={null} />);
 
-      const newFolderButton = screen.getByTitle('Create new folder');
+      const newFolderButton = getButtonByTitle('Create new folder');
       expect(newFolderButton).toBeDisabled();
     });
 
     it('enables New Folder button when a bucket is selected', () => {
       render(<FileToolbar {...defaultProps} />);
 
-      const newFolderButton = screen.getByTitle('Create new folder');
+      const newFolderButton = getButtonByTitle('Create new folder');
       expect(newFolderButton).not.toBeDisabled();
     });
 
@@ -759,14 +764,14 @@ describe('FileToolbar', () => {
       const onNewFolder = vi.fn();
       render(<FileToolbar {...defaultProps} onNewFolder={onNewFolder} />);
 
-      fireEvent.click(screen.getByText('New Folder'));
+      fireEvent.click(getButtonByTitle('Create new folder'));
       expect(onNewFolder).toHaveBeenCalled();
     });
 
     it('disables New Folder button when toolbar is disabled', () => {
       render(<FileToolbar {...defaultProps} disabled={true} />);
 
-      const newFolderButton = screen.getByText('New Folder').closest('button');
+      const newFolderButton = getButtonByTitle('Create new folder');
       expect(newFolderButton).toBeDisabled();
     });
 
@@ -778,8 +783,48 @@ describe('FileToolbar', () => {
         />
       );
 
-      const newFolderButton = screen.getByTitle('Create new folder');
+      const newFolderButton = getButtonByTitle('Create new folder');
       expect(newFolderButton).not.toBeDisabled();
+    });
+  });
+
+  describe('icon-only toolbar', () => {
+    it('renders all buttons as icon-only with correct class', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      // All toolbar buttons should have the icon-only class
+      const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
+      expect(buttons.length).toBe(12); // All 12 toolbar buttons
+    });
+
+    it('all buttons have aria-label for accessibility', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
+      buttons.forEach((button) => {
+        expect(button).toHaveAttribute('aria-label');
+        expect(button.getAttribute('aria-label')).not.toBe('');
+      });
+    });
+
+    it('all buttons have title attribute for tooltip', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
+      buttons.forEach((button) => {
+        expect(button).toHaveAttribute('title');
+        expect(button.getAttribute('title')).not.toBe('');
+      });
+    });
+
+    it('buttons contain SVG icons', () => {
+      render(<FileToolbar {...defaultProps} />);
+
+      const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
+      buttons.forEach((button) => {
+        const svg = button.querySelector('svg');
+        expect(svg).toBeInTheDocument();
+      });
     });
   });
 });
