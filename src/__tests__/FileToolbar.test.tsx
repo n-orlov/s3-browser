@@ -15,6 +15,7 @@ describe('FileToolbar', () => {
     onEdit: vi.fn(),
     onViewParquet: vi.fn(),
     onViewCsv: vi.fn(),
+    onViewJson: vi.fn(),
     onViewImage: vi.fn(),
     onCopyUrl: vi.fn(),
     onRefresh: vi.fn(),
@@ -789,13 +790,98 @@ describe('FileToolbar', () => {
     });
   });
 
+  describe('JSON button', () => {
+    it('disables JSON button when no file is selected', () => {
+      render(<FileToolbar {...defaultProps} selectedFile={null} />);
+
+      const jsonButton = getButtonByTitle(/Select a JSON file to view/);
+      expect(jsonButton).toBeDisabled();
+    });
+
+    it('disables JSON button when a folder is selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'folder/', isPrefix: true }}
+        />
+      );
+
+      const jsonButton = getButtonByTitle(/Select a JSON file to view/);
+      expect(jsonButton).toBeDisabled();
+    });
+
+    it('disables JSON button for non-JSON files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'data.csv', isPrefix: false }}
+        />
+      );
+
+      const jsonButton = getButtonByTitle(/Select a JSON file to view/);
+      expect(jsonButton).toBeDisabled();
+    });
+
+    it('enables JSON button for JSON files', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.json', isPrefix: false }}
+        />
+      );
+
+      const jsonButton = getButtonByTitle('View JSON file');
+      expect(jsonButton).not.toBeDisabled();
+    });
+
+    it('calls onViewJson when JSON button is clicked', () => {
+      const onViewJson = vi.fn();
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.json', isPrefix: false }}
+          onViewJson={onViewJson}
+        />
+      );
+
+      fireEvent.click(getButtonByTitle('View JSON file'));
+      expect(onViewJson).toHaveBeenCalled();
+    });
+
+    it('disables JSON button when toolbar is disabled', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.json', isPrefix: false }}
+          disabled={true}
+        />
+      );
+
+      const jsonButton = getButtonByTitle('View JSON file');
+      expect(jsonButton).toBeDisabled();
+    });
+
+    it('disables JSON button when multiple files are selected', () => {
+      render(
+        <FileToolbar
+          {...defaultProps}
+          selectedFile={{ key: 'config.json', isPrefix: false }}
+          selectedCount={2}
+        />
+      );
+
+      const jsonButton = getButtonByTitle(/Select a JSON file to view/);
+      expect(jsonButton).toBeDisabled();
+    });
+  });
+
   describe('icon-only toolbar', () => {
     it('renders all buttons as icon-only with correct class', () => {
       render(<FileToolbar {...defaultProps} />);
 
       // All toolbar buttons should have the icon-only class
       const buttons = document.querySelectorAll('.toolbar-btn.toolbar-btn-icon');
-      expect(buttons.length).toBe(13); // All 13 toolbar buttons
+      expect(buttons.length).toBe(14); // All 14 toolbar buttons (including JSON)
     });
 
     it('all buttons have aria-label for accessibility', () => {
