@@ -156,10 +156,14 @@ export async function isLocalStackHealthy(): Promise<boolean> {
   const endpoints = [dynamicEndpoint];
 
   // Also try container network IP if we started the container
+  // Use the range syntax to handle different Docker versions/configurations
   try {
-    const result = execSync('docker inspect s3-browser-localstack --format "{{.NetworkSettings.IPAddress}}" 2>/dev/null', { encoding: 'utf-8' }).trim();
+    const result = execSync('docker inspect s3-browser-localstack --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" 2>/dev/null', { encoding: 'utf-8' }).trim();
     if (result && result !== dynamicEndpoint.replace('http://', '').replace(':4566', '')) {
-      endpoints.push(`http://${result}:4566`);
+      const containerEndpoint = `http://${result}:4566`;
+      if (!endpoints.includes(containerEndpoint)) {
+        endpoints.push(containerEndpoint);
+      }
     }
   } catch {
     // Container might not exist
