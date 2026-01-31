@@ -28,24 +28,14 @@ export interface FileToolbarProps {
 }
 
 /**
- * Determine if a file can be edited in the text editor
+ * Determine if a file can be edited in the text editor.
+ * Any file can be edited (opened as text), not just known text formats.
+ * Binary files will show as text (may appear as garbage) but won't crash.
  */
-function isEditableFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
-  const editableExtensions = [
-    // Text
-    'txt', 'log', 'csv', 'tsv',
-    // Data
-    'json', 'yaml', 'yml', 'xml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env',
-    // Code
-    'js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'go', 'rs', 'rb', 'php',
-    'sh', 'bash', 'zsh', 'ps1', 'sql',
-    // Markup
-    'md', 'markdown', 'html', 'htm', 'css', 'scss', 'less', 'svg',
-    // Other
-    'dockerfile', 'makefile', 'gitignore', 'editorconfig', 'graphql', 'gql',
-  ];
-  return editableExtensions.includes(ext) || key.endsWith('file'); // e.g., Dockerfile, Makefile
+function isEditableFile(_key: string): boolean {
+  // Any file can be edited as text - special viewers (JSON, YAML, CSV, etc.)
+  // are still available for those specific file types via their own buttons
+  return true;
 }
 
 /**
@@ -253,7 +243,7 @@ function FileToolbar({
   const hasFolderSelection = selectedFile !== null && selectedFile.isPrefix;
   const hasAnySelection = selectedFile !== null;
   const hasMultipleSelection = selectedCount > 1;
-  const canEdit = hasSelection && !hasMultipleSelection && isEditableFile(selectedFile!.key);
+  const canEdit = hasSelection && !hasMultipleSelection;
   const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
   const canViewCsv = hasSelection && !hasMultipleSelection && isCsvFile(selectedFile!.key);
   const canViewJson = hasSelection && !hasMultipleSelection && isJsonFile(selectedFile!.key);
@@ -292,7 +282,7 @@ function FileToolbar({
       />
       <ToolbarButton
         icon={Icons.edit}
-        title={canEdit ? 'Edit selected file' : 'Select a text file to edit'}
+        title={canEdit ? 'Edit file as text' : 'Select a file to edit'}
         onClick={onEdit}
         disabled={disabled || !canEdit}
       />
