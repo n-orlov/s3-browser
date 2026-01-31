@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
@@ -17,10 +17,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "package": "npm run build && electron-builder --linux",
-    "package:win": "npm run build && electron-builder --win",
+    "test:e2e": "npm run build && xvfb-run --auto-servernum --server-args=\"-screen 0 1280x960x24\" playwright test",
+    "test:e2e:headed": "npm run build && playwright test --headed",
+    "test:e2e:report": "playwright show-report playwright-report",
+    "package": "npm run build && npx electron-builder --linux",
+    "package:win": "npm run build && npx electron-builder --win",
     "package:win:docker": "./scripts/build-windows.sh",
-    "package:all": "npm run build && electron-builder --win --mac --linux",
+    "package:all": "npm run build && npx electron-builder --win --mac --linux",
     "package:all:docker": "./scripts/build-all.sh"
   },
   "build": {
@@ -59,6 +62,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -74,6 +78,7 @@
     "electron": "^40.1.0",
     "electron-builder": "^26.4.0",
     "jsdom": "^27.4.0",
+    "playwright": "^1.58.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",

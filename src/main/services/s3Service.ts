@@ -64,6 +64,27 @@ export interface ListObjectsOptions {
 // Cached S3 client instance
 let s3Client: S3Client | null = null;
 let currentClientProfile: string | null = null;
+let currentEndpoint: string | null = null;
+
+// Custom endpoint for testing with LocalStack or other S3-compatible services
+let customEndpoint: string | null = process.env.AWS_ENDPOINT_URL || null;
+
+/**
+ * Set a custom S3 endpoint (e.g., for LocalStack)
+ * Call this before any S3 operations to use a custom endpoint
+ */
+export function setCustomEndpoint(endpoint: string | null): void {
+  customEndpoint = endpoint;
+  // Clear client cache to force recreation with new endpoint
+  clearS3Client();
+}
+
+/**
+ * Get the current custom endpoint
+ */
+export function getCustomEndpoint(): string | null {
+  return customEndpoint;
+}
 
 /**
  * Creates or returns cached S3 client for the given profile
@@ -79,8 +100,27 @@ let currentClientProfile: string | null = null;
  * @param forceNew - Force creation of a new client even if one exists
  */
 export function getS3Client(profileName: string, forceNew = false): S3Client {
-  // Return cached client if profile hasn't changed
-  if (s3Client && currentClientProfile === profileName && !forceNew) {
+  // Return cached client if profile and endpoint haven't changed
+  if (s3Client && currentClientProfile === profileName && currentEndpoint === customEndpoint && !forceNew) {
+    return s3Client;
+  }
+
+  // When using custom endpoint (e.g., LocalStack), use simple credentials
+  if (customEndpoint) {
+    const config: S3ClientConfig = {
+      endpoint: customEndpoint,
+      region: process.env.AWS_DEFAULT_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
+      },
+      forcePathStyle: true, // Required for LocalStack and most S3-compatible services
+    };
+
+    s3Client = new S3Client(config);
+    currentClientProfile = profileName;
+    currentEndpoint = customEndpoint;
+
     return s3Client;
   }
 
@@ -106,6 +146,7 @@ export function getS3Client(profileName: string, forceNew = false): S3Client {
 
   s3Client = new S3Client(config);
   currentClientProfile = profileName;
+  currentEndpoint = null;
 
   return s3Client;
 }
@@ -116,6 +157,7 @@ export function getS3Client(profileName: string, forceNew = false): S3Client {
 export function clearS3Client(): void {
   s3Client = null;
   currentClientProfile = null;
+  currentEndpoint = null;
 }
 
 /**

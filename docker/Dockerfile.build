@@ -19,4 +19,4 @@ COPY . .
 RUN npm run build
 
 # Default command builds Windows targets
-CMD ["npm", "run", "package:win"]
+CMD ["npx", "electron-builder", "--win"]
