@@ -260,6 +260,24 @@ function canProvideCredentials(
   }
 }
 
+// Test mode flag - when using custom endpoint (LocalStack), adds a mock "test" profile
+// Only trigger on AWS_ENDPOINT_URL, not NODE_ENV, to avoid affecting unit tests
+const isTestMode = !!process.env.AWS_ENDPOINT_URL;
+
+/**
+ * Creates a mock test profile for LocalStack/testing
+ */
+function createTestProfile(): AwsProfile {
+  return {
+    name: 'test',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
+    region: process.env.AWS_DEFAULT_REGION || 'us-east-1',
+    profileType: 'static',
+    hasCredentials: true,
+  };
+}
+
 /**
  * Merges credentials and config to build a complete list of profiles
  */
@@ -330,8 +348,18 @@ export function loadAwsProfiles(
     profiles.push(profile);
   }
 
-  // Sort profiles: 'default' first, then alphabetically
+  // Add test profile in test mode (for LocalStack)
+  if (isTestMode) {
+    // Only add if not already present
+    if (!profiles.some(p => p.name === 'test')) {
+      profiles.unshift(createTestProfile());
+    }
+  }
+
+  // Sort profiles: 'test' first in test mode, then 'default', then alphabetically
   profiles.sort((a, b) => {
+    if (isTestMode && a.name === 'test') return -1;
+    if (isTestMode && b.name === 'test') return 1;
     if (a.name === 'default') return -1;
     if (b.name === 'default') return 1;
     return a.name.localeCompare(b.name);

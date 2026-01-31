@@ -29,3 +29,5 @@ coverage/
 
 # Electron builder cache
 .electron-builder-cache/
+test-results/
+playwright-report/

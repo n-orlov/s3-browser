@@ -29,8 +29,10 @@ import {
 } from '../main/services/s3Service';
 
 // Skip these tests in CI environments without AWS credentials
-const AWS_CREDENTIALS_AVAILABLE = process.env.AWS_ACCESS_KEY_ID ||
-  (await import('fs')).existsSync(`${(await import('os')).homedir()}/.aws/credentials`);
+// Also skip when using LocalStack/custom endpoint (those are handled by E2E tests)
+const USING_LOCALSTACK = !!process.env.AWS_ENDPOINT_URL;
+const AWS_CREDENTIALS_AVAILABLE = !USING_LOCALSTACK && (process.env.AWS_ACCESS_KEY_ID ||
+  (await import('fs')).existsSync(`${(await import('os')).homedir()}/.aws/credentials`));
 
 describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('S3 Integration Tests', () => {
   afterEach(() => {
