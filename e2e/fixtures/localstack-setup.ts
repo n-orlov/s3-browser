@@ -86,6 +86,27 @@ nested:
     ]),
     contentType: 'image/png',
   },
+  // Additional files for multiselect testing
+  multiFile1: {
+    key: 'documents/file1.txt',
+    content: 'File 1 content for multiselect testing',
+    contentType: 'text/plain',
+  },
+  multiFile2: {
+    key: 'documents/file2.txt',
+    content: 'File 2 content for multiselect testing',
+    contentType: 'text/plain',
+  },
+  multiFile3: {
+    key: 'documents/file3.txt',
+    content: 'File 3 content for multiselect testing',
+    contentType: 'text/plain',
+  },
+  multiFile4: {
+    key: 'documents/file4.txt',
+    content: 'File 4 content for multiselect testing',
+    contentType: 'text/plain',
+  },
 };
 
 // S3 client for LocalStack
