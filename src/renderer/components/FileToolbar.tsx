@@ -16,6 +16,7 @@ export interface FileToolbarProps {
   onEdit: () => void;
   onViewParquet: () => void;
   onViewCsv: () => void;
+  onViewJson: () => void;
   onViewImage: () => void;
   onCopyUrl: () => void;
   onRefresh: () => void;
@@ -60,6 +61,14 @@ function isParquetFile(key: string): boolean {
 function isCsvFile(key: string): boolean {
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
   return ext === 'csv' || ext === 'tsv';
+}
+
+/**
+ * Determine if a file is a JSON file
+ */
+function isJsonFile(key: string): boolean {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  return ext === 'json';
 }
 
 /**
@@ -123,6 +132,16 @@ const Icons = {
       <polyline points="14,2 14,8 20,8" />
       <line x1="8" y1="13" x2="16" y2="13" />
       <line x1="8" y1="17" x2="16" y2="17" />
+    </svg>
+  ),
+  json: (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6c0-1.1.9-2 2-2h2" />
+      <path d="M4 18c0 1.1.9 2 2 2h2" />
+      <path d="M20 6c0-1.1-.9-2-2-2h-2" />
+      <path d="M20 18c0 1.1-.9 2-2 2h-2" />
+      <path d="M4 12h4" />
+      <path d="M16 12h4" />
     </svg>
   ),
   image: (
@@ -203,6 +222,7 @@ function FileToolbar({
   onEdit,
   onViewParquet,
   onViewCsv,
+  onViewJson,
   onViewImage,
   onCopyUrl,
   onRefresh,
@@ -218,6 +238,7 @@ function FileToolbar({
   const canEdit = hasSelection && !hasMultipleSelection && isEditableFile(selectedFile!.key);
   const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
   const canViewCsv = hasSelection && !hasMultipleSelection && isCsvFile(selectedFile!.key);
+  const canViewJson = hasSelection && !hasMultipleSelection && isJsonFile(selectedFile!.key);
   const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
   // Delete is allowed for any number of files selected (but not folders)
   const canDelete = selectedCount > 0;
@@ -267,6 +288,12 @@ function FileToolbar({
         title={canViewCsv ? 'View CSV file' : 'Select a CSV file to view'}
         onClick={onViewCsv}
         disabled={disabled || !canViewCsv}
+      />
+      <ToolbarButton
+        icon={Icons.json}
+        title={canViewJson ? 'View JSON file' : 'Select a JSON file to view'}
+        onClick={onViewJson}
+        disabled={disabled || !canViewJson}
       />
       <ToolbarButton
         icon={Icons.image}

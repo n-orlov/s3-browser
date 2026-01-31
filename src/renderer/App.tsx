@@ -14,6 +14,7 @@ import OperationStatus from './components/OperationStatus';
 import TextEditor from './components/TextEditor';
 import ParquetViewer from './components/ParquetViewer';
 import CsvViewer from './components/CsvViewer';
+import JsonViewer from './components/JsonViewer';
 import ImagePreview from './components/ImagePreview';
 import StatusBar from './components/StatusBar';
 import { ToastContainer, useToasts } from './components/Toast';
@@ -66,6 +67,7 @@ function App(): React.ReactElement {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isParquetViewerOpen, setIsParquetViewerOpen] = useState(false);
   const [isCsvViewerOpen, setIsCsvViewerOpen] = useState(false);
+  const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
@@ -267,6 +269,15 @@ function App(): React.ReactElement {
     setIsCsvViewerOpen(false);
   }, []);
 
+  const handleViewJson = useCallback(() => {
+    if (!selectedFile || selectedFile.isPrefix) return;
+    setIsJsonViewerOpen(true);
+  }, [selectedFile]);
+
+  const handleJsonViewerClose = useCallback(() => {
+    setIsJsonViewerOpen(false);
+  }, []);
+
   const handleViewImage = useCallback(() => {
     if (!selectedFile || selectedFile.isPrefix) return;
     setIsImagePreviewOpen(true);
@@ -465,6 +476,7 @@ function App(): React.ReactElement {
             onEdit={handleEdit}
             onViewParquet={handleViewParquet}
             onViewCsv={handleViewCsv}
+            onViewJson={handleViewJson}
             onViewImage={handleViewImage}
             onCopyUrl={handleCopyUrl}
             onRefresh={handleRefresh}
@@ -561,6 +573,17 @@ function App(): React.ReactElement {
           fileName={selectedFile.key.split('/').pop() || selectedFile.key}
           fileSize={selectedFile.size}
           onClose={handleCsvViewerClose}
+        />
+      )}
+
+      {/* JSON Viewer */}
+      {isJsonViewerOpen && selectedBucket && selectedFile && (
+        <JsonViewer
+          bucket={selectedBucket}
+          fileKey={selectedFile.key}
+          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
+          fileSize={selectedFile.size}
+          onClose={handleJsonViewerClose}
         />
       )}
 
