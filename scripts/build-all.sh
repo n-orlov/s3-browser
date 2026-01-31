@@ -46,7 +46,7 @@ if [ "$VOLUME_WORKS" = "test" ]; then
         -v ~/.cache/electron-builder:/root/.cache/electron-builder \
         -w /project \
         electronuserland/builder:wine \
-        /bin/bash -c "npm ci && npm run build && electron-builder --win --linux"
+        /bin/bash -c "npm ci && npm run build && npx electron-builder --win --linux"
 else
     echo "Volume mounts not available (Docker-in-Docker detected)"
     echo "Using docker cp approach..."
@@ -57,7 +57,7 @@ else
     # Create container
     echo "Creating build container..."
     docker create --name "$CONTAINER_NAME" -w /project electronuserland/builder:wine \
-        /bin/bash -c "npm ci && npm run build && electron-builder --win --linux"
+        /bin/bash -c "npm ci && npm run build && npx electron-builder --win --linux"
 
     # Copy project files to container (excluding node_modules and release)
     echo "Copying project files to container..."
