@@ -967,6 +967,235 @@ describe('FileToolbar', () => {
     });
   });
 
+  describe('gzip file support', () => {
+    describe('CSV button with .gz files', () => {
+      it('enables CSV button for .csv.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'data.csv.gz', isPrefix: false }}
+          />
+        );
+
+        const csvButton = getButtonByTitle('View CSV file');
+        expect(csvButton).not.toBeDisabled();
+      });
+
+      it('enables CSV button for .tsv.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'data.tsv.gz', isPrefix: false }}
+          />
+        );
+
+        const csvButton = getButtonByTitle('View CSV file');
+        expect(csvButton).not.toBeDisabled();
+      });
+
+      it('calls onViewCsv when CSV button is clicked for .csv.gz file', () => {
+        const onViewCsv = vi.fn();
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'data.csv.gz', isPrefix: false }}
+            onViewCsv={onViewCsv}
+          />
+        );
+
+        fireEvent.click(getButtonByTitle('View CSV file'));
+        expect(onViewCsv).toHaveBeenCalled();
+      });
+    });
+
+    describe('JSON button with .gz files', () => {
+      it('enables JSON button for .json.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.json.gz', isPrefix: false }}
+          />
+        );
+
+        const jsonButton = getButtonByTitle('View JSON file');
+        expect(jsonButton).not.toBeDisabled();
+      });
+
+      it('enables JSON button for .JSON.GZ files (case insensitive)', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'CONFIG.JSON.GZ', isPrefix: false }}
+          />
+        );
+
+        const jsonButton = getButtonByTitle('View JSON file');
+        expect(jsonButton).not.toBeDisabled();
+      });
+
+      it('calls onViewJson when JSON button is clicked for .json.gz file', () => {
+        const onViewJson = vi.fn();
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.json.gz', isPrefix: false }}
+            onViewJson={onViewJson}
+          />
+        );
+
+        fireEvent.click(getButtonByTitle('View JSON file'));
+        expect(onViewJson).toHaveBeenCalled();
+      });
+    });
+
+    describe('YAML button with .gz files', () => {
+      it('enables YAML button for .yaml.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.yaml.gz', isPrefix: false }}
+          />
+        );
+
+        const yamlButton = getButtonByTitle('View YAML file');
+        expect(yamlButton).not.toBeDisabled();
+      });
+
+      it('enables YAML button for .yml.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.yml.gz', isPrefix: false }}
+          />
+        );
+
+        const yamlButton = getButtonByTitle('View YAML file');
+        expect(yamlButton).not.toBeDisabled();
+      });
+
+      it('calls onViewYaml when YAML button is clicked for .yaml.gz file', () => {
+        const onViewYaml = vi.fn();
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.yaml.gz', isPrefix: false }}
+            onViewYaml={onViewYaml}
+          />
+        );
+
+        fireEvent.click(getButtonByTitle('View YAML file'));
+        expect(onViewYaml).toHaveBeenCalled();
+      });
+    });
+
+    describe('Edit button with .gz files', () => {
+      it('enables Edit button for .txt.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'readme.txt.gz', isPrefix: false }}
+          />
+        );
+
+        const editButton = getButtonByTitle('Edit file as text');
+        expect(editButton).not.toBeDisabled();
+      });
+
+      it('enables Edit button for .json.gz files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.json.gz', isPrefix: false }}
+          />
+        );
+
+        const editButton = getButtonByTitle('Edit file as text');
+        expect(editButton).not.toBeDisabled();
+      });
+
+      it('enables Edit button for any .gz file', () => {
+        const gzFiles = ['data.csv.gz', 'config.yaml.gz', 'readme.txt.gz', 'log.log.gz'];
+
+        gzFiles.forEach((fileName) => {
+          const { unmount } = render(
+            <FileToolbar
+              {...defaultProps}
+              selectedFile={{ key: fileName, isPrefix: false }}
+            />
+          );
+
+          const editButton = getButtonByTitle('Edit file as text');
+          expect(editButton).not.toBeDisabled();
+          unmount();
+        });
+      });
+    });
+
+    describe('File type detection with nested paths', () => {
+      it('correctly identifies .json.gz in nested path', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'path/to/deep/file.json.gz', isPrefix: false }}
+          />
+        );
+
+        const jsonButton = getButtonByTitle('View JSON file');
+        expect(jsonButton).not.toBeDisabled();
+      });
+
+      it('correctly identifies .csv.gz in nested path', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'bucket/folder/data.csv.gz', isPrefix: false }}
+          />
+        );
+
+        const csvButton = getButtonByTitle('View CSV file');
+        expect(csvButton).not.toBeDisabled();
+      });
+    });
+
+    describe('Non-gz files still work', () => {
+      it('enables CSV button for regular .csv files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'data.csv', isPrefix: false }}
+          />
+        );
+
+        const csvButton = getButtonByTitle('View CSV file');
+        expect(csvButton).not.toBeDisabled();
+      });
+
+      it('enables JSON button for regular .json files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.json', isPrefix: false }}
+          />
+        );
+
+        const jsonButton = getButtonByTitle('View JSON file');
+        expect(jsonButton).not.toBeDisabled();
+      });
+
+      it('enables YAML button for regular .yaml files', () => {
+        render(
+          <FileToolbar
+            {...defaultProps}
+            selectedFile={{ key: 'config.yaml', isPrefix: false }}
+          />
+        );
+
+        const yamlButton = getButtonByTitle('View YAML file');
+        expect(yamlButton).not.toBeDisabled();
+      });
+    });
+  });
+
   describe('icon-only toolbar', () => {
     it('renders all buttons as icon-only with correct class', () => {
       render(<FileToolbar {...defaultProps} />);
