@@ -211,6 +211,7 @@ test.describe('File Viewers', () => {
 
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
     });
@@ -388,6 +389,7 @@ test.describe('File Viewers', () => {
 
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
     });
@@ -615,6 +617,7 @@ test.describe('File Viewers', () => {
 
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
     });
@@ -822,6 +825,7 @@ test.describe('File Viewers', () => {
 
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
 
@@ -1023,6 +1027,7 @@ test.describe('File Viewers', () => {
     test('should disable parquet viewer button for non-parquet files', async ({ window }) => {
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
 
@@ -1101,6 +1106,7 @@ test.describe('File Viewers', () => {
     test('should show all viewer buttons in toolbar', async ({ window }) => {
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
 
@@ -1136,6 +1142,7 @@ test.describe('File Viewers', () => {
     test('should enable only relevant viewer button based on file type', async ({ window }) => {
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
 
@@ -1162,6 +1169,7 @@ test.describe('File Viewers', () => {
     test('should change enabled viewer buttons when selecting different file types', async ({ window }) => {
       // Navigate into data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
+      await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.click();
       await window.waitForTimeout(1500);
 
