@@ -2,17 +2,34 @@
 
 A lightweight desktop application for viewing and managing files in Amazon S3 buckets. Built with Electron, React, and TypeScript.
 
+## Background
+
+This project was created as an alternative to heavier S3 clients like Cyberduck. The key motivations were:
+
+- **Lightweight**: Minimal dependencies, quick startup time
+- **Full AWS credential support**: Unlike many GUI tools, this fully supports AWS CLI credential configurations including assume-role profiles, SSO, process credentials, and more
+- **Developer-friendly**: Inline text editing with Monaco Editor, specialized viewers for Parquet/CSV/JSON/YAML files
+
+See [CLAUDE.md](CLAUDE.md) for detailed development history and technical decisions.
+
 ## Features
 
 - **Explorer-like Interface**: Tree view sidebar for bucket navigation, main panel for file listing with sorting and filtering
 - **File Operations**: Upload (including drag-and-drop), download, delete, rename files and folders
 - **Multi-select**: Shift+click for range select, Ctrl+click for toggle select, batch delete
 - **Inline Text Editor**: Monaco Editor with syntax highlighting for JSON, YAML, CSV, and 30+ file types
-- **Parquet Viewer**: View parquet files in tabular format with lazy loading for large files
-- **Image Preview**: Preview PNG, JPG, GIF, WebP, SVG, and other image formats
+- **Specialized Viewers**:
+  - Parquet: tabular format with lazy loading for large files
+  - CSV: tabular viewer with lazy loading
+  - JSON: tree view with collapse/expand and text view modes
+  - YAML: syntax-highlighted text view
+  - Image: preview PNG, JPG, GIF, WebP, SVG, and other formats
+- **Compressed File Support**: View and edit gz-compressed text files (.json.gz, .yaml.gz, etc.) - automatically decompresses for viewing and recompresses on save
 - **S3 URL Navigation**: Paste S3 URLs in any format (s3://, virtual-hosted, path-style) to navigate directly
 - **AWS Credentials**: Full support for AWS CLI credentials including static keys, assume-role, SSO, process credentials
 - **Quick Filters**: Filter buckets (case-insensitive contains) and objects (prefix matching)
+- **Status Bar**: Shows item count in current prefix and total size of selected items
+- **Properties Dialog**: View detailed file/folder metadata (URL, size, modified date, storage class, tags)
 - **State Persistence**: Remembers last profile and location across sessions
 
 ## Screenshots
@@ -89,6 +106,8 @@ npm run package:all:docker
 Build artifacts are placed in the `release/` directory.
 
 ## Development
+
+For detailed development history, architecture decisions, common issues, and lessons learned, see [CLAUDE.md](CLAUDE.md).
 
 ### Scripts
 
