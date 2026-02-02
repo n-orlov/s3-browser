@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.18.5",
+  "version": "0.18.6",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
@@ -49,14 +49,17 @@
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64",
+            "x64"
           ]
         }
       ],
       "category": "public.app-category.developer-tools",
       "darkModeSupport": true,
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "dmg": {
       "title": "S3 Browser - Drag to Applications, then run: xattr -cr /Applications/S3\\ Browser.app",
