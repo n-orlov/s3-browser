@@ -674,6 +674,104 @@ export async function deleteFiles(
   };
 }
 
+export interface DeletePrefixResult {
+  success: boolean;
+  deletedCount: number;
+  failedCount: number;
+  error?: string;
+}
+
+/**
+ * Deletes all objects under a prefix (folder) in S3
+ * This recursively lists and deletes all objects with the given prefix
+ * @param profileName - The AWS profile name to use
+ * @param bucket - The S3 bucket name
+ * @param prefix - The prefix (folder) to delete
+ * @param onProgress - Optional callback for progress updates
+ * @param abortSignal - Optional signal to abort the operation
+ */
+export async function deletePrefix(
+  profileName: string,
+  bucket: string,
+  prefix: string,
+  onProgress?: (deleted: number, total: number) => void,
+  abortSignal?: AbortSignal
+): Promise<DeletePrefixResult> {
+  try {
+    // First, list all objects under this prefix (no delimiter to get all nested objects)
+    const allObjects: S3Object[] = [];
+    let continuationToken: string | undefined;
+
+    // List all objects recursively
+    do {
+      if (abortSignal?.aborted) {
+        return { success: false, deletedCount: 0, failedCount: 0, error: 'Operation aborted' };
+      }
+
+      const result = await listObjects(profileName, {
+        bucket,
+        prefix,
+        // No delimiter - we want all nested objects
+        maxKeys: MAX_PAGE_SIZE,
+        continuationToken,
+      });
+
+      allObjects.push(...result.objects);
+      // Also include the prefixes as potential empty folder markers
+      allObjects.push(...result.prefixes);
+      continuationToken = result.continuationToken;
+    } while (continuationToken);
+
+    if (allObjects.length === 0) {
+      // No objects to delete, but the prefix marker itself might exist
+      // Try to delete the prefix key itself (e.g., "folder/")
+      const deleteResult = await deleteFile(profileName, bucket, prefix);
+      return {
+        success: deleteResult.success,
+        deletedCount: deleteResult.success ? 1 : 0,
+        failedCount: deleteResult.success ? 0 : 1,
+        error: deleteResult.error,
+      };
+    }
+
+    // Delete all objects
+    let deletedCount = 0;
+    let failedCount = 0;
+    const total = allObjects.length;
+
+    for (const obj of allObjects) {
+      if (abortSignal?.aborted) {
+        return {
+          success: false,
+          deletedCount,
+          failedCount: failedCount + (total - deletedCount - failedCount),
+          error: 'Operation aborted',
+        };
+      }
+
+      const result = await deleteFile(profileName, bucket, obj.key);
+      if (result.success) {
+        deletedCount++;
+      } else {
+        failedCount++;
+      }
+      onProgress?.(deletedCount + failedCount, total);
+    }
+
+    // Also try to delete the prefix marker itself
+    await deleteFile(profileName, bucket, prefix);
+
+    return {
+      success: failedCount === 0,
+      deletedCount,
+      failedCount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, deletedCount: 0, failedCount: 0, error: message };
+  }
+}
+
 /**
  * Renames (copies then deletes) a file in S3
  * @param profileName - The AWS profile name to use

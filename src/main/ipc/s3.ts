@@ -15,6 +15,7 @@ import {
   downloadBinaryContent,
   deleteFile,
   deleteFiles,
+  deletePrefix,
   renameFile,
   copyFile,
   getFileSize,
@@ -27,6 +28,7 @@ import {
   type ListObjectsOptions,
   type FileOperationResult,
   type DeleteFilesResult,
+  type DeletePrefixResult,
   type ObjectMetadata,
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
@@ -331,6 +333,20 @@ export function registerS3Ipc(): void {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, results: [], deletedCount: 0, failedCount: keys.length };
+      }
+    }
+  );
+
+  // Delete a prefix (folder) and all its contents from S3
+  ipcMain.handle(
+    's3:delete-prefix',
+    async (_event, bucket: string, prefix: string): Promise<DeletePrefixResult> => {
+      try {
+        const profileName = getCurrentProfile();
+        return await deletePrefix(profileName, bucket, prefix);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { success: false, deletedCount: 0, failedCount: 0, error: message };
       }
     }
   );

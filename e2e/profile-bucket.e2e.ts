@@ -418,11 +418,11 @@ test.describe('Profile Selection and Bucket Listing', () => {
       await window.screenshot({ path: 'test-results/file-list-controls.png' });
     });
 
-    test('should navigate into folder when clicked', async ({ window }) => {
-      // Click on documents folder - folders navigate on single click
+    test('should navigate into folder when double-clicked', async ({ window }) => {
+      // Double-click on documents folder to navigate into it
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
 
       // Wait for navigation
       await window.waitForTimeout(1500);

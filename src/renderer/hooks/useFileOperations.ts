@@ -22,6 +22,13 @@ export interface DeleteFilesResult {
   failedCount: number;
 }
 
+export interface DeletePrefixResult {
+  success: boolean;
+  deletedCount: number;
+  failedCount: number;
+  error?: string;
+}
+
 export interface UseFileOperationsResult {
   operations: Operation[];
   isLoading: boolean;
@@ -29,6 +36,7 @@ export interface UseFileOperationsResult {
   uploadFiles: (bucket: string, prefix: string, filePaths?: string[]) => Promise<void>;
   deleteFile: (bucket: string, key: string) => Promise<boolean>;
   deleteFiles: (bucket: string, keys: string[]) => Promise<DeleteFilesResult>;
+  deletePrefix: (bucket: string, prefix: string) => Promise<DeletePrefixResult>;
   renameFile: (bucket: string, sourceKey: string, newName: string) => Promise<boolean>;
   dismissOperation: (id: string) => void;
   clearCompleted: () => void;
@@ -177,6 +185,29 @@ export function useFileOperations(options: UseFileOperationsOptions = {}): UseFi
     }
   }, []);
 
+  const deletePrefix = useCallback(async (bucket: string, prefix: string): Promise<DeletePrefixResult> => {
+    setIsLoading(true);
+
+    try {
+      const result = await window.electronAPI.s3.deletePrefix(bucket, prefix);
+      return {
+        success: result.success,
+        deletedCount: result.deletedCount,
+        failedCount: result.failedCount,
+        error: result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        deletedCount: 0,
+        failedCount: 0,
+        error: error instanceof Error ? error.message : 'Delete failed',
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const renameFile = useCallback(
     async (bucket: string, sourceKey: string, newName: string): Promise<boolean> => {
       setIsLoading(true);
@@ -200,6 +231,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}): UseFi
     uploadFiles,
     deleteFile,
     deleteFiles,
+    deletePrefix,
     renameFile,
     dismissOperation,
     clearCompleted,

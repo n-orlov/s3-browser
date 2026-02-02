@@ -101,6 +101,13 @@ export interface DeleteFilesResult {
   failedCount: number;
 }
 
+export interface DeletePrefixResult {
+  success: boolean;
+  deletedCount: number;
+  failedCount: number;
+  error?: string;
+}
+
 // Types for Object Metadata
 export interface ObjectMetadata {
   key: string;
@@ -199,6 +206,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('s3:delete-file', bucket, key),
     deleteFiles: (bucket: string, keys: string[]): Promise<DeleteFilesResult> =>
       ipcRenderer.invoke('s3:delete-files', bucket, keys),
+    deletePrefix: (bucket: string, prefix: string): Promise<DeletePrefixResult> =>
+      ipcRenderer.invoke('s3:delete-prefix', bucket, prefix),
     renameFile: (bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> =>
       ipcRenderer.invoke('s3:rename-file', bucket, sourceKey, newName),
     copyFile: (

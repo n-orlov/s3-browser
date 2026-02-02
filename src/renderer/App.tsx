@@ -52,6 +52,7 @@ function App(): React.ReactElement {
     uploadFiles,
     deleteFile,
     deleteFiles,
+    deletePrefix,
     renameFile,
     dismissOperation,
   } = useFileOperations({ onDownloadComplete: handleDownloadComplete });
@@ -186,11 +187,15 @@ function App(): React.ReactElement {
     downloadFile(selectedBucket, selectedFile.key);
   }, [selectedBucket, selectedFile, downloadFile]);
 
+  // Handler for double-click download from FileList
+  const handleDownloadFile = useCallback((file: S3Object) => {
+    if (!selectedBucket || file.isPrefix) return;
+    downloadFile(selectedBucket, file.key);
+  }, [selectedBucket, downloadFile]);
+
   const handleDelete = useCallback(() => {
-    // Allow delete if there are selected files (single or multiple)
+    // Allow delete if there are selected items (files or folders)
     if (selectedFiles.length === 0) return;
-    // Don't allow deleting folders in multiselect
-    if (selectedFiles.some(f => f.isPrefix)) return;
     setIsDeleteOpen(true);
   }, [selectedFiles]);
 
@@ -198,41 +203,59 @@ function App(): React.ReactElement {
     if (!selectedBucket || selectedFiles.length === 0) return;
     setIsDeleteOpen(false);
 
-    if (selectedFiles.length === 1) {
-      // Single file delete
-      const success = await deleteFile(selectedBucket, selectedFiles[0].key);
-      if (success) {
-        setSelectedFile(null);
-        setSelectedFiles([]);
-        window.dispatchEvent(new Event('s3-refresh-files'));
-      }
-    } else {
-      // Batch delete
-      const keys = selectedFiles.map(f => f.key);
-      const result = await deleteFiles(selectedBucket, keys);
-      if (result.deletedCount > 0) {
-        setSelectedFile(null);
-        setSelectedFiles([]);
-        window.dispatchEvent(new Event('s3-refresh-files'));
-      }
-      // Show toast with results
-      if (result.failedCount > 0) {
-        addToast({
-          type: 'warning',
-          title: 'Partial Delete',
-          message: `Deleted ${result.deletedCount} files, ${result.failedCount} failed`,
-          duration: 5000,
-        });
-      } else {
-        addToast({
-          type: 'success',
-          title: 'Delete Complete',
-          message: `Deleted ${result.deletedCount} files`,
-          duration: 3000,
-        });
-      }
+    // Separate folders and files
+    const folders = selectedFiles.filter(f => f.isPrefix);
+    const files = selectedFiles.filter(f => !f.isPrefix);
+
+    let totalDeleted = 0;
+    let totalFailed = 0;
+
+    // Delete folders first (they contain nested objects)
+    for (const folder of folders) {
+      const result = await deletePrefix(selectedBucket, folder.key);
+      totalDeleted += result.deletedCount;
+      totalFailed += result.failedCount;
     }
-  }, [selectedBucket, selectedFiles, deleteFile, deleteFiles, addToast]);
+
+    // Delete files
+    if (files.length === 1) {
+      const success = await deleteFile(selectedBucket, files[0].key);
+      if (success) {
+        totalDeleted++;
+      } else {
+        totalFailed++;
+      }
+    } else if (files.length > 1) {
+      const keys = files.map(f => f.key);
+      const result = await deleteFiles(selectedBucket, keys);
+      totalDeleted += result.deletedCount;
+      totalFailed += result.failedCount;
+    }
+
+    // Clear selection and refresh
+    if (totalDeleted > 0) {
+      setSelectedFile(null);
+      setSelectedFiles([]);
+      window.dispatchEvent(new Event('s3-refresh-files'));
+    }
+
+    // Show toast with results
+    if (totalFailed > 0) {
+      addToast({
+        type: 'warning',
+        title: 'Partial Delete',
+        message: `Deleted ${totalDeleted} item(s), ${totalFailed} failed`,
+        duration: 5000,
+      });
+    } else if (totalDeleted > 0) {
+      addToast({
+        type: 'success',
+        title: 'Delete Complete',
+        message: `Deleted ${totalDeleted} item(s)`,
+        duration: 3000,
+      });
+    }
+  }, [selectedBucket, selectedFiles, deleteFile, deleteFiles, deletePrefix, addToast]);
 
   const handleRename = useCallback(() => {
     if (!selectedFile || selectedFile.isPrefix) return;
@@ -479,7 +502,7 @@ function App(): React.ReactElement {
             selectedBucket={selectedBucket}
             currentPrefix={currentPrefix}
             selectedFile={selectedFile}
-            selectedCount={selectedFiles.filter(f => !f.isPrefix).length}
+            selectedCount={selectedFiles.length}
             onUpload={handleUpload}
             onDownload={handleDownload}
             onDelete={handleDelete}
@@ -511,6 +534,7 @@ function App(): React.ReactElement {
               pendingFileSelection={pendingFileSelection}
               onPendingFileSelectionHandled={handlePendingFileSelectionHandled}
               onItemCountChange={handleItemCountChange}
+              onDownloadFile={handleDownloadFile}
             />
           </div>
           <StatusBar
@@ -534,7 +558,11 @@ function App(): React.ReactElement {
       />
       <DeleteConfirmDialog
         isOpen={isDeleteOpen}
-        fileNames={selectedFiles.map(f => f.key.split('/').pop() || '')}
+        fileNames={selectedFiles.map(f => {
+          const name = f.key.split('/').filter(Boolean).pop() || '';
+          return f.isPrefix ? `${name}/` : name;
+        })}
+        hasFolders={selectedFiles.some(f => f.isPrefix)}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
       />

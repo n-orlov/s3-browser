@@ -121,7 +121,36 @@ describe('FileList', () => {
   });
 
   describe('navigation', () => {
-    it('navigates into folder on click', async () => {
+    it('selects folder on single click', async () => {
+      const onNavigate = vi.fn();
+      const onSelectFile = vi.fn();
+      const onSelectFiles = vi.fn();
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: [],
+          prefixes: [{ key: 'subfolder/', size: 0, isPrefix: true }],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: '',
+          keyCount: 1,
+        },
+      });
+
+      render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', onNavigate, onSelectFile, onSelectFiles })} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('subfolder')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('subfolder'));
+      // Single click should select, not navigate
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ key: 'subfolder/', isPrefix: true }));
+      expect(onSelectFiles).toHaveBeenCalledWith([expect.objectContaining({ key: 'subfolder/', isPrefix: true })]);
+    });
+
+    it('navigates into folder on double click', async () => {
       const onNavigate = vi.fn();
       mockElectronAPI.s3.listObjects.mockResolvedValue({
         success: true,
@@ -141,7 +170,7 @@ describe('FileList', () => {
         expect(screen.getByText('subfolder')).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText('subfolder'));
+      fireEvent.doubleClick(screen.getByText('subfolder'));
       expect(onNavigate).toHaveBeenCalledWith('subfolder/');
     });
 

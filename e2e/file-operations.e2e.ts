@@ -38,9 +38,9 @@ test.describe('File Operations', () => {
     });
 
     test('should have drop zone element in file list', async ({ window }) => {
-      // Navigate into documents folder to have a more isolated test area
+      // Navigate into documents folder to have a more isolated test area (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Get the file list container - verify it exists and has correct structure
@@ -64,9 +64,9 @@ test.describe('File Operations', () => {
       await mainBucket.click();
       await window.waitForTimeout(2000);
 
-      // Navigate into documents folder
+      // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
     });
 
@@ -182,9 +182,9 @@ test.describe('File Operations', () => {
       await mainBucket.click();
       await window.waitForTimeout(2000);
 
-      // Navigate into documents folder
+      // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
     });
 
@@ -400,9 +400,9 @@ test.describe('File Operations', () => {
       await mainBucket.click();
       await window.waitForTimeout(2000);
 
-      // Navigate into documents folder
+      // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
     });
 
@@ -573,9 +573,9 @@ test.describe('File Operations', () => {
       await mainBucket.click();
       await window.waitForTimeout(2000);
 
-      // Navigate into documents folder
+      // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
     });
 

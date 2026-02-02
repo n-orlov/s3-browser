@@ -43,6 +43,8 @@ export interface FileListProps {
   onPendingFileSelectionHandled?: () => void;
   /** Callback to report item count changes for status bar */
   onItemCountChange?: (count: number, allLoaded: boolean, loading: boolean) => void;
+  /** Callback for double-click on a file (triggers download) */
+  onDownloadFile?: (file: S3Object) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -117,6 +119,7 @@ function FileList({
   pendingFileSelection,
   onPendingFileSelectionHandled,
   onItemCountChange,
+  onDownloadFile,
 }: FileListProps): React.ReactElement {
   const [items, setItems] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
@@ -317,26 +320,15 @@ function FileList({
   );
 
   const handleItemClick = (item: S3Object, index: number, event: React.MouseEvent) => {
-    if (item.isPrefix) {
-      // Navigate into folder on single click (unless modifier keys are held)
-      if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        onNavigate(item.key);
-        onSelectFile(null);
-        onSelectFiles([]);
-        lastClickedIndexRef.current = -1;
-      }
-      return;
-    }
-
-    // Handle multiselect with modifier keys
+    // Handle multiselect with modifier keys - works for both files and folders
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
 
     if (event.shiftKey && lastClickedIndexRef.current >= 0) {
-      // Shift+click: range selection
+      // Shift+click: range selection (includes both files and folders)
       const start = Math.min(lastClickedIndexRef.current, index);
       const end = Math.max(lastClickedIndexRef.current, index);
-      const rangeItems = displayedItems.slice(start, end + 1).filter(i => !i.isPrefix);
+      const rangeItems = displayedItems.slice(start, end + 1);
 
       if (isCtrlOrCmd) {
         // Shift+Ctrl/Cmd: add range to existing selection
@@ -367,7 +359,7 @@ function FileList({
       }
       lastClickedIndexRef.current = index;
     } else {
-      // Single click: select only this item
+      // Single click: select only this item (same behavior for files and folders)
       onSelectFile(item);
       onSelectFiles([item]);
       lastClickedIndexRef.current = index;
@@ -376,9 +368,15 @@ function FileList({
 
   const handleItemDoubleClick = (item: S3Object) => {
     if (item.isPrefix) {
+      // Double-click on folder: navigate into it
       onNavigate(item.key);
+      onSelectFile(null);
+      onSelectFiles([]);
+      lastClickedIndexRef.current = -1;
+    } else {
+      // Double-click on file: trigger download
+      onDownloadFile?.(item);
     }
-    // Double-click on file could open preview/editor (future feature)
   };
 
   const handleGoUp = () => {
@@ -644,10 +642,14 @@ function FileList({
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         if (item.isPrefix) {
+                          // Enter on folder: navigate into it
                           onNavigate(item.key);
+                          onSelectFile(null);
+                          onSelectFiles([]);
+                          lastClickedIndexRef.current = -1;
                         } else {
-                          onSelectFile(item);
-                          onSelectFiles([item]);
+                          // Enter on file: trigger download
+                          onDownloadFile?.(item);
                         }
                       }
                     }}

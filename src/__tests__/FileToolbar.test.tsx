@@ -503,7 +503,7 @@ describe('FileToolbar', () => {
         />
       );
 
-      const deleteButton = getButtonByTitle(/Delete 3 files/);
+      const deleteButton = getButtonByTitle(/Delete 3 items/);
       expect(deleteButton).not.toBeDisabled();
     });
 
