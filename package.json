@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.18.3",
+  "version": "0.18.4",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
@@ -69,11 +69,17 @@
           "y": 220,
           "type": "link",
           "path": "/Applications"
+        },
+        {
+          "x": 270,
+          "y": 320,
+          "type": "file",
+          "path": "build/Install.command"
         }
       ],
       "window": {
         "width": 540,
-        "height": 380
+        "height": 420
       }
     },
     "linux": {
