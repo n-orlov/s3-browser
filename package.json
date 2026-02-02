@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
@@ -59,6 +59,7 @@
       "gatekeeperAssess": false
     },
     "dmg": {
+      "title": "S3 Browser - Drag to Applications, then run: xattr -cr /Applications/S3\\ Browser.app",
       "contents": [
         {
           "x": 130,
@@ -69,17 +70,11 @@
           "y": 220,
           "type": "link",
           "path": "/Applications"
-        },
-        {
-          "x": 270,
-          "y": 320,
-          "type": "file",
-          "path": "build/Install.command"
         }
       ],
       "window": {
         "width": 540,
-        "height": 420
+        "height": 380
       }
     },
     "linux": {
