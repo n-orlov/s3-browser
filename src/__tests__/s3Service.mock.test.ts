@@ -70,6 +70,7 @@ import {
   uploadContent,
   deleteFile,
   deleteFiles,
+  deletePrefix,
   renameFile,
   copyFile,
   getFileSize,
@@ -548,6 +549,283 @@ describe('S3 Service Mock Integration Tests', () => {
       expect(result.deletedCount).toBe(2);
       expect(result.failedCount).toBe(1);
       expect(result.results[1].success).toBe(false);
+    });
+  });
+
+  describe('Delete Prefix Operations', () => {
+    it('should delete a prefix with multiple nested objects', async () => {
+      // listObjects returns nested objects
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [
+          { Key: 'folder/file1.txt', Size: 100 },
+          { Key: 'folder/file2.txt', Size: 200 },
+          { Key: 'folder/subfolder/file3.txt', Size: 300 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 3,
+      });
+      // All deletes succeed
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(3);
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should delete an empty prefix (just the marker)', async () => {
+      // listObjects returns empty
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'empty-folder/' }).resolves({
+        Contents: [],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 0,
+      });
+      // Delete of prefix marker succeeds
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'empty-folder/');
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(1);
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should handle partial failure when deleting objects', async () => {
+      // listObjects returns two objects
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [
+          { Key: 'folder/file1.txt', Size: 100 },
+          { Key: 'folder/file2.txt', Size: 200 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 2,
+      });
+
+      // First delete succeeds, second fails
+      let deleteCount = 0;
+      s3Mock.on(DeleteObjectCommand).callsFake((input) => {
+        deleteCount++;
+        if (input.Key === 'folder/file2.txt') {
+          throw new Error('Access denied');
+        }
+        return {};
+      });
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      expect(result.success).toBe(false);
+      expect(result.deletedCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+    });
+
+    it('should handle abort signal before listing objects', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await deletePrefix(
+        'test-profile',
+        'test-bucket',
+        'folder/',
+        undefined,
+        controller.signal
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Operation aborted');
+      expect(result.deletedCount).toBe(0);
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should handle abort signal during object deletion', async () => {
+      // listObjects returns objects
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [
+          { Key: 'folder/file1.txt', Size: 100 },
+          { Key: 'folder/file2.txt', Size: 200 },
+          { Key: 'folder/file3.txt', Size: 300 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 3,
+      });
+
+      const controller = new AbortController();
+      let deleteCount = 0;
+
+      // Abort after first deletion
+      s3Mock.on(DeleteObjectCommand).callsFake(() => {
+        deleteCount++;
+        if (deleteCount === 1) {
+          controller.abort();
+        }
+        return {};
+      });
+
+      const result = await deletePrefix(
+        'test-profile',
+        'test-bucket',
+        'folder/',
+        undefined,
+        controller.signal
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Operation aborted');
+      expect(result.deletedCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should call progress callback during deletion', async () => {
+      // listObjects returns objects
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [
+          { Key: 'folder/file1.txt', Size: 100 },
+          { Key: 'folder/file2.txt', Size: 200 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 2,
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const progressCalls: Array<{ deleted: number; total: number }> = [];
+      await deletePrefix('test-profile', 'test-bucket', 'folder/', (deleted, total) => {
+        progressCalls.push({ deleted, total });
+      });
+
+      expect(progressCalls).toHaveLength(2);
+      expect(progressCalls[0]).toEqual({ deleted: 1, total: 2 });
+      expect(progressCalls[1]).toEqual({ deleted: 2, total: 2 });
+    });
+
+    it('should handle pagination when listing objects', async () => {
+      let listCallCount = 0;
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).callsFake(() => {
+        listCallCount++;
+        if (listCallCount === 1) {
+          return {
+            Contents: [{ Key: 'folder/file1.txt', Size: 100 }],
+            CommonPrefixes: [],
+            IsTruncated: true,
+            NextContinuationToken: 'page2token',
+            KeyCount: 1,
+          };
+        } else {
+          return {
+            Contents: [{ Key: 'folder/file2.txt', Size: 200 }],
+            CommonPrefixes: [],
+            IsTruncated: false,
+            KeyCount: 1,
+          };
+        }
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should include common prefixes (subfolders) in deletion', async () => {
+      // listObjects returns objects and common prefixes
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [{ Key: 'folder/file1.txt', Size: 100 }],
+        CommonPrefixes: [{ Prefix: 'folder/subfolder/' }],
+        IsTruncated: false,
+        KeyCount: 1,
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(2); // file + subfolder prefix
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should handle error when deleting empty prefix marker fails', async () => {
+      // listObjects returns empty
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'empty-folder/' }).resolves({
+        Contents: [],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 0,
+      });
+      // Delete of prefix marker fails
+      s3Mock.on(DeleteObjectCommand).rejects(new Error('Access denied'));
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'empty-folder/');
+
+      expect(result.success).toBe(false);
+      expect(result.deletedCount).toBe(0);
+      expect(result.failedCount).toBe(1);
+    });
+
+    it('should handle unexpected error during listing', async () => {
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).rejects(new Error('Network error'));
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      expect(result.success).toBe(false);
+      expect(result.deletedCount).toBe(0);
+      expect(result.failedCount).toBe(0);
+      expect(result.error).toBe('Network error');
+    });
+
+    it('should handle deeply nested folder structure', async () => {
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'a/' }).resolves({
+        Contents: [
+          { Key: 'a/b/c/d/file1.txt', Size: 100 },
+          { Key: 'a/b/c/file2.txt', Size: 200 },
+          { Key: 'a/b/file3.txt', Size: 300 },
+          { Key: 'a/file4.txt', Size: 400 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 4,
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'a/');
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(4);
+      expect(result.failedCount).toBe(0);
+    });
+
+    it('should continue deletion after individual file failures', async () => {
+      s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
+        Contents: [
+          { Key: 'folder/file1.txt', Size: 100 },
+          { Key: 'folder/file2.txt', Size: 200 },
+          { Key: 'folder/file3.txt', Size: 300 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 3,
+      });
+
+      let deleteCount = 0;
+      s3Mock.on(DeleteObjectCommand).callsFake((input) => {
+        deleteCount++;
+        // Fail on second file only
+        if (input.Key === 'folder/file2.txt') {
+          throw new Error('Failed');
+        }
+        return {};
+      });
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      // Should have attempted all 3 files plus the prefix marker
+      expect(result.deletedCount).toBe(2); // file1 and file3 succeed
+      expect(result.failedCount).toBe(1); // file2 fails
+      expect(result.success).toBe(false);
     });
   });
 

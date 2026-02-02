@@ -9,6 +9,7 @@ const mockElectronAPI = {
     uploadFiles: vi.fn(),
     deleteFile: vi.fn(),
     deleteFiles: vi.fn(),
+    deletePrefix: vi.fn(),
     renameFile: vi.fn(),
     showOpenDialog: vi.fn(),
   },
@@ -333,6 +334,139 @@ describe('useFileOperations', () => {
       });
 
       expect(result.current.isLoading).toBe(false);
+    });
+  });
+
+  describe('deletePrefix', () => {
+    it('should return success result when prefix deletion succeeds', async () => {
+      mockElectronAPI.s3.deletePrefix.mockResolvedValue({
+        success: true,
+        deletedCount: 5,
+        failedCount: 0,
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number; error?: string };
+      await act(async () => {
+        deleteResult = await result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(deleteResult!.success).toBe(true);
+      expect(deleteResult!.deletedCount).toBe(5);
+      expect(deleteResult!.failedCount).toBe(0);
+      expect(deleteResult!.error).toBeUndefined();
+    });
+
+    it('should return partial result when some objects fail to delete', async () => {
+      mockElectronAPI.s3.deletePrefix.mockResolvedValue({
+        success: false,
+        deletedCount: 3,
+        failedCount: 2,
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number; error?: string };
+      await act(async () => {
+        deleteResult = await result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.deletedCount).toBe(3);
+      expect(deleteResult!.failedCount).toBe(2);
+    });
+
+    it('should return error message when operation fails', async () => {
+      mockElectronAPI.s3.deletePrefix.mockResolvedValue({
+        success: false,
+        deletedCount: 0,
+        failedCount: 0,
+        error: 'Operation aborted',
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number; error?: string };
+      await act(async () => {
+        deleteResult = await result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.error).toBe('Operation aborted');
+    });
+
+    it('should handle exception gracefully', async () => {
+      mockElectronAPI.s3.deletePrefix.mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number; error?: string };
+      await act(async () => {
+        deleteResult = await result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.deletedCount).toBe(0);
+      expect(deleteResult!.failedCount).toBe(0);
+      expect(deleteResult!.error).toBe('Network error');
+    });
+
+    it('should handle non-Error exception gracefully', async () => {
+      mockElectronAPI.s3.deletePrefix.mockRejectedValue('Unknown error');
+
+      const { result } = renderHook(() => useFileOperations());
+
+      let deleteResult: { success: boolean; deletedCount: number; failedCount: number; error?: string };
+      await act(async () => {
+        deleteResult = await result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(deleteResult!.success).toBe(false);
+      expect(deleteResult!.error).toBe('Delete failed');
+    });
+
+    it('should set isLoading during prefix delete operation', async () => {
+      let resolvePromise: (value: any) => void;
+      mockElectronAPI.s3.deletePrefix.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        })
+      );
+
+      const { result } = renderHook(() => useFileOperations());
+
+      expect(result.current.isLoading).toBe(false);
+
+      let deletePromise: Promise<{ success: boolean; deletedCount: number; failedCount: number; error?: string }>;
+      act(() => {
+        deletePromise = result.current.deletePrefix('test-bucket', 'folder/');
+      });
+
+      expect(result.current.isLoading).toBe(true);
+
+      await act(async () => {
+        resolvePromise!({ success: true, deletedCount: 3, failedCount: 0 });
+        await deletePromise;
+      });
+
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('should call electronAPI with correct bucket and prefix', async () => {
+      mockElectronAPI.s3.deletePrefix.mockResolvedValue({
+        success: true,
+        deletedCount: 1,
+        failedCount: 0,
+      });
+
+      const { result } = renderHook(() => useFileOperations());
+
+      await act(async () => {
+        await result.current.deletePrefix('my-bucket', 'my/nested/folder/');
+      });
+
+      expect(mockElectronAPI.s3.deletePrefix).toHaveBeenCalledWith('my-bucket', 'my/nested/folder/');
     });
   });
 

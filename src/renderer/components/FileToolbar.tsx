@@ -274,7 +274,7 @@ function FileToolbar({
   const canViewJson = hasSelection && !hasMultipleSelection && isJsonFile(selectedFile!.key);
   const canViewYaml = hasSelection && !hasMultipleSelection && isYamlFile(selectedFile!.key);
   const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
-  // Delete is allowed for any number of files selected (but not folders)
+  // Delete is allowed for any selected items (files or folders)
   const canDelete = selectedCount > 0;
   // Properties can be shown for any single selected item (file or folder)
   const canShowProperties = hasAnySelection && !hasMultipleSelection;
@@ -356,7 +356,7 @@ function FileToolbar({
       />
       <ToolbarButton
         icon={Icons.delete}
-        title={selectedCount > 1 ? `Delete ${selectedCount} files` : 'Delete selected file'}
+        title={selectedCount > 1 ? `Delete ${selectedCount} items` : (hasFolderSelection ? 'Delete selected folder' : 'Delete selected file')}
         onClick={onDelete}
         disabled={disabled || !canDelete}
         className="toolbar-btn-danger"
