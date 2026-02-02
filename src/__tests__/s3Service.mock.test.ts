@@ -798,6 +798,98 @@ describe('S3 Service Mock Integration Tests', () => {
       expect(result.failedCount).toBe(0);
     });
 
+    it('should use empty delimiter to list all nested objects recursively', async () => {
+      // Track the delimiter used in ListObjectsV2Command
+      let capturedDelimiter: string | undefined = 'NOT_SET';
+      s3Mock.on(ListObjectsV2Command).callsFake((input) => {
+        capturedDelimiter = input.Delimiter;
+        return {
+          Contents: [
+            { Key: 'folder/level1/level2/level3/deep-file.txt', Size: 100 },
+            { Key: 'folder/level1/level2/mid-file.txt', Size: 200 },
+            { Key: 'folder/level1/shallow-file.txt', Size: 300 },
+          ],
+          CommonPrefixes: [],
+          IsTruncated: false,
+          KeyCount: 3,
+        };
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'folder/');
+
+      // Verify that no delimiter was used (undefined means no grouping by prefix, returns all nested objects)
+      // The listObjects function converts empty string to undefined via `delimiter || undefined`
+      expect(capturedDelimiter).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(3);
+    });
+
+    it('should delete all objects across multiple pages when deeply nested', async () => {
+      // Simulate pagination with deeply nested objects
+      let listCallCount = 0;
+      s3Mock.on(ListObjectsV2Command).callsFake((input) => {
+        listCallCount++;
+        // Verify delimiter is undefined for recursive listing (empty string is converted to undefined)
+        expect(input.Delimiter).toBeUndefined();
+
+        if (listCallCount === 1) {
+          return {
+            Contents: [
+              { Key: 'parent/child1/grandchild1/file1.txt', Size: 100 },
+              { Key: 'parent/child1/grandchild1/file2.txt', Size: 200 },
+            ],
+            CommonPrefixes: [],
+            IsTruncated: true,
+            NextContinuationToken: 'page2',
+            KeyCount: 2,
+          };
+        } else if (listCallCount === 2) {
+          return {
+            Contents: [
+              { Key: 'parent/child1/grandchild2/file3.txt', Size: 300 },
+              { Key: 'parent/child2/file4.txt', Size: 400 },
+            ],
+            CommonPrefixes: [],
+            IsTruncated: true,
+            NextContinuationToken: 'page3',
+            KeyCount: 2,
+          };
+        } else {
+          return {
+            Contents: [
+              { Key: 'parent/child2/grandchild3/file5.txt', Size: 500 },
+              { Key: 'parent/file6.txt', Size: 600 },
+            ],
+            CommonPrefixes: [],
+            IsTruncated: false,
+            KeyCount: 2,
+          };
+        }
+      });
+
+      const deletedKeys: string[] = [];
+      s3Mock.on(DeleteObjectCommand).callsFake((input) => {
+        deletedKeys.push(input.Key as string);
+        return {};
+      });
+
+      const result = await deletePrefix('test-profile', 'test-bucket', 'parent/');
+
+      expect(listCallCount).toBe(3); // Should have paginated through 3 pages
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(6);
+      expect(result.failedCount).toBe(0);
+
+      // Verify all nested files were deleted
+      expect(deletedKeys).toContain('parent/child1/grandchild1/file1.txt');
+      expect(deletedKeys).toContain('parent/child1/grandchild1/file2.txt');
+      expect(deletedKeys).toContain('parent/child1/grandchild2/file3.txt');
+      expect(deletedKeys).toContain('parent/child2/file4.txt');
+      expect(deletedKeys).toContain('parent/child2/grandchild3/file5.txt');
+      expect(deletedKeys).toContain('parent/file6.txt');
+    });
+
     it('should continue deletion after individual file failures', async () => {
       s3Mock.on(ListObjectsV2Command, { Prefix: 'folder/' }).resolves({
         Contents: [

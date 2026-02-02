@@ -711,7 +711,7 @@ export async function deletePrefix(
       const result = await listObjects(profileName, {
         bucket,
         prefix,
-        // No delimiter - we want all nested objects
+        delimiter: '', // No delimiter - we want ALL nested objects recursively
         maxKeys: MAX_PAGE_SIZE,
         continuationToken,
       });

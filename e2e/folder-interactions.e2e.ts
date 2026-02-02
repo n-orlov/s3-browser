@@ -541,6 +541,105 @@ test.describe('Folder Interactions', () => {
       }
     });
 
+    test('should recursively delete folder with deeply nested subfolders', async ({ window }) => {
+      // Create a deeply nested folder structure to test recursive deletion
+      const s3Client = getLocalStackS3Client();
+      const timestamp = Date.now();
+      const rootFolderName = `deep-nested-${timestamp}`;
+
+      // Create folder structure: rootFolder/level1/level2/level3/ with files at each level
+      const keysToCreate = [
+        `${rootFolderName}/`,                                    // Root folder marker
+        `${rootFolderName}/root-file.txt`,                      // File at root
+        `${rootFolderName}/level1/`,                            // Level 1 folder marker
+        `${rootFolderName}/level1/level1-file.txt`,             // File at level 1
+        `${rootFolderName}/level1/level2/`,                     // Level 2 folder marker
+        `${rootFolderName}/level1/level2/level2-file.txt`,      // File at level 2
+        `${rootFolderName}/level1/level2/level3/`,              // Level 3 folder marker
+        `${rootFolderName}/level1/level2/level3/level3-file.txt`, // File at level 3
+        `${rootFolderName}/level1/sibling/`,                    // Sibling folder at level 1
+        `${rootFolderName}/level1/sibling/sibling-file.txt`,    // File in sibling
+      ];
+
+      // Create all objects in S3
+      for (const key of keysToCreate) {
+        await s3Client.send(new PutObjectCommand({
+          Bucket: TEST_BUCKETS.main,
+          Key: key,
+          Body: key.endsWith('/') ? '' : `Content of ${key}`,
+          ContentType: key.endsWith('/') ? 'application/x-directory' : 'text/plain',
+        }));
+      }
+
+      // Also create a file at root level to enable delete button
+      const enablerFile = `enabler-file-${timestamp}.txt`;
+      await s3Client.send(new PutObjectCommand({
+        Bucket: TEST_BUCKETS.main,
+        Key: enablerFile,
+        Body: 'Enabler file',
+        ContentType: 'text/plain',
+      }));
+
+      // Refresh to see the new items
+      const refreshButton = window.locator('button[title="Refresh file list"]');
+      await refreshButton.click();
+      await window.waitForTimeout(2000);
+
+      // Select the enabler file first (enables delete button)
+      const enablerFileRow = window.locator('.file-row.file').filter({ hasText: enablerFile.replace('.txt', '') });
+      await expect(enablerFileRow).toBeVisible({ timeout: 5000 });
+      await enablerFileRow.click();
+      await window.waitForTimeout(300);
+
+      // Ctrl+click to add the deep nested folder to selection
+      const deepFolder = window.locator('.file-row.folder').filter({ hasText: rootFolderName });
+      await expect(deepFolder).toBeVisible({ timeout: 5000 });
+      await deepFolder.click({ modifiers: ['Control'] });
+      await window.waitForTimeout(300);
+
+      // Click delete button
+      const deleteButton = window.locator('button[title*="Delete"]');
+      await expect(deleteButton).toBeEnabled();
+      await deleteButton.click();
+
+      // Wait for confirmation dialog
+      const dialog = window.locator('.dialog, .modal, [role="dialog"]');
+      await expect(dialog).toBeVisible({ timeout: 5000 });
+
+      // Click confirm/delete button
+      const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
+      await confirmButton.click();
+
+      // Wait for operation to complete
+      await window.waitForTimeout(5000);
+
+      // Both folder and enabler file should no longer be visible
+      await expect(deepFolder).not.toBeVisible({ timeout: 5000 });
+      await expect(enablerFileRow).not.toBeVisible({ timeout: 5000 });
+
+      // Screenshot showing items deleted
+      await window.screenshot({ path: 'test-results/delete-deeply-nested-folder-complete.png' });
+
+      // Verify ALL nested objects are actually deleted in S3
+      const listResult = await s3Client.send(new ListObjectsV2Command({
+        Bucket: TEST_BUCKETS.main,
+        Prefix: `${rootFolderName}/`,
+      }));
+
+      // Should be completely empty - all nested levels should be deleted
+      expect(listResult.Contents?.length ?? 0).toBe(0);
+
+      // Clean up enabler file if it wasn't deleted
+      try {
+        await s3Client.send(new DeleteObjectCommand({
+          Bucket: TEST_BUCKETS.main,
+          Key: enablerFile,
+        }));
+      } catch {
+        // Ignore - may already be deleted
+      }
+    });
+
     test('should cancel folder delete when clicking cancel', async ({ window }) => {
       // Create a temp file to enable delete button
       const s3Client = getLocalStackS3Client();
