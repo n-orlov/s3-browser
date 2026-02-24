@@ -534,20 +534,20 @@ test.describe('File Navigation and Selection', () => {
       await window.waitForTimeout(1500);
     });
 
-    test('should select file with Enter key', async ({ window }) => {
+    test('should trigger download on Enter key for file', async ({ window }) => {
       // Focus on a file row first
       const file1 = window.locator('.file-row.file').filter({ hasText: 'file1.txt' });
       await file1.focus();
 
-      // Press Enter to select
+      // Press Enter to trigger download (Enter on file = download, Enter on folder = navigate)
       await file1.press('Enter');
-      await window.waitForTimeout(500);
 
-      // File should be selected
-      await expect(file1).toHaveClass(/selected/);
+      // Wait for download toast to appear
+      const toast = window.locator('.toast').filter({ hasText: /download/i });
+      await expect(toast).toBeVisible({ timeout: 10000 });
 
-      // Screenshot showing Enter key selection
-      await window.screenshot({ path: 'test-results/keyboard-enter-select.png' });
+      // Screenshot showing Enter key download
+      await window.screenshot({ path: 'test-results/keyboard-enter-download.png' });
     });
   });
 

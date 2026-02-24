@@ -518,10 +518,9 @@ test.describe('Folder Interactions', () => {
       await documentsFolder.click({ modifiers: ['Control'] });
       await window.waitForTimeout(300);
 
-      // Delete button should show badge with count (only counts files, not folders)
-      // The badge shows count of files in the selection
+      // Delete button should show badge with count of all selected items (files + folders)
       const badge = window.locator('.toolbar-badge');
-      await expect(badge).toHaveText('2');
+      await expect(badge).toHaveText('3');
 
       // Screenshot showing badge
       await window.screenshot({ path: 'test-results/delete-multiselect-badge.png' });
