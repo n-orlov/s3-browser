@@ -152,6 +152,16 @@ describe('ToastContainer', () => {
     // Should still have dismiss button
     expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
   });
+
+  it('renders dismiss button with × character (not raw unicode escape)', () => {
+    const toast = createTestToast();
+    render(<ToastContainer toasts={[toast]} onDismiss={mockOnDismiss} />);
+
+    const dismissButton = screen.getByRole('button', { name: /dismiss/i });
+    // Should render the actual × character, not the literal string \u00D7
+    expect(dismissButton.textContent).toBe('\u00D7');
+    expect(dismissButton.textContent).not.toContain('\\u');
+  });
 });
 
 describe('useToasts hook', () => {
