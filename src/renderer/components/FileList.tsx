@@ -191,8 +191,16 @@ function FileList({
         if (reset) {
           setItems(combined);
         } else {
-          // For pagination, only new objects are appended (prefixes come in first page)
-          setItems((prev) => [...prev, ...data.objects]);
+          // For pagination, append both new prefixes and objects.
+          // S3 paginates over the underlying key space, so CommonPrefixes (folders)
+          // can appear on any page. Deduplicate since a prefix group can span pages.
+          setItems((prev) => {
+            const existingKeys = new Set(prev.map((item) => item.key));
+            const newItems = [...data.prefixes, ...data.objects].filter(
+              (item) => !existingKeys.has(item.key)
+            );
+            return [...prev, ...newItems];
+          });
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to list objects');

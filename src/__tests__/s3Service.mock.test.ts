@@ -921,6 +921,57 @@ describe('S3 Service Mock Integration Tests', () => {
     });
   });
 
+  describe('Delete Prefix with Special Characters', () => {
+    it('should delete prefix containing equals sign (user_id=unknown/)', async () => {
+      const specialPrefix = 'usage-audit/user_id=unknown/';
+
+      s3Mock.on(ListObjectsV2Command, { Prefix: specialPrefix }).resolves({
+        Contents: [
+          { Key: 'usage-audit/user_id=unknown/data.json', Size: 100 },
+          { Key: 'usage-audit/user_id=unknown/log.txt', Size: 200 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 2,
+      });
+
+      const deletedKeys: string[] = [];
+      s3Mock.on(DeleteObjectCommand).callsFake((input) => {
+        deletedKeys.push(input.Key as string);
+        return {};
+      });
+
+      const result = await deletePrefix('test-profile', 'test-bucket', specialPrefix);
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+      expect(deletedKeys).toContain('usage-audit/user_id=unknown/data.json');
+      expect(deletedKeys).toContain('usage-audit/user_id=unknown/log.txt');
+      // Prefix marker itself should also be deleted
+      expect(deletedKeys).toContain(specialPrefix);
+    });
+
+    it('should delete prefix containing spaces and special chars', async () => {
+      const specialPrefix = 'data/my folder (2024)/';
+
+      s3Mock.on(ListObjectsV2Command, { Prefix: specialPrefix }).resolves({
+        Contents: [
+          { Key: 'data/my folder (2024)/file.txt', Size: 100 },
+        ],
+        CommonPrefixes: [],
+        IsTruncated: false,
+        KeyCount: 1,
+      });
+      s3Mock.on(DeleteObjectCommand).resolves({});
+
+      const result = await deletePrefix('test-profile', 'test-bucket', specialPrefix);
+
+      expect(result.success).toBe(true);
+      expect(result.deletedCount).toBe(1);
+    });
+  });
+
   describe('Rename and Copy Operations', () => {
     it('should rename file successfully', async () => {
       s3Mock.on(CopyObjectCommand).resolves({});

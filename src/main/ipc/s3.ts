@@ -346,7 +346,7 @@ export function registerS3Ipc(): void {
         return await deletePrefix(profileName, bucket, prefix);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
-        return { success: false, deletedCount: 0, failedCount: 0, error: message };
+        return { success: false, deletedCount: 0, failedCount: 1, error: message };
       }
     }
   );
