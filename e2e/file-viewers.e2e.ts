@@ -875,9 +875,13 @@ test.describe('File Viewers', () => {
       const loadingSpinner = window.locator('.image-preview-loading');
       await expect(loadingSpinner).not.toBeVisible({ timeout: 15000 });
 
-      // Check image is displayed
+      // Check image is displayed AND actually loaded (not just a visible broken <img> element).
+      // When CSP blocks a blob: URL, the <img> tag is still "visible" in the DOM but
+      // naturalWidth remains 0. This check catches CSP and other loading failures.
       const previewImage = window.locator('.image-preview-image');
       await expect(previewImage).toBeVisible();
+      const naturalWidth = await previewImage.evaluate((img: HTMLImageElement) => img.naturalWidth);
+      expect(naturalWidth).toBeGreaterThan(0);
 
       // Screenshot showing image preview
       await window.screenshot({ path: 'test-results/viewers/image-preview-loaded.png' });
