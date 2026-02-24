@@ -1,6 +1,6 @@
 {
   "name": "s3-browser",
-  "version": "0.18.8",
+  "version": "0.18.9",
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
