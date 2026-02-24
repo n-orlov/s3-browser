@@ -63,7 +63,7 @@ function Toast({ toast, onDismiss }: ToastProps): React.ReactElement {
         )}
       </div>
       <button className="toast-dismiss" onClick={handleDismiss} aria-label="Dismiss">
-        \u00D7
+        {'\u00D7'}
       </button>
     </div>
   );
