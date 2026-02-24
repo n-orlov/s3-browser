@@ -42,10 +42,10 @@ test.describe('UI Features', () => {
     });
 
     test('should update selection count when file is selected', async ({ window }) => {
-      // Navigate to documents folder
+      // Navigate to documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Select a file
@@ -64,10 +64,10 @@ test.describe('UI Features', () => {
     });
 
     test('should show total size of selected files', async ({ window }) => {
-      // Navigate to documents folder
+      // Navigate to documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Select a file
@@ -82,10 +82,10 @@ test.describe('UI Features', () => {
     });
 
     test('should update count with multiselect', async ({ window }) => {
-      // Navigate to documents folder
+      // Navigate to documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Select first file
@@ -142,10 +142,10 @@ test.describe('UI Features', () => {
     });
 
     test('should enable Properties button when file is selected', async ({ window }) => {
-      // Navigate to data folder
+      // Navigate to data folder (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Select a file (config.json)
@@ -160,10 +160,10 @@ test.describe('UI Features', () => {
     });
 
     test('should open Properties dialog when button clicked', async ({ window }) => {
-      // Navigate to data folder and select a file
+      // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -185,9 +185,9 @@ test.describe('UI Features', () => {
     });
 
     test('should display file name in Properties dialog', async ({ window }) => {
-      // Navigate and select config.json
+      // Navigate and select config.json (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -204,9 +204,9 @@ test.describe('UI Features', () => {
     });
 
     test('should display S3 URL in Properties dialog', async ({ window }) => {
-      // Navigate and select a file
+      // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -223,9 +223,9 @@ test.describe('UI Features', () => {
     });
 
     test('should show Copy buttons for URLs in Properties dialog', async ({ window }) => {
-      // Navigate and select a file
+      // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -242,9 +242,9 @@ test.describe('UI Features', () => {
     });
 
     test('should close Properties dialog with Close button', async ({ window }) => {
-      // Navigate and select a file
+      // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -266,9 +266,9 @@ test.describe('UI Features', () => {
     });
 
     test('should close Properties dialog with Escape key', async ({ window }) => {
-      // Navigate and select a file
+      // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -506,9 +506,9 @@ test.describe('UI Features', () => {
     });
 
     test('should show toast when copying S3 URL', async ({ window }) => {
-      // Navigate to data folder and select a file
+      // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -529,9 +529,9 @@ test.describe('UI Features', () => {
     });
 
     test('should display toast title', async ({ window }) => {
-      // Navigate to data folder and select a file
+      // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -549,9 +549,9 @@ test.describe('UI Features', () => {
     });
 
     test('should dismiss toast when clicking dismiss button', async ({ window }) => {
-      // Navigate to data folder and select a file
+      // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -575,9 +575,9 @@ test.describe('UI Features', () => {
     });
 
     test('should auto-dismiss toast after duration', async ({ window }) => {
-      // Navigate to data folder and select a file
+      // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
@@ -708,10 +708,10 @@ test.describe('UI Features', () => {
       await mainBucket.click();
       await window.waitForTimeout(2000);
 
-      // Navigate to data folder which has various file types
+      // Navigate to data folder which has various file types (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
-      await dataFolder.click();
+      await dataFolder.dblclick();
       await window.waitForTimeout(1500);
     });
 
@@ -880,9 +880,9 @@ test.describe('UI Features', () => {
     });
 
     test('should have up button in navigation', async ({ window }) => {
-      // Navigate into a folder first
+      // Navigate into a folder first (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Up button should be visible (class: go-up-btn, title: "Go to parent folder")
@@ -891,9 +891,9 @@ test.describe('UI Features', () => {
     });
 
     test('should navigate up when up button clicked', async ({ window }) => {
-      // Navigate into documents folder
+      // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
-      await documentsFolder.click();
+      await documentsFolder.dblclick();
       await window.waitForTimeout(1500);
 
       // Verify we're in documents
