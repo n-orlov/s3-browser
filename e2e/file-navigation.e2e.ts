@@ -1,5 +1,6 @@
 import { test, expect, TEST_BUCKETS, getEndpoint } from './electron-fixtures';
-import { TEST_DATA } from './fixtures/localstack-setup';
+import { TEST_DATA, getLocalStackS3Client } from './fixtures/localstack-setup';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 test.describe('File Navigation and Selection', () => {
   test.describe('Folder Navigation', () => {
@@ -547,6 +548,106 @@ test.describe('File Navigation and Selection', () => {
 
       // Screenshot showing Enter key selection
       await window.screenshot({ path: 'test-results/keyboard-enter-select.png' });
+    });
+  });
+
+  test.describe('Infinite Scroll / Pagination', () => {
+    // This test creates >100 folders (the default page size) and verifies
+    // that scrolling loads additional pages, including new prefixes.
+    const PAGINATION_PREFIX = 'pagination-test/';
+    const FOLDER_COUNT = 120; // More than the default maxKeys of 100
+
+    test.beforeEach(async ({ window }) => {
+      const s3Client = getLocalStackS3Client();
+
+      // Create 120 folders by putting a marker file in each
+      const putPromises = [];
+      for (let i = 0; i < FOLDER_COUNT; i++) {
+        const folderName = `folder-${String(i).padStart(4, '0')}`;
+        putPromises.push(
+          s3Client.send(new PutObjectCommand({
+            Bucket: TEST_BUCKETS.main,
+            Key: `${PAGINATION_PREFIX}${folderName}/marker.txt`,
+            Body: `File in ${folderName}`,
+            ContentType: 'text/plain',
+          }))
+        );
+      }
+      await Promise.all(putPromises);
+
+      // Select test profile and main bucket
+      const dropdown = window.locator('.profile-dropdown');
+      await dropdown.selectOption('test');
+
+      const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
+      await expect(mainBucket).toBeVisible({ timeout: 15000 });
+      await mainBucket.click();
+      await window.waitForTimeout(2000);
+
+      // Navigate into pagination-test folder
+      const paginationFolder = window.locator('.file-row.folder').filter({ hasText: 'pagination-test' });
+      await expect(paginationFolder).toBeVisible({ timeout: 5000 });
+      await paginationFolder.dblclick();
+      await window.waitForTimeout(2000);
+    });
+
+    test.afterEach(async () => {
+      // Clean up the pagination test data
+      const s3Client = getLocalStackS3Client();
+      const deletePromises = [];
+      for (let i = 0; i < FOLDER_COUNT; i++) {
+        const folderName = `folder-${String(i).padStart(4, '0')}`;
+        deletePromises.push(
+          s3Client.send(new DeleteObjectCommand({
+            Bucket: TEST_BUCKETS.main,
+            Key: `${PAGINATION_PREFIX}${folderName}/marker.txt`,
+          })).catch(() => {})
+        );
+      }
+      await Promise.all(deletePromises);
+    });
+
+    test('should load all folders via infinite scroll beyond initial page', async ({ window }) => {
+      // Initially some folders should be visible
+      const firstFolder = window.locator('.file-row.folder').filter({ hasText: 'folder-0000' });
+      await expect(firstFolder).toBeVisible({ timeout: 5000 });
+
+      // Check if "Scroll to load more" indicator is present (means there are more items)
+      const hasMore = window.locator('.file-list-has-more');
+      const loadingMore = window.locator('.file-list-loading-more');
+
+      // Scroll to the bottom to trigger loading more items
+      const tableWrapper = window.locator('.file-list-table-wrapper');
+
+      // Keep scrolling until all items are loaded
+      let attempts = 0;
+      while (attempts < 20) {
+        const hasMoreVisible = await hasMore.isVisible().catch(() => false);
+        const loadingMoreVisible = await loadingMore.isVisible().catch(() => false);
+
+        if (!hasMoreVisible && !loadingMoreVisible) {
+          break; // All loaded
+        }
+
+        // Scroll to bottom
+        await tableWrapper.evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+        await window.waitForTimeout(1000);
+        attempts++;
+      }
+
+      // The last folder (folder-0119) should be visible after scrolling through all pages
+      const lastFolder = window.locator('.file-row.folder').filter({ hasText: 'folder-0119' });
+      await expect(lastFolder).toBeVisible({ timeout: 10000 });
+
+      // Count all visible folder rows to verify all 120 are loaded
+      const folderRows = window.locator('.file-row.folder');
+      const count = await folderRows.count();
+      expect(count).toBe(FOLDER_COUNT);
+
+      // Screenshot showing all items loaded
+      await window.screenshot({ path: 'test-results/pagination-all-loaded.png' });
     });
   });
 });

@@ -209,12 +209,16 @@ function App(): React.ReactElement {
 
     let totalDeleted = 0;
     let totalFailed = 0;
+    const errors: string[] = [];
 
     // Delete folders first (they contain nested objects)
     for (const folder of folders) {
       const result = await deletePrefix(selectedBucket, folder.key);
       totalDeleted += result.deletedCount;
       totalFailed += result.failedCount;
+      if (result.error) {
+        errors.push(result.error);
+      }
     }
 
     // Delete files
@@ -241,10 +245,11 @@ function App(): React.ReactElement {
 
     // Show toast with results
     if (totalFailed > 0) {
+      const errorDetail = errors.length > 0 ? `: ${errors[0]}` : '';
       addToast({
         type: 'warning',
-        title: 'Partial Delete',
-        message: `Deleted ${totalDeleted} item(s), ${totalFailed} failed`,
+        title: 'Delete Failed',
+        message: `Deleted ${totalDeleted} item(s), ${totalFailed} failed${errorDetail}`,
         duration: 5000,
       });
     } else if (totalDeleted > 0) {
@@ -253,6 +258,14 @@ function App(): React.ReactElement {
         title: 'Delete Complete',
         message: `Deleted ${totalDeleted} item(s)`,
         duration: 3000,
+      });
+    } else if (errors.length > 0) {
+      // Both counters zero but error occurred (e.g., exception during operation)
+      addToast({
+        type: 'error',
+        title: 'Delete Error',
+        message: errors[0],
+        duration: 5000,
       });
     }
   }, [selectedBucket, selectedFiles, deleteFile, deleteFiles, deletePrefix, addToast]);

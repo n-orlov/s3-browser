@@ -392,6 +392,106 @@ describe('FileList', () => {
         expect(screen.getByText('Scroll to load more')).toBeInTheDocument();
       });
     });
+
+    it('includes prefixes from subsequent pages during pagination', async () => {
+      // First page: returns some prefixes and objects
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [{ key: 'file1.txt', size: 100, isPrefix: false }],
+          prefixes: [{ key: 'folderA/', size: 0, isPrefix: true }],
+          continuationToken: 'page2-token',
+          isTruncated: true,
+          prefix: '',
+          keyCount: 2,
+        },
+      });
+
+      // Second page: returns new prefixes that weren't in the first page
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [{ key: 'file2.txt', size: 200, isPrefix: false }],
+          prefixes: [{ key: 'folderB/', size: 0, isPrefix: true }],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: '',
+          keyCount: 2,
+        },
+      });
+
+      const onItemCountChange = vi.fn();
+      render(<FileList {...createDefaultProps({
+        currentProfile: 'test-profile',
+        selectedBucket: 'my-bucket',
+        pendingFileSelection: 'file2.txt',
+        onPendingFileSelectionHandled: vi.fn(),
+        onItemCountChange,
+      })} />);
+
+      // Wait for first page to load
+      await waitFor(() => {
+        expect(screen.getByText('folderA')).toBeInTheDocument();
+        expect(screen.getByText('file1.txt')).toBeInTheDocument();
+      });
+
+      // Wait for second page (triggered by pendingFileSelection search)
+      await waitFor(() => {
+        expect(screen.getByText('file2.txt')).toBeInTheDocument();
+        // Key assertion: folderB from the second page must appear
+        expect(screen.getByText('folderB')).toBeInTheDocument();
+      }, { timeout: 3000 });
+
+      // Verify all 4 items are present
+      expect(screen.getByText('folderA')).toBeInTheDocument();
+      expect(screen.getByText('folderB')).toBeInTheDocument();
+      expect(screen.getByText('file1.txt')).toBeInTheDocument();
+      expect(screen.getByText('file2.txt')).toBeInTheDocument();
+    });
+
+    it('deduplicates prefixes that span page boundaries', async () => {
+      // First page: returns a prefix
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [],
+          prefixes: [{ key: 'shared-folder/', size: 0, isPrefix: true }],
+          continuationToken: 'page2-token',
+          isTruncated: true,
+          prefix: '',
+          keyCount: 1,
+        },
+      });
+
+      // Second page: returns the same prefix again (spans page boundary)
+      mockElectronAPI.s3.listObjects.mockResolvedValueOnce({
+        success: true,
+        result: {
+          objects: [{ key: 'target.txt', size: 100, isPrefix: false }],
+          prefixes: [{ key: 'shared-folder/', size: 0, isPrefix: true }],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: '',
+          keyCount: 2,
+        },
+      });
+
+      render(<FileList {...createDefaultProps({
+        currentProfile: 'test-profile',
+        selectedBucket: 'my-bucket',
+        pendingFileSelection: 'target.txt',
+        onPendingFileSelectionHandled: vi.fn(),
+      })} />);
+
+      // Wait for both pages to load
+      await waitFor(() => {
+        expect(screen.getByText('target.txt')).toBeInTheDocument();
+      }, { timeout: 3000 });
+
+      // shared-folder should appear only once (deduplicated)
+      const folderRows = screen.getAllByText('shared-folder');
+      expect(folderRows).toHaveLength(1);
+    });
   });
 
   describe('keyboard navigation', () => {

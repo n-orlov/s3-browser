@@ -386,6 +386,70 @@ test.describe('File Operations', () => {
       // Screenshot
       await window.screenshot({ path: 'test-results/delete-cancelled.png' });
     });
+
+    test('should delete folder with special characters (equals sign)', async ({ window }) => {
+      // Create a folder with special characters (= sign) via S3 client
+      const s3Client = getLocalStackS3Client();
+      const specialFolder = 'documents/user_id=unknown/';
+      const specialFileKey = `${specialFolder}data.json`;
+
+      await s3Client.send(new PutObjectCommand({
+        Bucket: TEST_BUCKETS.main,
+        Key: specialFileKey,
+        Body: '{"user": "unknown"}',
+        ContentType: 'application/json',
+      }));
+
+      // Go back to root to see the folder
+      const upButton = window.locator('.go-up-btn');
+      await upButton.click();
+      await window.waitForTimeout(1500);
+
+      // Navigate into documents
+      const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
+      await documentsFolder.dblclick();
+      await window.waitForTimeout(2000);
+
+      // Refresh to see the new folder
+      const refreshButton = window.locator('button[title="Refresh file list"]');
+      await refreshButton.click();
+      await window.waitForTimeout(2000);
+
+      // The folder with = sign should be visible
+      const specialFolderRow = window.locator('.file-row.folder').filter({ hasText: 'user_id=unknown' });
+      await expect(specialFolderRow).toBeVisible({ timeout: 5000 });
+
+      // Select the folder
+      await specialFolderRow.click();
+
+      // Click delete button
+      const deleteButton = window.locator('button[title*="Delete"]');
+      await deleteButton.click();
+
+      // Wait for confirmation dialog
+      const dialog = window.locator('.dialog, .modal, [role="dialog"]');
+      await expect(dialog).toBeVisible({ timeout: 5000 });
+
+      // Should mention the folder name
+      await expect(dialog).toContainText('user_id=unknown');
+
+      // Click confirm/delete button
+      const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
+      await confirmButton.click();
+
+      // Wait for deletion
+      await window.waitForTimeout(3000);
+
+      // Folder should no longer be visible
+      await expect(specialFolderRow).not.toBeVisible({ timeout: 5000 });
+
+      // Should see a success toast
+      const toast = window.locator('.toast').filter({ hasText: /delete/i });
+      await expect(toast).toBeVisible({ timeout: 5000 });
+
+      // Screenshot showing successful deletion
+      await window.screenshot({ path: 'test-results/delete-special-chars-complete.png' });
+    });
   });
 
   test.describe('Rename Files', () => {
