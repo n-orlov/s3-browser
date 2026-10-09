@@ -19,7 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
-import { getProfile, type AwsProfile } from './awsCredentials';
+import { getProfile } from './awsCredentials';
 
 // Default page size for object listing
 const DEFAULT_PAGE_SIZE = 100;

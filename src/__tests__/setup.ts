@@ -1,7 +1,15 @@
 import '@testing-library/dom';
 import '@testing-library/jest-dom/vitest';
-import { afterEach, vi } from 'vitest';
+import { afterEach, vi, type Mock } from 'vitest';
 import { cleanup } from '@testing-library/react';
+
+type DeepMock<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? Mock<(...args: A) => R>
+    : T[K] extends object
+      ? DeepMock<T[K]>
+      : T[K];
+};
 
 // Mock electronAPI for renderer tests
 const mockElectronAPI = {
@@ -92,7 +100,7 @@ const mockElectronAPI = {
     openDownloadsFolder: vi.fn(() => Promise.resolve()),
     showFileInFolder: vi.fn(() => Promise.resolve()),
   },
-};
+} as unknown as DeepMock<Window['electronAPI']>;
 
 // Assign to window
 Object.defineProperty(window, 'electronAPI', {

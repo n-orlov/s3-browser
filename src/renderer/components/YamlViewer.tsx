@@ -38,8 +38,6 @@ interface Token {
  */
 function tokenizeLine(line: string): Token[] {
   const tokens: Token[] = [];
-  let remaining = line;
-  let pos = 0;
 
   // Check for comment line (possibly after whitespace)
   const commentMatch = line.match(/^(\s*)(#.*)$/);

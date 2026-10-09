@@ -45,24 +45,6 @@ function getBaseExtension(key: string): string {
 }
 
 /**
- * Check if a file is gzip compressed
- */
-function isGzipFile(key: string): boolean {
-  return key.toLowerCase().endsWith('.gz');
-}
-
-/**
- * Determine if a file can be edited in the text editor.
- * Any file can be edited (opened as text), not just known text formats.
- * Binary files will show as text (may appear as garbage) but won't crash.
- */
-function isEditableFile(_key: string): boolean {
-  // Any file can be edited as text - special viewers (JSON, YAML, CSV, etc.)
-  // are still available for those specific file types via their own buttons
-  return true;
-}
-
-/**
  * Determine if a file is a parquet file
  */
 function isParquetFile(key: string): boolean {
@@ -244,7 +226,6 @@ function ToolbarButton({ icon, title, onClick, disabled, className = '', badge }
 
 function FileToolbar({
   selectedBucket,
-  currentPrefix,
   selectedFile,
   selectedCount,
   onUpload,

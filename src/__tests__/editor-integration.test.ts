@@ -170,7 +170,7 @@ describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('ParquetViewer Integration', () => {
       let dataRead = false;
       await parquetRead({
         file: asyncBuffer,
-        onComplete: (readData: Record<string, unknown[]>) => {
+        onComplete: (readData: any) => {
           const columns = Object.keys(readData);
           console.log(`Data columns: ${columns.join(', ')}`);
           if (columns.length > 0) {

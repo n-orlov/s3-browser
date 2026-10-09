@@ -118,6 +118,9 @@ For detailed development history, architecture decisions, common issues, and les
 | `npm test` | Run unit tests |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Run tests with coverage report |
+| `npm run typecheck` | Type-check src, e2e and config files |
+| `npm run lint` | ESLint |
+| `npm run test:e2e:docker` | Run e2e suite in containers (no host windows) |
 
 ### Project Structure
 

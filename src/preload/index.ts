@@ -1,12 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 // Types for AWS credentials API
+export type ProfileType = 'static' | 'role' | 'sso' | 'process' | 'web-identity' | 'config-only';
+
 export interface ProfileInfo {
   name: string;
   region?: string;
   hasCredentials: boolean;
   isValid: boolean;
   validationMessage?: string;
+  profileType: ProfileType;
+  profileTypeDescription: string;
 }
 
 export interface CredentialsState {
@@ -306,6 +310,7 @@ declare global {
         ) => Promise<UploadFilesResult>;
         deleteFile: (bucket: string, key: string) => Promise<FileOperationResult>;
         deleteFiles: (bucket: string, keys: string[]) => Promise<DeleteFilesResult>;
+        deletePrefix: (bucket: string, prefix: string) => Promise<DeletePrefixResult>;
         renameFile: (bucket: string, sourceKey: string, newName: string) => Promise<FileOperationResult>;
         copyFile: (
           sourceBucket: string,

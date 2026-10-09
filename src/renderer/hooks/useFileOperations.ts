@@ -125,7 +125,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}): UseFi
         });
 
         // Upload files
-        for (const { path, id } of opIds) {
+        for (const { id } of opIds) {
           updateOperation(id, { status: 'in-progress' });
         }
 

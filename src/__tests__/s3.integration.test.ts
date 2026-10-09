@@ -591,7 +591,7 @@ describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('S3 File Content Operations', () => 
 
       await parquetRead({
         file: asyncBuffer,
-        onComplete: (readData: Record<string, unknown[]>) => {
+        onComplete: (readData: any) => {
           const columns = Object.keys(readData);
           console.log(`Parquet data: ${columns.length} columns`);
           if (columns.length > 0) {

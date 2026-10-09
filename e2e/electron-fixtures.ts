@@ -63,8 +63,9 @@ let localStackInitialized = false;
 /**
  * Custom test fixture that launches the Electron app with LocalStack backend
  */
-export const test = base.extend<ElectronTestFixtures>({
+export const test = base.extend<Omit<ElectronTestFixtures, 'localStackReady'>, Pick<ElectronTestFixtures, 'localStackReady'>>({
   // LocalStack setup fixture - runs once per worker
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring syntax for fixture args
   localStackReady: [async ({}, use) => {
     // Initialize LocalStack if not already done
     if (!localStackInitialized) {

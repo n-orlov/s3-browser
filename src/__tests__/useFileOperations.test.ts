@@ -15,13 +15,6 @@ const mockElectronAPI = {
   },
 };
 
-// Declare global window type
-declare global {
-  interface Window {
-    electronAPI: typeof mockElectronAPI;
-  }
-}
-
 // Set up the mock before tests
 Object.defineProperty(window, 'electronAPI', {
   value: mockElectronAPI,
