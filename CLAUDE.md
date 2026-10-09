@@ -141,6 +141,8 @@ CI (`.github/workflows/ci.yml`) runs on the owner's self-hosted runners (label `
 
 Gates, all runnable locally: `npm run typecheck` (src + e2e + configs, tests included), `npm run lint` (ESLint; `--max-warnings 18` is a ratchet - lower it as warnings are fixed, never raise it), `npm run test:coverage` (thresholds in `vitest.config.ts`; only raise them), `npm run audit:prod` (high+), `npm run build`, and `npm run test:e2e:docker` (Playwright + Electron + LocalStack entirely in containers - use this instead of `npm run test:e2e`, which opens windows on the host).
 
+Tests that call real AWS (`s3.integration`, `e2e-ui-flow`, `editor-integration`) are opt-in: set `S3_BROWSER_REAL_AWS_TESTS=1`. They never run in CI.
+
 ## Testing Philosophy
 
 - Unit tests for core logic (credential parsing, URL parsing, S3 operations)

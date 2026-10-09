@@ -17,7 +17,8 @@ import {
   clearS3Client,
 } from '../main/services/s3Service';
 
-const AWS_CREDENTIALS_AVAILABLE = (await import('fs')).existsSync(
+// Opt-in only (S3_BROWSER_REAL_AWS_TESTS=1): calls REAL AWS with the operator's own credentials.
+const AWS_CREDENTIALS_AVAILABLE = process.env.S3_BROWSER_REAL_AWS_TESTS === '1' && (await import('fs')).existsSync(
   `${(await import('os')).homedir()}/.aws/credentials`
 );
 
