@@ -15,7 +15,7 @@ test.describe('File Navigation and Selection', () => {
 
       // Select the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should navigate into folder on double click', async ({ window }) => {
@@ -25,7 +25,7 @@ test.describe('File Navigation and Selection', () => {
       await documentsFolder.dblclick();
 
       // Wait for navigation
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).toContainText('documents');
 
       // Verify we're inside documents folder - content header should show the path
       const contentHeader = window.locator('.content-header h2');
@@ -44,7 +44,7 @@ test.describe('File Navigation and Selection', () => {
       const nestedFolder = window.locator('.file-row.folder').filter({ hasText: 'nested' });
       await expect(nestedFolder).toBeVisible({ timeout: 5000 });
       await nestedFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).toContainText('nested');
 
       // Verify we're in nested folder
       const breadcrumb = window.locator('.breadcrumb');
@@ -54,7 +54,7 @@ test.describe('File Navigation and Selection', () => {
       const level1Folder = window.locator('.file-row.folder').filter({ hasText: 'level1' });
       await expect(level1Folder).toBeVisible({ timeout: 5000 });
       await level1Folder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).toContainText('level1');
 
       // Verify we're in level1
       await expect(breadcrumb).toContainText('level1');
@@ -63,7 +63,7 @@ test.describe('File Navigation and Selection', () => {
       const level2Folder = window.locator('.file-row.folder').filter({ hasText: 'level2' });
       await expect(level2Folder).toBeVisible({ timeout: 5000 });
       await level2Folder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).toContainText('level2');
 
       // Verify we're in level2 and can see the deep file
       await expect(breadcrumb).toContainText('level2');
@@ -79,7 +79,7 @@ test.describe('File Navigation and Selection', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
 
       // Verify we're in documents
       const contentHeader = window.locator('.content-header h2');
@@ -89,7 +89,7 @@ test.describe('File Navigation and Selection', () => {
       const upButton = window.locator('.go-up-btn');
       await expect(upButton).toBeVisible();
       await upButton.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Verify we're back at root
       await expect(contentHeader).toHaveText(TEST_BUCKETS.main);
@@ -102,21 +102,21 @@ test.describe('File Navigation and Selection', () => {
       // Navigate deep: nested/level1/level2 (double-click to navigate into folders)
       const nestedFolder = window.locator('.file-row.folder').filter({ hasText: 'nested' });
       await nestedFolder.dblclick();
-      await window.waitForTimeout(1000);
+      await expect(window.locator('.breadcrumb')).toContainText('nested');
 
       const level1Folder = window.locator('.file-row.folder').filter({ hasText: 'level1' });
       await level1Folder.dblclick();
-      await window.waitForTimeout(1000);
+      await expect(window.locator('.breadcrumb')).toContainText('level1');
 
       const level2Folder = window.locator('.file-row.folder').filter({ hasText: 'level2' });
       await level2Folder.dblclick();
-      await window.waitForTimeout(1000);
+      await expect(window.locator('.breadcrumb')).toContainText('level2');
 
       // Now click on "nested" breadcrumb to go back
       const nestedBreadcrumb = window.locator('.breadcrumb-item').filter({ hasText: 'nested' });
       await expect(nestedBreadcrumb).toBeVisible();
       await nestedBreadcrumb.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).not.toContainText('level2');
 
       // Verify we're back in nested folder (should see level1)
       const level1FolderAgain = window.locator('.file-row.folder').filter({ hasText: 'level1' });
@@ -125,7 +125,7 @@ test.describe('File Navigation and Selection', () => {
       // Click on bucket breadcrumb to go to root
       const bucketBreadcrumb = window.locator('.breadcrumb-bucket');
       await bucketBreadcrumb.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.breadcrumb')).not.toContainText('nested');
 
       // Verify we're at root (should see all top-level folders)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
@@ -146,12 +146,12 @@ test.describe('File Navigation and Selection', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate, has multiple files for selection testing)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should select file on single click', async ({ window }) => {
@@ -293,7 +293,7 @@ test.describe('File Navigation and Selection', () => {
       // Go back to root to have both files and folders
       const upButton = window.locator('.go-up-btn');
       await upButton.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Find data folder
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
@@ -301,7 +301,6 @@ test.describe('File Navigation and Selection', () => {
 
       // Single click on folder selects it (doesn't navigate)
       await dataFolder.click();
-      await window.waitForTimeout(500);
 
       // Folder should be selected
       await expect(dataFolder).toHaveClass(/selected/);
@@ -348,7 +347,6 @@ test.describe('File Navigation and Selection', () => {
 
       // Click Go button
       await goButton.click();
-      await window.waitForTimeout(2000);
 
       // Content header should show the bucket name
       const contentHeader = window.locator('.content-header h2');
@@ -371,7 +369,6 @@ test.describe('File Navigation and Selection', () => {
 
       // Click Go button
       await goButton.click();
-      await window.waitForTimeout(2000);
 
       // Content header should show documents path
       const contentHeader = window.locator('.content-header h2');
@@ -398,7 +395,6 @@ test.describe('File Navigation and Selection', () => {
 
       // Click Go button
       await goButton.click();
-      await window.waitForTimeout(3000);
 
       // Should be in documents folder
       const contentHeader = window.locator('.content-header h2');
@@ -419,7 +415,6 @@ test.describe('File Navigation and Selection', () => {
       // Enter S3 URL and press Enter
       await navInput.fill(`s3://${TEST_BUCKETS.main}/data/`);
       await navInput.press('Enter');
-      await window.waitForTimeout(2000);
 
       // Should be in data folder
       const contentHeader = window.locator('.content-header h2');
@@ -461,7 +456,6 @@ test.describe('File Navigation and Selection', () => {
       // Enter HTTPS S3 URL format
       await navInput.fill(`https://${TEST_BUCKETS.main}.s3.us-east-1.amazonaws.com/documents/`);
       await goButton.click();
-      await window.waitForTimeout(2000);
 
       // Should navigate to documents folder
       const contentHeader = window.locator('.content-header h2');
@@ -475,7 +469,6 @@ test.describe('File Navigation and Selection', () => {
       // First select a bucket
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
 
       // Navigation bar should show bucket URL
       const navInput = window.locator('.navigation-bar-input');
@@ -484,7 +477,6 @@ test.describe('File Navigation and Selection', () => {
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Navigation bar should update to show documents path
       await expect(navInput).toHaveValue(new RegExp(`s3://${TEST_BUCKETS.main}/documents/`));
@@ -497,7 +489,7 @@ test.describe('File Navigation and Selection', () => {
       // First select a bucket so we have a current location
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.navigation-bar-input')).toHaveValue(`s3://${TEST_BUCKETS.main}/`);
 
       const navInput = window.locator('.navigation-bar-input');
       const originalValue = await navInput.inputValue();
@@ -507,7 +499,6 @@ test.describe('File Navigation and Selection', () => {
 
       // Press Escape to cancel
       await navInput.press('Escape');
-      await window.waitForTimeout(500);
 
       // Should revert to original value
       await expect(navInput).toHaveValue(originalValue);
@@ -526,12 +517,12 @@ test.describe('File Navigation and Selection', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should trigger download on Enter key for file', async ({ window }) => {
@@ -582,13 +573,13 @@ test.describe('File Navigation and Selection', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into pagination-test folder
       const paginationFolder = window.locator('.file-row.folder').filter({ hasText: 'pagination-test' });
       await expect(paginationFolder).toBeVisible({ timeout: 5000 });
       await paginationFolder.dblclick();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.breadcrumb')).toContainText('pagination-test');
     });
 
     test.afterEach(async () => {
@@ -619,6 +610,8 @@ test.describe('File Navigation and Selection', () => {
       // Scroll to the bottom to trigger loading more items
       const tableWrapper = window.locator('.file-list-table-wrapper');
 
+      const folderRows = window.locator('.file-row.folder');
+
       // Keep scrolling until all items are loaded
       let attempts = 0;
       while (attempts < 20) {
@@ -629,11 +622,14 @@ test.describe('File Navigation and Selection', () => {
           break; // All loaded
         }
 
-        // Scroll to bottom
+        // Scroll to bottom, then wait until a further page rendered or no more pages remain
+        const rowsBefore = await folderRows.count();
         await tableWrapper.evaluate((el) => {
           el.scrollTop = el.scrollHeight;
         });
-        await window.waitForTimeout(1000);
+        await expect
+          .poll(async () => (await folderRows.count()) > rowsBefore || !(await hasMore.isVisible()))
+          .toBe(true);
         attempts++;
       }
 
@@ -642,7 +638,6 @@ test.describe('File Navigation and Selection', () => {
       await expect(lastFolder).toBeVisible({ timeout: 10000 });
 
       // Count all visible folder rows to verify all 120 are loaded
-      const folderRows = window.locator('.file-row.folder');
       const count = await folderRows.count();
       expect(count).toBe(FOLDER_COUNT);
 

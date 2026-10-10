@@ -13,38 +13,14 @@ import {
 } from './fixtures/localstack-setup';
 
 /**
- * Clear the app state file to ensure test isolation
- * The app state file is stored in the user data directory
+ * Create a private, empty user-data directory for one app launch.
+ * The app persists its last profile/bucket/prefix under userData and restores it at startup,
+ * so a shared directory leaks navigation state from one test into the next. The directory
+ * name the app derives from its product name differs per platform, so isolating through
+ * --user-data-dir is more reliable than deleting a guessed state file path.
  */
-function clearAppStateFile(): void {
-  // App state file location varies by platform:
-  // - Linux: ~/.config/s3-browser/app-state.json
-  // - macOS: ~/Library/Application Support/s3-browser/app-state.json
-  // - Windows: %APPDATA%/s3-browser/app-state.json
-  const homeDir = os.homedir();
-  let userDataPath: string;
-
-  switch (process.platform) {
-    case 'darwin':
-      userDataPath = path.join(homeDir, 'Library', 'Application Support', 's3-browser');
-      break;
-    case 'win32':
-      userDataPath = path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 's3-browser');
-      break;
-    default: // linux
-      userDataPath = path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 's3-browser');
-  }
-
-  const stateFilePath = path.join(userDataPath, 'app-state.json');
-
-  try {
-    if (fs.existsSync(stateFilePath)) {
-      fs.unlinkSync(stateFilePath);
-      console.log(`Cleared app state file: ${stateFilePath}`);
-    }
-  } catch (error) {
-    console.warn(`Failed to clear app state file: ${error}`);
-  }
+function createIsolatedUserDataDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 's3-browser-e2e-userdata-'));
 }
 
 /**
@@ -87,8 +63,8 @@ export const test = base.extend<Omit<ElectronTestFixtures, 'localStackReady'>, P
       throw new Error('LocalStack is not ready');
     }
 
-    // Clear app state file before each test to ensure isolation
-    clearAppStateFile();
+    // Fresh user-data dir per launch so persisted app state never leaks between tests
+    const userDataDir = createIsolatedUserDataDir();
 
     // Build the app before testing
     const appPath = path.join(__dirname, '..');
@@ -104,6 +80,7 @@ export const test = base.extend<Omit<ElectronTestFixtures, 'localStackReady'>, P
         '--no-sandbox',
         '--disable-gpu-sandbox',
         '--disable-setuid-sandbox',
+        `--user-data-dir=${userDataDir}`,
         path.join(appPath, 'dist/main/index.js'),
       ],
       cwd: appPath,
@@ -126,6 +103,7 @@ export const test = base.extend<Omit<ElectronTestFixtures, 'localStackReady'>, P
 
     // Close the app after test
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   },
 
   window: async ({ electronApp }, use) => {

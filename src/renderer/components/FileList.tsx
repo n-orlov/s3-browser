@@ -126,6 +126,9 @@ function FileList({
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Location ("bucket|prefix") whose first page has finished loading. The pending-selection
+  // effect must not run against the previous location's (empty) items before this catches up.
+  const [loadedLocation, setLoadedLocation] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Sorting and filtering state
@@ -207,6 +210,9 @@ function FileList({
       } finally {
         setLoading(false);
         setLoadingMore(false);
+        if (reset) {
+          setLoadedLocation(`${selectedBucket}|${currentPrefix}`);
+        }
       }
     },
     [currentProfile, selectedBucket, currentPrefix]
@@ -238,8 +244,14 @@ function FileList({
 
   // Handle pending file selection - search through all pages if needed
   useEffect(() => {
-    // Skip if no pending selection, still loading, or search was cancelled
-    if (!pendingFileSelection || loading || fileSearchState.cancelled) {
+    // Skip if no pending selection, still loading (or the new location's first page has not
+    // been requested/finished yet), or search was cancelled
+    if (
+      !pendingFileSelection ||
+      loading ||
+      loadedLocation !== `${selectedBucket}|${currentPrefix}` ||
+      fileSearchState.cancelled
+    ) {
       return;
     }
 
@@ -278,6 +290,9 @@ function FileList({
     pendingFileSelection,
     items,
     loading,
+    loadedLocation,
+    selectedBucket,
+    currentPrefix,
     loadingMore,
     hasMore,
     fileSearchState.cancelled,

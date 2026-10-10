@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import FileList, { type FileListProps, type S3Object } from '../renderer/components/FileList';
@@ -958,6 +959,60 @@ describe('FileList', () => {
 
       // File should not be selected
       expect(onSelectFile).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'prefix/nonexistent.txt' }));
+    });
+  });
+  describe('pending selection with a parent that clears it once handled', () => {
+    it('keeps the pending file until the listing arrives and then selects it', async () => {
+      const target = { key: 'prefix/target.txt', size: 100, isPrefix: false };
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: [target, { key: 'prefix/other.txt', size: 200, isPrefix: false }],
+          prefixes: [],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: 'prefix/',
+          keyCount: 2,
+        },
+      });
+
+      // Mirrors App: the parent owns the pending key and clears it when FileList reports it handled.
+      function Parent() {
+        const [bucket, setBucket] = useState<string | null>(null);
+        const [prefix, setPrefix] = useState('');
+        const [pending, setPending] = useState<string | null>(null);
+        const [selected, setSelected] = useState<S3Object | null>(null);
+        return (
+          <>
+            <button
+              onClick={() => {
+                setBucket('my-bucket');
+                setPrefix('prefix/');
+                setPending(target.key);
+              }}
+            >
+              go
+            </button>
+            <div data-testid="selected">{selected?.key ?? ''}</div>
+            <FileList {...createDefaultProps({
+              currentProfile: 'test-profile',
+              selectedBucket: bucket,
+              currentPrefix: prefix,
+              selectedFile: selected,
+              onSelectFile: setSelected,
+              pendingFileSelection: pending,
+              onPendingFileSelectionHandled: () => setPending(null),
+            })} />
+          </>
+        );
+      }
+
+      render(<Parent />);
+      fireEvent.click(screen.getByText('go'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('selected').textContent).toBe(target.key);
+      });
     });
   });
 });
