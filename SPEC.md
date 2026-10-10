@@ -15,7 +15,9 @@ The application has three kinds of code, each built by its own script.
 - `src/main/index.ts` enforces a single application instance (`app.requestSingleInstanceLock`); a second launch focuses the existing window. On `app.whenReady` it registers `registerCredentialsIpc`, `registerS3Ipc` and `registerAppStateIpc`, then creates one `BrowserWindow` (1200x800, minimum 800x600, no application menu). In development (`NODE_ENV=development`) it loads `http://localhost:5173`; otherwise it loads `dist/renderer/index.html`.
 - The preload script exposes `platform` plus three groups of functions, each of which is a thin wrapper around `ipcRenderer.invoke` on one channel from section 2: `appState` (persistence), `aws` (profiles) and `s3` (bucket and object operations). `electronAPI.getObjectMetadata` is an alias for `s3.getObjectMetadata` and invokes the same channel.
 - All requests are renderer-initiated request/response calls (`ipcRenderer.invoke` / `ipcMain.handle`). The main process sends no unsolicited events to the renderer.
-- The main process holds the selected AWS profile name in memory (set by `aws:set-profile`). Every `s3:*` handler that talks to S3 resolves credentials from that profile and returns `{ success: false, error: 'No AWS profile selected. Please select a profile first.' }` when none is selected.
+- The main process holds the selected AWS profile name in memory (set by `aws:set-profile`). Every `s3:*` handler that talks to S3 resolves credentials from that profile. When none is selected, each of them returns `{ success: false, error: 'No AWS profile selected. Please select a profile first.' }` (`s3:delete-prefix` adds `deletedCount: 0, failedCount: 1`), with two exceptions that carry no `error` field:
+  - `s3:upload-files` returns `{ success: false, results: [] }`;
+  - `s3:delete-files` returns `{ success: false, results: [], deletedCount: 0, failedCount: <number of keys> }`.
 
 ## 2. IPC surface
 
@@ -54,9 +56,9 @@ Result shapes: `FileOperationResult` is `{ success: boolean; error?: string }`. 
 | `s3:clear-client` | none | `void`; drops the cached S3 client |
 | `s3:download-file` | `bucket: string`, `key: string`, `operationId: string` | `FileOperationResult & { localPath?: string }`; writes into the user's downloads folder, adding ` (n)` before the extension when the name exists |
 | `s3:upload-file` | `bucket: string`, `prefix: string`, `filePath: string`, `operationId: string` | `FileOperationResult` |
-| `s3:upload-files` | `bucket: string`, `prefix: string`, `filePaths: string[]`, `operationId: string` | `{ success; results: { path; success; error? }[] }` |
+| `s3:upload-files` | `bucket: string`, `prefix: string`, `filePaths: string[]`, `operationId: string` | `{ success; results: { path; success; error? }[] }`; no top-level `error` (see section 3, Errors) |
 | `s3:delete-file` | `bucket: string`, `key: string` | `FileOperationResult` |
-| `s3:delete-files` | `bucket: string`, `keys: string[]` | `DeleteFilesResult`: `{ success; results; deletedCount; failedCount }` |
+| `s3:delete-files` | `bucket: string`, `keys: string[]` | `DeleteFilesResult`: `{ success; results: { key; success; error? }[]; deletedCount; failedCount }`; no top-level `error` (see section 3, Errors) |
 | `s3:delete-prefix` | `bucket: string`, `prefix: string` | `DeletePrefixResult`: `{ success; deletedCount; failedCount; error? }` |
 | `s3:rename-file` | `bucket: string`, `sourceKey: string`, `newName: string` | `FileOperationResult`; copies to the same parent prefix under the new name, then deletes the source |
 | `s3:copy-file` | `sourceBucket: string`, `sourceKey: string`, `destinationBucket: string`, `destinationKey: string` | `FileOperationResult` |
@@ -80,7 +82,8 @@ The following is what the code implements; behaviour that is absent is stated as
 - **Credentials.** AWS credentials are read in the main process from the standard AWS shared config and credentials files and never cross the IPC boundary in clear text. `aws:get-profile-details` masks the access key (first and last four characters), replaces the secret key and session token with `********` and the credential process with `(configured)`. `getCurrentProfileCredentials` is internal to the main process.
 - **External links.** `setWindowOpenHandler` denies every new window and passes the requested URL to `shell.openExternal`. The handler does not filter by URL scheme.
 - **Navigation.** No `will-navigate` or `will-redirect` handler is installed.
-- **IPC input.** Handlers type their parameters with TypeScript only; they do not validate the shape of arguments at runtime. Errors thrown by the AWS SDK or the file system are caught and returned as `{ success: false, error }`.
+- **IPC input.** Handlers type their parameters with TypeScript only; they do not validate the shape of arguments at runtime.
+- **Errors.** Every `s3:*` handler whose result has a `success` field catches errors thrown by the AWS SDK or the file system and returns `{ success: false, error }` (for `s3:delete-prefix`, together with `deletedCount: 0, failedCount: 1`), except two that return no `error`: `s3:upload-files` reports per-file failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [] }`, dropping the results already collected; `s3:delete-files` reports per-key failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [], deletedCount: 0, failedCount: keys.length }`. `app-state:save` returns `{ success: false, error }` when the state file cannot be written. The `aws:*` handlers, `app-state:load`, `s3:show-open-dialog`, `s3:open-downloads-folder` and `s3:show-file-in-folder` have no handler-level catch; an error that reaches them rejects the renderer's `invoke` promise.
 - **Downloads.** `s3:download-file` writes into the downloads folder using the final path segment of the key as the file name.
 - **Single instance.** A second application instance quits immediately.
 
