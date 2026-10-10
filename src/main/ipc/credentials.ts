@@ -7,6 +7,7 @@ import {
   type AwsProfile,
   type ProfileType,
 } from '../services/awsCredentials';
+import { arg, failure, validated } from './validate';
 
 // Store the currently selected profile
 let currentProfile: string | null = null;
@@ -56,7 +57,7 @@ export function registerCredentialsIpc(): void {
   });
 
   // Set the current profile
-  ipcMain.handle('aws:set-profile', async (_event, profileName: string): Promise<{ success: boolean; error?: string }> => {
+  ipcMain.handle('aws:set-profile', validated([arg.identifier('profileName')], failure, async (_event, profileName: string): Promise<{ success: boolean; error?: string }> => {
     const profile = getProfile(profileName);
 
     if (!profile) {
@@ -70,7 +71,7 @@ export function registerCredentialsIpc(): void {
 
     currentProfile = profileName;
     return { success: true };
-  });
+  }));
 
   // Get the currently selected profile
   ipcMain.handle('aws:get-current-profile', async (): Promise<string | null> => {
@@ -78,7 +79,7 @@ export function registerCredentialsIpc(): void {
   });
 
   // Get details for a specific profile
-  ipcMain.handle('aws:get-profile-details', async (_event, profileName: string): Promise<AwsProfile | null> => {
+  ipcMain.handle('aws:get-profile-details', validated([arg.identifier('profileName')], () => null, async (_event, profileName: string): Promise<AwsProfile | null> => {
     const profile = getProfile(profileName);
     if (!profile) {
       return null;
@@ -105,7 +106,7 @@ export function registerCredentialsIpc(): void {
       profileType: profile.profileType,
       hasCredentials: profile.hasCredentials,
     };
-  });
+  }));
 
   // Refresh profiles (re-read from disk)
   ipcMain.handle('aws:refresh-profiles', async (): Promise<CredentialsState> => {

@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { arg, failure, validated } from './validate';
 import { loadAppState, saveAppState } from '../services/appState';
 
 /**
@@ -28,7 +29,7 @@ export function registerAppStateIpc(): void {
   // Save app state
   ipcMain.handle(
     'app-state:save',
-    async (
+    validated([arg.appStateData('data')], failure, async (
       _event,
       data: Partial<AppStateData>
     ): Promise<{ success: boolean; error?: string }> => {
@@ -44,6 +45,6 @@ export function registerAppStateIpc(): void {
           error: error instanceof Error ? error.message : 'Unknown error saving state',
         };
       }
-    }
+    })
   );
 }

@@ -33,6 +33,7 @@ import {
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
 import { isGzipFile, decompressGzip, compressGzip } from '../services/gzipUtils';
+import { arg, failure, validated } from './validate';
 import { getMaxContentBytes, contentTooLargeMessage } from '../contentLimits';
 
 // Abort controllers for cancellable operations
@@ -107,7 +108,7 @@ export function registerS3Ipc(): void {
   // List objects in a bucket with pagination support
   ipcMain.handle(
     's3:list-objects',
-    async (_event, options: ListObjectsOptions): Promise<S3ListObjectsResult> => {
+    validated([arg.listOptions('options')], failure, async (_event, options: ListObjectsOptions): Promise<S3ListObjectsResult> => {
       try {
         const profileName = getCurrentProfile();
         const result = await listObjects(profileName, options);
@@ -116,13 +117,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // List all objects (with pagination handled internally) - supports cancellation
   ipcMain.handle(
     's3:list-all-objects',
-    async (
+    validated([arg.listAllOptions('options'), arg.identifier('operationId')], failure, async (
       _event,
       options: Omit<ListObjectsOptions, 'continuationToken'>,
       operationId: string
@@ -154,11 +155,11 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Cancel a running operation
-  ipcMain.handle('s3:cancel-operation', async (_event, operationId: string): Promise<boolean> => {
+  ipcMain.handle('s3:cancel-operation', validated([arg.identifier('operationId')], () => false, async (_event, operationId: string): Promise<boolean> => {
     const controller = abortControllers.get(operationId);
     if (controller) {
       controller.abort();
@@ -166,10 +167,10 @@ export function registerS3Ipc(): void {
       return true;
     }
     return false;
-  });
+  }));
 
   // Parse an S3 URL
-  ipcMain.handle('s3:parse-url', async (_event, url: string): Promise<S3ParseUrlResult> => {
+  ipcMain.handle('s3:parse-url', validated([arg.identifier('url')], failure, async (_event, url: string): Promise<S3ParseUrlResult> => {
     try {
       const parsed = parseS3Url(url);
       if (!parsed) {
@@ -184,17 +185,17 @@ export function registerS3Ipc(): void {
       const message = error instanceof Error ? error.message : 'Unknown error occurred';
       return { success: false, error: message };
     }
-  });
+  }));
 
   // Get parent prefix
-  ipcMain.handle('s3:get-parent-prefix', async (_event, keyOrPrefix: string): Promise<string> => {
+  ipcMain.handle('s3:get-parent-prefix', validated([arg.text('keyOrPrefix')], () => '', async (_event, keyOrPrefix: string): Promise<string> => {
     return getParentPrefix(keyOrPrefix);
-  });
+  }));
 
   // Get key name
-  ipcMain.handle('s3:get-key-name', async (_event, keyOrPrefix: string): Promise<string> => {
+  ipcMain.handle('s3:get-key-name', validated([arg.text('keyOrPrefix')], () => '', async (_event, keyOrPrefix: string): Promise<string> => {
     return getKeyName(keyOrPrefix);
-  });
+  }));
 
   // Clear cached S3 client (called when profile changes)
   ipcMain.handle('s3:clear-client', async (): Promise<void> => {
@@ -204,7 +205,7 @@ export function registerS3Ipc(): void {
   // Download a file from S3 to the downloads folder
   ipcMain.handle(
     's3:download-file',
-    async (
+    validated([arg.bucket('bucket'), arg.key('key'), arg.identifier('operationId')], failure, async (
       _event,
       bucket: string,
       key: string,
@@ -252,13 +253,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Upload a file to S3
   ipcMain.handle(
     's3:upload-file',
-    async (
+    validated([arg.bucket('bucket'), arg.prefix('prefix'), arg.identifier('filePath'), arg.identifier('operationId')], failure, async (
       _event,
       bucket: string,
       prefix: string,
@@ -285,13 +286,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Upload multiple files
   ipcMain.handle(
     's3:upload-files',
-    async (
+    validated([arg.bucket('bucket'), arg.prefix('prefix'), arg.paths('filePaths'), arg.identifier('operationId')], () => ({ success: false, results: [] }), async (
       _event,
       bucket: string,
       prefix: string,
@@ -326,13 +327,13 @@ export function registerS3Ipc(): void {
       } catch {
         return { success: false, results: [] };
       }
-    }
+    })
   );
 
   // Delete a file from S3
   ipcMain.handle(
     's3:delete-file',
-    async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
         return await deleteFile(profileName, bucket, key);
@@ -340,26 +341,26 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Delete multiple files from S3
   ipcMain.handle(
     's3:delete-files',
-    async (_event, bucket: string, keys: string[]): Promise<DeleteFilesResult> => {
+    validated([arg.bucket('bucket'), arg.keys('keys')], () => ({ success: false, results: [], deletedCount: 0, failedCount: 0 }), async (_event, bucket: string, keys: string[]): Promise<DeleteFilesResult> => {
       try {
         const profileName = getCurrentProfile();
         return await deleteFiles(profileName, bucket, keys);
       } catch {
         return { success: false, results: [], deletedCount: 0, failedCount: keys.length };
       }
-    }
+    })
   );
 
   // Delete a prefix (folder) and all its contents from S3
   ipcMain.handle(
     's3:delete-prefix',
-    async (_event, bucket: string, prefix: string): Promise<DeletePrefixResult> => {
+    validated([arg.bucket('bucket'), arg.nonEmptyPrefix('prefix')], message => ({ success: false, deletedCount: 0, failedCount: 0, error: message }), async (_event, bucket: string, prefix: string): Promise<DeletePrefixResult> => {
       try {
         const profileName = getCurrentProfile();
         return await deletePrefix(profileName, bucket, prefix);
@@ -367,13 +368,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, deletedCount: 0, failedCount: 1, error: message };
       }
-    }
+    })
   );
 
   // Rename a file in S3
   ipcMain.handle(
     's3:rename-file',
-    async (_event, bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> => {
+    validated([arg.bucket('bucket'), arg.key('sourceKey'), arg.key('newName')], failure, async (_event, bucket: string, sourceKey: string, newName: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
 
@@ -386,13 +387,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Copy a file in S3
   ipcMain.handle(
     's3:copy-file',
-    async (
+    validated([arg.bucket('sourceBucket'), arg.key('sourceKey'), arg.bucket('destinationBucket'), arg.key('destinationKey')], failure, async (
       _event,
       sourceBucket: string,
       sourceKey: string,
@@ -406,14 +407,14 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Upload content directly (for editor save)
   // Automatically compresses content for .gz files
   ipcMain.handle(
     's3:upload-content',
-    async (_event, bucket: string, key: string, content: string): Promise<FileOperationResult> => {
+    validated([arg.bucket('bucket'), arg.key('key'), arg.text('content')], failure, async (_event, bucket: string, key: string, content: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
 
@@ -436,14 +437,14 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Download content directly (for editor load)
   // Automatically decompresses .gz files
   ipcMain.handle(
     's3:download-content',
-    async (_event, bucket: string, key: string): Promise<{ success: boolean; content?: string; error?: string }> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<{ success: boolean; content?: string; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
 
@@ -476,13 +477,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Get file size
   ipcMain.handle(
     's3:get-file-size',
-    async (_event, bucket: string, key: string): Promise<{ success: boolean; size?: number; error?: string }> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<{ success: boolean; size?: number; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
         return await getFileSize(profileName, bucket, key);
@@ -490,13 +491,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Download binary content (for parquet files)
   ipcMain.handle(
     's3:download-binary-content',
-    async (_event, bucket: string, key: string): Promise<{ success: boolean; data?: Uint8Array; error?: string }> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<{ success: boolean; data?: Uint8Array; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
         const tooLarge = await rejectOversized(profileName, bucket, key);
@@ -513,7 +514,7 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Open file dialog for selecting files to upload
@@ -537,14 +538,14 @@ export function registerS3Ipc(): void {
   });
 
   // Show file in folder
-  ipcMain.handle('s3:show-file-in-folder', async (_event, filePath: string): Promise<void> => {
+  ipcMain.handle('s3:show-file-in-folder', validated([arg.identifier('filePath')], () => undefined, async (_event, filePath: string): Promise<void> => {
     shell.showItemInFolder(filePath);
-  });
+  }));
 
   // Get object metadata
   ipcMain.handle(
     's3:get-object-metadata',
-    async (_event, bucket: string, key: string): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<{ success: boolean; metadata?: ObjectMetadata; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
         return await getObjectMetadata(profileName, bucket, key);
@@ -552,13 +553,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Create an empty file in S3
   ipcMain.handle(
     's3:create-file',
-    async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
+    validated([arg.bucket('bucket'), arg.key('key')], failure, async (_event, bucket: string, key: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
         return await createEmptyFile(profileName, bucket, key);
@@ -566,13 +567,13 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 
   // Create a folder in S3
   ipcMain.handle(
     's3:create-folder',
-    async (_event, bucket: string, prefix: string): Promise<FileOperationResult> => {
+    validated([arg.bucket('bucket'), arg.nonEmptyPrefix('prefix')], failure, async (_event, bucket: string, prefix: string): Promise<FileOperationResult> => {
       try {
         const profileName = getCurrentProfile();
         return await createFolder(profileName, bucket, prefix);
@@ -580,7 +581,7 @@ export function registerS3Ipc(): void {
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         return { success: false, error: message };
       }
-    }
+    })
   );
 }
 

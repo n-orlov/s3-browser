@@ -27,51 +27,53 @@ Result shapes: `FileOperationResult` is `{ success: boolean; error?: string }`. 
 
 ### 2.1 Credentials
 
-| Channel | Arguments | Returns |
-| --- | --- | --- |
-| `aws:get-profiles` | none | `CredentialsState`: `{ profiles: ProfileInfo[]; currentProfile: string \| null; defaultRegion?: string }` |
-| `aws:set-profile` | `profileName: string` | `{ success: boolean; error?: string }`; fails for an unknown or invalid profile |
-| `aws:get-current-profile` | none | `string \| null` |
-| `aws:get-profile-details` | `profileName: string` | profile details with credentials masked, or `null` for an unknown profile |
-| `aws:refresh-profiles` | none | `CredentialsState`, re-read from disk; clears the current profile if it no longer exists |
+| Channel | Arguments | Returns | Invalid input |
+| --- | --- | --- | --- |
+| `aws:get-profiles` | none | `CredentialsState`: `{ profiles: ProfileInfo[]; currentProfile: string \| null; defaultRegion?: string }` | none (arguments ignored) |
+| `aws:set-profile` | `profileName: string` (non-empty) | `{ success: boolean; error?: string }`; fails for an unknown or invalid profile | `{ success: false, error }` |
+| `aws:get-current-profile` | none | `string \| null` | none (arguments ignored) |
+| `aws:get-profile-details` | `profileName: string` | profile details with credentials masked, or `null` for an unknown profile | `null` |
+| `aws:refresh-profiles` | none | `CredentialsState`, re-read from disk; clears the current profile if it no longer exists | none (arguments ignored) |
 
 ### 2.2 App state
 
-| Channel | Arguments | Returns |
-| --- | --- | --- |
-| `app-state:load` | none | `AppStateData`: `{ lastProfile: string \| null; lastBucket: string \| null; lastPrefix: string }` |
-| `app-state:save` | `data: Partial<AppStateData>` | `{ success: boolean; error?: string }` |
+| Channel | Arguments | Returns | Invalid input |
+| --- | --- | --- | --- |
+| `app-state:load` | none | `AppStateData`: `{ lastProfile: string \| null; lastBucket: string \| null; lastPrefix: string }` | none (arguments ignored) |
+| `app-state:save` | `data: Partial<AppStateData>` (a plain object with only `lastProfile`, `lastBucket`: string or `null`, `lastPrefix`: string) | `{ success: boolean; error?: string }` | `{ success: false, error }` |
 
 ### 2.3 S3
 
-| Channel | Arguments | Returns |
-| --- | --- | --- |
-| `s3:list-buckets` | none | `{ success; buckets?: S3Bucket[]; error? }` |
-| `s3:list-objects` | `options: ListObjectsOptions` (`bucket`, `prefix?`, `delimiter?`, `maxKeys?`, `continuationToken?`) | `{ success; result?: ListObjectsResult; error? }` |
-| `s3:list-all-objects` | `options: Omit<ListObjectsOptions, 'continuationToken'>`, `operationId: string` | `{ success; result?: ListObjectsResult; error? }`; cancellable through `operationId` |
-| `s3:cancel-operation` | `operationId: string` | `boolean`, `true` when a running operation was aborted |
-| `s3:parse-url` | `url: string` | `{ success; bucket?; key?; error? }` |
-| `s3:get-parent-prefix` | `keyOrPrefix: string` | `string` |
-| `s3:get-key-name` | `keyOrPrefix: string` | `string` |
-| `s3:clear-client` | none | `void`; drops the cached S3 client |
-| `s3:download-file` | `bucket: string`, `key: string`, `operationId: string` | `FileOperationResult & { localPath?: string }`; writes into the user's downloads folder, adding ` (n)` before the extension when the name exists |
-| `s3:upload-file` | `bucket: string`, `prefix: string`, `filePath: string`, `operationId: string` | `FileOperationResult` |
-| `s3:upload-files` | `bucket: string`, `prefix: string`, `filePaths: string[]`, `operationId: string` | `{ success; results: { path; success; error? }[] }`; no top-level `error` (see section 3, Errors) |
-| `s3:delete-file` | `bucket: string`, `key: string` | `FileOperationResult` |
-| `s3:delete-files` | `bucket: string`, `keys: string[]` | `DeleteFilesResult`: `{ success; results: { key; success; error? }[]; deletedCount; failedCount }`; no top-level `error` (see section 3, Errors) |
-| `s3:delete-prefix` | `bucket: string`, `prefix: string` | `DeletePrefixResult`: `{ success; deletedCount; failedCount; error? }` |
-| `s3:rename-file` | `bucket: string`, `sourceKey: string`, `newName: string` | `FileOperationResult`; copies to the same parent prefix under the new name, then deletes the source |
-| `s3:copy-file` | `sourceBucket: string`, `sourceKey: string`, `destinationBucket: string`, `destinationKey: string` | `FileOperationResult` |
-| `s3:upload-content` | `bucket: string`, `key: string`, `content: string` | `FileOperationResult`; gzip-compresses the content when the key ends in `.gz` |
-| `s3:download-content` | `bucket: string`, `key: string` | `{ success; content?: string; error? }`; gunzips keys ending in `.gz`; size-capped (see below) |
-| `s3:get-file-size` | `bucket: string`, `key: string` | `{ success; size?: number; error? }` |
-| `s3:download-binary-content` | `bucket: string`, `key: string` | `{ success; data?: Uint8Array; error? }`; size-capped (see below) |
-| `s3:show-open-dialog` | none | `string[] \| null`; native multi-file open dialog, `null` when cancelled |
-| `s3:open-downloads-folder` | none | `void`; opens the downloads folder in the system file manager |
-| `s3:show-file-in-folder` | `filePath: string` | `void`; reveals the file in the system file manager |
-| `s3:get-object-metadata` | `bucket: string`, `key: string` | `{ success; metadata?: ObjectMetadata; error? }` |
-| `s3:create-file` | `bucket: string`, `key: string` | `FileOperationResult`; creates an empty object |
-| `s3:create-folder` | `bucket: string`, `prefix: string` | `FileOperationResult`; creates a zero-byte folder marker object |
+| Channel | Arguments | Returns | Invalid input |
+| --- | --- | --- | --- |
+| `s3:list-buckets` | none | `{ success; buckets?: S3Bucket[]; error? }` | none (arguments ignored) |
+| `s3:list-objects` | `options: ListObjectsOptions` (plain object: `bucket` a bucket name, `prefix?` and `delimiter?` strings, `maxKeys?` a positive integer, `continuationToken?` a non-empty string; other properties are invalid) | `{ success; result?: ListObjectsResult; error? }` | `{ success: false, error }` |
+| `s3:list-all-objects` | `options: Omit<ListObjectsOptions, 'continuationToken'>`, `operationId: string` | `{ success; result?: ListObjectsResult; error? }`; cancellable through `operationId` | `{ success: false, error }` |
+| `s3:cancel-operation` | `operationId: string` | `boolean`, `true` when a running operation was aborted | `false` |
+| `s3:parse-url` | `url: string` | `{ success; bucket?; key?; error? }` | `{ success: false, error }` |
+| `s3:get-parent-prefix` | `keyOrPrefix: string` | `string` | `''` |
+| `s3:get-key-name` | `keyOrPrefix: string` | `string` | `''` |
+| `s3:clear-client` | none | `void`; drops the cached S3 client | none (arguments ignored) |
+| `s3:download-file` | `bucket: string`, `key: string`, `operationId: string` | `FileOperationResult & { localPath?: string }`; writes into the user's downloads folder, adding ` (n)` before the extension when the name exists | `{ success: false, error }` |
+| `s3:upload-file` | `bucket: string`, `prefix: string`, `filePath: string`, `operationId: string` | `FileOperationResult` | `{ success: false, error }` |
+| `s3:upload-files` | `bucket: string`, `prefix: string`, `filePaths: string[]`, `operationId: string` | `{ success; results: { path; success; error? }[] }`; no top-level `error` (see section 3, Errors) | `{ success: false, results: [] }` |
+| `s3:delete-file` | `bucket: string`, `key: string` | `FileOperationResult` | `{ success: false, error }` |
+| `s3:delete-files` | `bucket: string`, `keys: string[]` | `DeleteFilesResult`: `{ success; results: { key; success; error? }[]; deletedCount; failedCount }`; no top-level `error` (see section 3, Errors) | `{ success: false, results: [], deletedCount: 0, failedCount: 0 }` |
+| `s3:delete-prefix` | `bucket: string`, `prefix: string` | `DeletePrefixResult`: `{ success; deletedCount; failedCount; error? }` | `{ success: false, deletedCount: 0, failedCount: 0, error }` |
+| `s3:rename-file` | `bucket: string`, `sourceKey: string`, `newName: string` | `FileOperationResult`; copies to the same parent prefix under the new name, then deletes the source | `{ success: false, error }` |
+| `s3:copy-file` | `sourceBucket: string`, `sourceKey: string`, `destinationBucket: string`, `destinationKey: string` | `FileOperationResult` | `{ success: false, error }` |
+| `s3:upload-content` | `bucket: string`, `key: string`, `content: string` | `FileOperationResult`; gzip-compresses the content when the key ends in `.gz` | `{ success: false, error }` |
+| `s3:download-content` | `bucket: string`, `key: string` | `{ success; content?: string; error? }`; gunzips keys ending in `.gz`; size-capped (see below) | `{ success: false, error }` |
+| `s3:get-file-size` | `bucket: string`, `key: string` | `{ success; size?: number; error? }` | `{ success: false, error }` |
+| `s3:download-binary-content` | `bucket: string`, `key: string` | `{ success; data?: Uint8Array; error? }`; size-capped (see below) | `{ success: false, error }` |
+| `s3:show-open-dialog` | none | `string[] \| null`; native multi-file open dialog, `null` when cancelled | none (arguments ignored) |
+| `s3:open-downloads-folder` | none | `void`; opens the downloads folder in the system file manager | none (arguments ignored) |
+| `s3:show-file-in-folder` | `filePath: string` | `void`; reveals the file in the system file manager | `undefined` (nothing is revealed) |
+| `s3:get-object-metadata` | `bucket: string`, `key: string` | `{ success; metadata?: ObjectMetadata; error? }` | `{ success: false, error }` |
+| `s3:create-file` | `bucket: string`, `key: string` | `FileOperationResult`; creates an empty object | `{ success: false, error }` |
+| `s3:create-folder` | `bucket: string`, `prefix: string` | `FileOperationResult`; creates a zero-byte folder marker object | `{ success: false, error }` |
+
+**Argument validation.** Every handler checks its positional arguments with the helper in `src/main/ipc/validate.ts` before doing any work; the renderer is not trusted. Argument types are: a *bucket name* is a non-empty string of at most 255 characters without `/`; an *object key* is a non-empty string of at most 1024 UTF-8 bytes; a *key prefix* is a string of at most 1024 UTF-8 bytes that may be empty (`prefix` of `s3:delete-prefix` and `s3:create-folder` must be non-empty); a *non-empty string* is at most 4096 characters (profile names, operation ids, local file paths, URLs); `string[]` arguments (`keys`, `filePaths`) are arrays whose items are all object keys, respectively non-empty strings; `newName` is an object key; `content` and `keyOrPrefix` are strings that may be empty. No string may contain a NUL character. Extra arguments are ignored. An argument of the wrong type, a missing argument or a value outside these shapes makes the call resolve (it never rejects) to the *Invalid input* column and the handler body does not run: no S3 request, no filesystem access, no dialog and no shell call. Where the result type has the `{ success, error }` shape the invalid-input result is `{ success: false, error }` with `error` of the form `Invalid argument '<name>': expected <shape>`; otherwise it is the neutral value in the column. The unit test `src/__tests__/ipcValidation.test.ts` holds one row per channel and fails when a registered channel has none.
 
 **Content-read size cap.** `s3:download-content` (text and gzip) and `s3:download-binary-content` (binary, parquet, image) send a HEAD request first and compare `ContentLength` with the cap, 50 MB (`50 * 1024 * 1024` bytes) by default, defined in `src/main/contentLimits.ts` and overridable with the positive-integer environment variable `S3_BROWSER_MAX_CONTENT_BYTES` (bytes). An object above the cap resolves to `{ success: false, error }` where `error` names the limit, and no `GetObject` request is made. The cap applies to the stored size, so a `.gz` object is measured compressed; gunzip output is bounded separately by the same cap (`decompressGzip` in `src/main/services/gzipUtils.ts` passes it as `maxOutputLength`), so a small gzip bomb resolves to `{ success: false, error }` (`Gzip decompression failed: Decompressed content exceeds the maximum size of 50 MB (52428800 bytes).`) instead of exhausting memory. The helper `tryDecompressGzip` falls back to raw text for non-gzip input but rethrows that cap error. A failing HEAD resolves to `{ success: false, error }` with the service message and no download follows.
 
@@ -85,7 +87,7 @@ The following is what the code implements; behaviour that is absent is stated as
 - **External links.** `src/main/windowSecurity.ts` (`secureWebContents`, called from `createWindow`) installs a `setWindowOpenHandler` that denies every new window. It passes the requested URL to `shell.openExternal` only when `isExternalOpenAllowed` (`src/main/externalUrlPolicy.ts`) accepts it: the scheme must be `https:` or `mailto:`. `http:`, `file:`, `javascript:`, `data:`, custom protocols and strings that do not parse as a URL are denied and never reach `shell.openExternal`.
 - **Navigation.** `secureWebContents` handles `will-navigate` and `will-redirect` on the main window's `webContents` and calls `preventDefault` for any target outside the application origin (the Vite dev server origin in development; the exact `index.html` file URL in production, ignoring query and fragment). Same-origin navigation proceeds. A blocked navigation is not forwarded to the system browser.
 - **IPC input.** Handlers type their parameters with TypeScript only; they do not validate the shape of arguments at runtime.
-- **Errors.** Every `s3:*` handler whose result has a `success` field catches errors thrown by the AWS SDK or the file system and returns `{ success: false, error }` (for `s3:delete-prefix`, together with `deletedCount: 0, failedCount: 1`), except two that return no `error`: `s3:upload-files` reports per-file failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [] }`, dropping the results already collected; `s3:delete-files` reports per-key failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [], deletedCount: 0, failedCount: keys.length }`. `app-state:save` returns `{ success: false, error }` when the state file cannot be written. The `aws:*` handlers, `app-state:load`, `s3:cancel-operation`, `s3:get-parent-prefix`, `s3:get-key-name`, `s3:clear-client`, `s3:show-open-dialog`, `s3:open-downloads-folder` and `s3:show-file-in-folder` have no handler-level catch; an error that reaches them rejects the renderer's `invoke` promise.
+- **Errors.** Invalid arguments never reach these paths: they resolve to the invalid-input result of section 2. Every `s3:*` handler whose result has a `success` field catches errors thrown by the AWS SDK or the file system and returns `{ success: false, error }` (for `s3:delete-prefix`, together with `deletedCount: 0, failedCount: 1`), except two that return no `error`: `s3:upload-files` reports per-file failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [] }`, dropping the results already collected; `s3:delete-files` reports per-key failures in `results[].error`, and an error escaping the loop yields `{ success: false, results: [], deletedCount: 0, failedCount: keys.length }`. `app-state:save` returns `{ success: false, error }` when the state file cannot be written. The `aws:*` handlers, `app-state:load`, `s3:cancel-operation`, `s3:get-parent-prefix`, `s3:get-key-name`, `s3:clear-client`, `s3:show-open-dialog`, `s3:open-downloads-folder` and `s3:show-file-in-folder` have no handler-level catch; an error that reaches them rejects the renderer's `invoke` promise.
 - **Downloads.** `s3:download-file` writes into the downloads folder using the final path segment of the key as the file name.
 - **Single instance.** A second application instance quits immediately.
 
