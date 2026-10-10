@@ -217,7 +217,7 @@ function canProvideCredentials(
     case 'static':
       return true;
 
-    case 'sso':
+    case 'sso': {
       // SSO profiles are valid if they have the required SSO fields
       // AWS SDK will handle the SSO login flow
       const ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
@@ -225,18 +225,20 @@ function canProvideCredentials(
       const ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
       const ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
       return !!(ssoStartUrl || ssoSession) && !!(ssoAccountId && ssoRoleName);
+    }
 
-    case 'web-identity':
+    case 'web-identity': {
       // Web identity needs token file and role (check both files)
       const tokenFile = getFromEither(credData, configData, 'web_identity_token_file');
       const roleArnWeb = getFromEither(credData, configData, 'role_arn');
       return !!(tokenFile && roleArnWeb);
+    }
 
     case 'process':
       // Process credentials just need the command (check both files)
       return !!getFromEither(credData, configData, 'credential_process');
 
-    case 'role':
+    case 'role': {
       // Role assumption needs either source_profile with creds, or credential_source for EC2/ECS
       // AWS CLI allows these settings in either credentials or config file
       const sourceProfile = getFromEither(credData, configData, 'source_profile');
@@ -254,6 +256,7 @@ function canProvideCredentials(
       }
 
       return false;
+    }
 
     case 'config-only':
       return false;

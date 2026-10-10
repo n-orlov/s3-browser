@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { loadAppState, saveAppState, type AppState } from '../services/appState';
+import { loadAppState, saveAppState } from '../services/appState';
 
 /**
  * Interface for the state data exposed to renderer

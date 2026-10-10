@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
+// Max file size for preview (50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 export interface ImagePreviewProps {
   bucket: string;
   fileKey: string;
@@ -54,9 +57,6 @@ function ImagePreview({
   const [zoom, setZoom] = useState(100);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Max file size for preview (50MB)
-  const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
   // Load image content
   useEffect(() => {
     let mounted = true;
@@ -83,7 +83,7 @@ function ImagePreview({
 
         // Create blob URL for the image
         const mimeType = getMimeType(fileName);
-        const blob = new Blob([result.data], { type: mimeType });
+        const blob = new Blob([result.data as Uint8Array<ArrayBuffer>], { type: mimeType });
         objectUrl = URL.createObjectURL(blob);
 
         setImageUrl(objectUrl);

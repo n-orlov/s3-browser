@@ -88,7 +88,7 @@ import {
 const s3Mock = mockClient(S3Client);
 
 // Helper to create a mock Readable stream from string/buffer
-function createMockStream(content: string | Buffer): Readable {
+function createMockStream(content: string | Buffer): any {
   const stream = new Readable();
   stream.push(content);
   stream.push(null);

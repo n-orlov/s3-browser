@@ -46,7 +46,7 @@ describe('App', () => {
 
   it('shows placeholder text when no bucket is selected', async () => {
     mockElectronAPI.aws.getProfiles.mockResolvedValue({
-      profiles: [{ name: 'default', hasCredentials: true, isValid: true }],
+      profiles: [{ name: 'default', hasCredentials: true, isValid: true, profileType: 'static' as const, profileTypeDescription: 'Static credentials' }],
       currentProfile: 'default',
       defaultRegion: 'us-east-1',
     });
@@ -65,7 +65,7 @@ describe('App', () => {
         buckets: [{ name: 'test-bucket', creationDate: new Date() }],
       });
       mockElectronAPI.aws.getProfiles.mockResolvedValue({
-        profiles: [{ name: 'default', hasCredentials: true, isValid: true }],
+        profiles: [{ name: 'default', hasCredentials: true, isValid: true, profileType: 'static' as const, profileTypeDescription: 'Static credentials' }],
         currentProfile: 'default',
         defaultRegion: 'us-east-1',
       });
@@ -103,7 +103,7 @@ describe('App', () => {
         buckets: [{ name: 'my-bucket', creationDate: new Date() }],
       });
       mockElectronAPI.aws.getProfiles.mockResolvedValue({
-        profiles: [{ name: 'default', hasCredentials: true, isValid: true }],
+        profiles: [{ name: 'default', hasCredentials: true, isValid: true, profileType: 'static' as const, profileTypeDescription: 'Static credentials' }],
         currentProfile: 'default',
         defaultRegion: 'us-east-1',
       });
@@ -149,7 +149,7 @@ describe('App', () => {
         buckets: [{ name: 'test-bucket', creationDate: new Date() }],
       });
       mockElectronAPI.aws.getProfiles.mockResolvedValue({
-        profiles: [{ name: 'default', hasCredentials: true, isValid: true }],
+        profiles: [{ name: 'default', hasCredentials: true, isValid: true, profileType: 'static' as const, profileTypeDescription: 'Static credentials' }],
         currentProfile: 'default',
         defaultRegion: 'us-east-1',
       });
@@ -174,7 +174,8 @@ describe('App', () => {
       // Setup upload mock that resolves
       mockElectronAPI.s3.showOpenDialog.mockResolvedValue(['/path/to/file.txt']);
       mockElectronAPI.s3.uploadFiles.mockResolvedValue({
-        results: [{ success: true }],
+        success: true,
+        results: [{ success: true, path: '/path/to/file.txt' }],
       });
 
       // Track s3-refresh-files events

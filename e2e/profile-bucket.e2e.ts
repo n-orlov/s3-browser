@@ -267,7 +267,7 @@ test.describe('Profile Selection and Bucket Listing', () => {
       await window.waitForTimeout(2000);
 
       // Verify main bucket content is shown
-      let contentHeader = window.locator('.content-header h2');
+      const contentHeader = window.locator('.content-header h2');
       await expect(contentHeader).toHaveText(TEST_BUCKETS.main);
 
       // Screenshot before switching

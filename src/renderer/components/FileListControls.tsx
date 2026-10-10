@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { S3Object } from './FileList';
 
 export type SortField = 'name' | 'size' | 'lastModified';
@@ -37,8 +37,6 @@ export interface FileListControlsProps {
 }
 
 function FileListControls({
-  sortConfig,
-  onSortChange,
   filterType,
   onFilterTypeChange,
   searchQuery,

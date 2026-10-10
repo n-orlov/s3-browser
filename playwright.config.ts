@@ -32,10 +32,10 @@ export default defineConfig({
 
   use: {
     // Capture screenshot on failure and always
-    screenshot: 'on',
+    screenshot: process.env.CI ? 'only-on-failure' : 'on',
 
     // Record video for each test
-    video: 'on',
+    video: process.env.CI ? 'retain-on-failure' : 'on',
 
     // Trace on first retry
     trace: 'on-first-retry',

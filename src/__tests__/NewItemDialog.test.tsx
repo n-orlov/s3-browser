@@ -126,7 +126,7 @@ describe('NewItemDialog', () => {
           onCancel={mockOnCancel}
         />
       );
-      fireEvent.click(screen.getByClassName('dialog-overlay'));
+      fireEvent.click(document.querySelector('.dialog-overlay')!);
       expect(mockOnCancel).toHaveBeenCalled();
     });
 
@@ -267,15 +267,3 @@ describe('NewItemDialog', () => {
     });
   });
 });
-
-// Helper function for testing class presence
-function getByClassName(className: string): Element {
-  const element = document.querySelector(`.${className}`);
-  if (!element) {
-    throw new Error(`Element with class "${className}" not found`);
-  }
-  return element;
-}
-
-// Add to screen
-Object.assign(screen, { getByClassName });

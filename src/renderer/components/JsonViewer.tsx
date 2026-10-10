@@ -254,7 +254,7 @@ function JsonViewer({
           const parsed = JSON.parse(result.content);
           setParsedJson(parsed);
         } catch (parseErr) {
-          throw new Error('Invalid JSON: ' + (parseErr instanceof Error ? parseErr.message : 'Parse error'));
+          throw new Error('Invalid JSON: ' + (parseErr instanceof Error ? parseErr.message : 'Parse error'), { cause: parseErr });
         }
       } catch (err) {
         if (mounted) {

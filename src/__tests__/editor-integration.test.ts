@@ -15,8 +15,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 // Skip these tests in CI environments without AWS credentials
-const AWS_CREDENTIALS_AVAILABLE = process.env.AWS_ACCESS_KEY_ID ||
-  fs.existsSync(`${os.homedir()}/.aws/credentials`);
+// Opt-in only (S3_BROWSER_REAL_AWS_TESTS=1): calls REAL AWS with the operator's own credentials.
+const AWS_CREDENTIALS_AVAILABLE = process.env.S3_BROWSER_REAL_AWS_TESTS === '1' && (process.env.AWS_ACCESS_KEY_ID ||
+  fs.existsSync(`${os.homedir()}/.aws/credentials`));
 
 describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('TextEditor Integration', () => {
   it('should complete the full TextEditor flow: getFileSize -> downloadContent', async () => {
@@ -170,7 +171,7 @@ describe.skipIf(!AWS_CREDENTIALS_AVAILABLE)('ParquetViewer Integration', () => {
       let dataRead = false;
       await parquetRead({
         file: asyncBuffer,
-        onComplete: (readData: Record<string, unknown[]>) => {
+        onComplete: (readData: any) => {
           const columns = Object.keys(readData);
           console.log(`Data columns: ${columns.join(', ')}`);
           if (columns.length > 0) {

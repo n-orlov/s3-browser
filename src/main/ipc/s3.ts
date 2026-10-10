@@ -1,4 +1,5 @@
 import { ipcMain, app, dialog, shell } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import {
   listBuckets,
@@ -23,7 +24,6 @@ import {
   createEmptyFile,
   createFolder,
   type S3Bucket,
-  type S3Object,
   type ListObjectsResult,
   type ListObjectsOptions,
   type FileOperationResult,
@@ -117,7 +117,7 @@ export function registerS3Ipc(): void {
           const result = await listAllObjects(
             profileName,
             options,
-            (count) => {
+            (_count) => {
               // Send progress updates to renderer
               // Note: This would require additional IPC setup for progress events
               // For now, we'll handle progress in the UI layer
@@ -302,8 +302,7 @@ export function registerS3Ipc(): void {
         } finally {
           abortControllers.delete(operationId);
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      } catch {
         return { success: false, results: [] };
       }
     }
@@ -330,8 +329,7 @@ export function registerS3Ipc(): void {
       try {
         const profileName = getCurrentProfile();
         return await deleteFiles(profileName, bucket, keys);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      } catch {
         return { success: false, results: [], deletedCount: 0, failedCount: keys.length };
       }
     }
@@ -561,7 +559,7 @@ export function registerS3Ipc(): void {
  */
 async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await require('fs').promises.access(filePath);
+    await fs.promises.access(filePath);
     return true;
   } catch {
     return false;
