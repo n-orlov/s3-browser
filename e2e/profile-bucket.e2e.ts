@@ -56,7 +56,8 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // After selecting profile, buckets should start loading
       // Wait for loading indicator or bucket tree to appear
-      await window.waitForTimeout(1000);
+      const mainBucketItem = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
+      await expect(mainBucketItem).toBeVisible({ timeout: 15000 });
 
       // Screenshot after profile selection
       await window.screenshot({ path: 'test-results/profile-selected.png' });
@@ -125,7 +126,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // Filter for "secondary"
       await filterInput.fill('secondary');
-      await window.waitForTimeout(300); // Allow filtering to apply
 
       // Only secondary bucket should be visible in the bucket list
       const secondaryBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.secondary });
@@ -149,7 +149,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // Apply filter
       await filterInput.fill('test');
-      await window.waitForTimeout(300);
 
       // Clear button should appear
       const clearBtn = window.locator('.bucket-filter-clear');
@@ -174,7 +173,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // Filter with non-matching text
       await filterInput.fill('nonexistent');
-      await window.waitForTimeout(300);
 
       // Should show "No matching buckets" placeholder
       const placeholder = window.locator('.bucket-tree-placeholder');
@@ -192,14 +190,12 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // First, click on secondary bucket to clear any previous selection
       const secondaryBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.secondary });
       await secondaryBucket.click();
-      await window.waitForTimeout(500);
 
       // Verify secondary is selected
       await expect(secondaryBucket).toHaveClass(/selected/);
 
       // Now click on the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(500);
 
       // Now the main bucket should be selected (have selected class)
       await expect(mainBucket).toHaveClass(/selected/);
@@ -219,8 +215,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // Click on the main bucket (which has test data)
       await mainBucket.click();
 
-      // Wait for file list to load
-      await window.waitForTimeout(2000);
 
       // Content header should show bucket name
       const contentHeader = window.locator('.content-header h2');
@@ -243,8 +237,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // Click on the empty bucket
       await emptyBucket.click();
 
-      // Wait for file list to load
-      await window.waitForTimeout(2000);
 
       // Content header should show empty bucket name
       const contentHeader = window.locator('.content-header h2');
@@ -264,7 +256,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // Click on main bucket first
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
 
       // Verify main bucket content is shown
       const contentHeader = window.locator('.content-header h2');
@@ -276,7 +267,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // Now switch to secondary bucket
       const secondaryBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.secondary });
       await secondaryBucket.click();
-      await window.waitForTimeout(2000);
 
       // Verify secondary bucket content is shown
       await expect(contentHeader).toHaveText(TEST_BUCKETS.secondary);
@@ -299,7 +289,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // Select empty option to deselect profile
       await dropdown.selectOption('');
-      await window.waitForTimeout(1500);
 
       // Bucket tree should show placeholder
       const placeholder = window.locator('.bucket-tree-placeholder');
@@ -322,7 +311,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
 
       // Select the bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
 
       // Note: Full persistence testing would require restarting the app
       // For now, we verify the state is set correctly
@@ -339,13 +327,13 @@ test.describe('Profile Selection and Bucket Listing', () => {
       // Select test profile and bucket
       const dropdown = window.locator('.profile-dropdown');
       await dropdown.selectOption('test');
-      await window.waitForTimeout(2000);
 
       // Select main bucket with test data
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row').filter({ hasText: 'documents' })).toBeVisible();
 
       // Status bar should be visible
       const statusBar = window.locator('.status-bar');
@@ -372,7 +360,7 @@ test.describe('Profile Selection and Bucket Listing', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should show folders and files in file list', async ({ window }) => {
@@ -424,8 +412,6 @@ test.describe('Profile Selection and Bucket Listing', () => {
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
 
-      // Wait for navigation
-      await window.waitForTimeout(1500);
 
       // Content header should show the new path
       const contentHeader = window.locator('.content-header h2');
