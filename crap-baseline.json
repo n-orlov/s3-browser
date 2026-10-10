@@ -1,0 +1,18 @@
+{
+  "src/main/services/awsCredentials.ts:canProvideCredentials": 58.59200000000001,
+  "src/main/services/awsCredentials.ts:getProfileTypeDescription": 56,
+  "src/main/services/s3Service.ts:downloadFile": 42,
+  "src/renderer/App.tsx:App": 31,
+  "src/renderer/App.tsx:App.handleConfirmDelete": 182,
+  "src/renderer/App.tsx:App.handleConfirmNewItem": 90,
+  "src/renderer/components/CsvViewer.tsx:CsvViewer.handleScroll": 42,
+  "src/renderer/components/FileList.tsx:FileList.handleItemClick": 50.64421074023268,
+  "src/renderer/components/FileList.tsx:getFileIcon": 39.53937187073281,
+  "src/renderer/components/FileToolbar.tsx:FileToolbar": 48,
+  "src/renderer/components/ParquetViewer.tsx:ParquetViewer.handleScroll": 42,
+  "src/renderer/components/TextEditor.tsx:TextEditor.handleKeyDown": 42,
+  "src/renderer/components/YamlViewer.tsx:tokenizeValue": 66.59259259259261,
+  "src/renderer/hooks/useS3.ts:useS3.loadBuckets": 56,
+  "src/renderer/hooks/useS3.ts:useS3.loadObjects": 110,
+  "src/renderer/utils/errorMessages.ts:parseError": 39
+}

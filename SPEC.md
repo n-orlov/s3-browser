@@ -100,9 +100,16 @@ All gates run locally with the `package.json` scripts; CI runs the same commands
 | `typecheck` | `tsc -p tsconfig.typecheck.json` | Type-checks `src`, `e2e` and the config files, tests included. |
 | `lint` | `eslint . --max-warnings 18` | ESLint; the warning count may only go down. |
 | `test:coverage` | `vitest run --coverage` | Unit tests (jsdom) with V8 coverage; thresholds in `vitest.config.ts` are lines 80, functions 78, branches 70, statements 78. `src/main/index.ts` and `src/preload/index.ts` are excluded from coverage. |
+| `crap` | `node scripts/crap/crap.ts` | CRAP gate, run after `test:coverage` (see below). |
 | `audit:prod` | `npm audit --omit=dev --audit-level=high` | Fails on a high or critical advisory in production dependencies. |
 | `build` | `build:renderer`, `build:main`, `build:preload` | Produces `dist/`. |
 | `test:e2e:docker` | `./scripts/e2e-docker.sh` | Runs the Playwright Electron suite in `e2e/` against LocalStack, entirely in containers: a LocalStack container plus a Playwright-image container that runs `npm ci`, `npm run build` and `xvfb-run npx playwright test`. Container, network and run names carry `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT` and the shell pid so concurrent runs do not collide. |
+
+**CRAP gate.** `npm run crap` scores every function in `src/main`, `src/preload`, `src/renderer` and `src/shared` (the directories that exist; tests and `.d.ts` files are skipped) as `CRAP = c^2 * (1 - cov)^3 + c`, where `c` is the function's cyclomatic complexity from ESLint's `complexity` rule and `cov` is the fraction of the function's own statements (nested functions excluded) that ran, read from `coverage/coverage-final.json`. A function in a file that has no coverage entry has `cov = 0`. Scoring is `scripts/crap/crapScore.ts`; the CLI is `scripts/crap/crap.ts`. The command prints each offending function as `CRAP <score>  <file>:<qualified name>` and exits non-zero when any function fails; it exits `2` when `coverage/coverage-final.json` is missing, so run `npm run test:coverage` first. A function id is `<file>:<qualified name>` (repeated names in a file get `#2`, `#3`, ... in source order).
+
+- **Limit.** A function not in the baseline fails when its score exceeds `CRAP_MAX` (environment variable, default `30`).
+- **Baseline.** `crap-baseline.json` maps function ids to the score they had when the baseline was last written. It lists exactly the functions over `CRAP_MAX` at that time. `npm run crap -- --write-baseline` regenerates it from the current code and coverage (honouring `CRAP_MAX`); it is the only supported way to edit it.
+- **Shrink-only.** A baselined function fails when its score exceeds its baseline entry, even if the score is below `CRAP_MAX`, so the baseline can only improve: lowering an entry by hand below the live score makes the gate fail, and a function that gets better is locked in by regenerating the baseline. Entries for functions that no longer exist are ignored and reported.
 
 `playwright.config.ts` runs one worker, sequentially, with `retries: 2` when `CI` is set and `0` otherwise, and forbids `test.only` in CI.
 
