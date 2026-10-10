@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AwsProfileProvider } from './context/AwsProfileContext';
 import './styles/global.css';
+import { configureMonaco } from './monacoSetup';
+
+configureMonaco();
 
 const container = document.getElementById('root');
 if (!container) {
