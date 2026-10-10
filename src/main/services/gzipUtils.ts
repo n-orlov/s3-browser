@@ -1,7 +1,12 @@
 import * as zlib from 'zlib';
 import { promisify } from 'util';
 
-const gunzipAsync = promisify(zlib.gunzip);
+import { getMaxContentBytes, formatContentLimit } from '../contentLimits';
+
+const gunzipAsync = promisify(zlib.gunzip) as (
+  buf: zlib.InputType,
+  options: zlib.ZlibOptions,
+) => Promise<Buffer>;
 const gzipAsync = promisify(zlib.gzip);
 
 /**
@@ -29,14 +34,34 @@ export function getBaseExtension(key: string): string {
   return key.split('.').pop()?.toLowerCase() ?? '';
 }
 
+/** Raised when gunzip output would exceed the configured cap (gzip bomb guard). */
+export class GzipOutputTooLargeError extends Error {
+  constructor(readonly limit: number) {
+    super(`Decompressed content exceeds the maximum size of ${formatContentLimit(limit)}.`);
+    this.name = 'GzipOutputTooLargeError';
+  }
+}
+
 /**
  * Decompress gzip content to string
  * @param buffer - The gzip compressed buffer
+ * @param maxOutputBytes - Maximum decompressed size; defaults to the content cap
  * @returns The decompressed string content
+ * @throws GzipOutputTooLargeError when the output would exceed the cap
  */
-export async function decompressGzip(buffer: Buffer): Promise<string> {
-  const decompressed = await gunzipAsync(buffer);
-  return decompressed.toString('utf-8');
+export async function decompressGzip(
+  buffer: Buffer,
+  maxOutputBytes: number = getMaxContentBytes(),
+): Promise<string> {
+  try {
+    const decompressed = await gunzipAsync(buffer, { maxOutputLength: maxOutputBytes });
+    return decompressed.toString('utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new GzipOutputTooLargeError(maxOutputBytes);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -55,10 +80,16 @@ export async function compressGzip(content: string): Promise<Buffer> {
  * @param buffer - The potentially compressed buffer
  * @returns The decompressed content as string
  */
-export async function tryDecompressGzip(buffer: Buffer): Promise<string> {
+export async function tryDecompressGzip(
+  buffer: Buffer,
+  maxOutputBytes: number = getMaxContentBytes(),
+): Promise<string> {
   try {
-    return await decompressGzip(buffer);
-  } catch {
+    return await decompressGzip(buffer, maxOutputBytes);
+  } catch (error) {
+    if (error instanceof GzipOutputTooLargeError) {
+      throw error;
+    }
     // If decompression fails, return as-is (might be a corrupt file or not actually gzipped)
     return buffer.toString('utf-8');
   }

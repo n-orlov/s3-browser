@@ -126,4 +126,16 @@ describe('content-read size cap (HEAD before GET)', () => {
       expect(getMaxContentBytes({ [MAX_CONTENT_BYTES_ENV]: bad })).toBe(DEFAULT_MAX_CONTENT_BYTES);
     }
   });
+
+  it('s3:download-content resolves {success:false, error} for a gzip bomb under the cap', async () => {
+    vi.stubEnv(MAX_CONTENT_BYTES_ENV, '1000');
+    const bomb = zlib.gzipSync(Buffer.alloc(200_000, 'a'));
+    expect(bomb.length).toBeLessThan(1000);
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: bomb.length });
+    s3Mock.on(GetObjectCommand).callsFake(async () => ({ Body: body(bomb) }));
+    const res = await call('s3:download-content', 'bucket', 'bomb.txt.gz');
+    expect(res.success).toBe(false);
+    expect(res.content).toBeUndefined();
+    expect(res.error).toContain('1000 bytes');
+  });
 });

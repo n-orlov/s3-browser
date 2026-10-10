@@ -1,4 +1,4 @@
-import { isGzipFile, getBaseExtension, compressGzip, decompressGzip, tryDecompressGzip } from '../main/services/gzipUtils';
+import { isGzipFile, getBaseExtension, compressGzip, decompressGzip, tryDecompressGzip, GzipOutputTooLargeError } from '../main/services/gzipUtils';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
 
@@ -157,6 +157,45 @@ describe('gzipUtils', () => {
       const emptyBuffer = Buffer.from('');
       const result = await tryDecompressGzip(emptyBuffer);
       expect(result).toBe('');
+    });
+  });
+
+  describe('gunzip output cap', () => {
+    const bomb = zlib.gzipSync(Buffer.alloc(200_000, 'a'));
+
+    it('uses a small payload that expands well past the cap', () => {
+      expect(bomb.length).toBeLessThan(2_000);
+    });
+
+    it('rejects with an error naming the limit once output would exceed it', async () => {
+      const err = await decompressGzip(bomb, 1_000).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(GzipOutputTooLargeError);
+      expect((err as Error).message).toContain('1000 bytes');
+    });
+
+    it('rejects a real default-cap bomb (50 MB + 1 of zeros, ~50 KB compressed)', async () => {
+      const real = zlib.gzipSync(Buffer.alloc(50 * 1024 * 1024 + 1));
+      const err = await decompressGzip(real).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(GzipOutputTooLargeError);
+      expect((err as Error).message).toContain('52428800 bytes');
+    });
+
+    it('round-trips a payload under the cap, also exactly at the cap', async () => {
+      const text = 'héllo wörld '.repeat(50);
+      expect(await decompressGzip(await compressGzip(text))).toBe(text);
+      const exact = 'b'.repeat(1_000);
+      expect(await decompressGzip(await compressGzip(exact), 1_000)).toBe(exact);
+      await expect(decompressGzip(await compressGzip(exact + 'b'), 1_000)).rejects.toBeInstanceOf(
+        GzipOutputTooLargeError,
+      );
+    });
+
+    it('tryDecompressGzip does not swallow the cap error into raw text', async () => {
+      await expect(tryDecompressGzip(bomb, 1_000)).rejects.toBeInstanceOf(GzipOutputTooLargeError);
+    });
+
+    it('tryDecompressGzip still falls back to raw text for non-gzip input', async () => {
+      expect(await tryDecompressGzip(Buffer.from('plain'), 1_000)).toBe('plain');
     });
   });
 

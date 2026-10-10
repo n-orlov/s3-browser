@@ -22,6 +22,11 @@ function formatMegabytes(bytes: number): string {
   return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
 }
 
+/** Human-readable limit, e.g. `50 MB (52428800 bytes)`. */
+export function formatContentLimit(limit: number): string {
+  return `${formatMegabytes(limit)} (${limit} bytes)`;
+}
+
 /** Error text for an object whose size exceeds the cap; names the limit. */
 export function contentTooLargeMessage(size: number, limit: number): string {
   return `File is too large to open (${formatMegabytes(size)}). Maximum size is ${formatMegabytes(limit)} (${limit} bytes).`;
