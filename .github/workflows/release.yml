@@ -33,7 +33,7 @@ jobs:
           npx electron-builder --linux -p never
 
       - name: Upload Linux artifacts to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/*.AppImage
@@ -61,7 +61,7 @@ jobs:
         run: ls -la release/
 
       - name: Upload Windows artifacts to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/*.exe
@@ -96,7 +96,7 @@ jobs:
         run: ls -la release/
 
       - name: Upload macOS artifacts to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/*.dmg
