@@ -12,7 +12,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible({ timeout: 15000 });
     });
 
     test('should display status bar at bottom of file list', async ({ window }) => {
@@ -34,7 +35,6 @@ test.describe('UI Features', () => {
       // Click elsewhere to clear selection if any
       const contentArea = window.locator('.content');
       await contentArea.click({ position: { x: 10, y: 10 } });
-      await window.waitForTimeout(500);
 
       const selection = window.locator('.status-bar-selection');
       await expect(selection).toBeVisible();
@@ -46,13 +46,14 @@ test.describe('UI Features', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
+      await expect(window.locator('.file-row:not(.folder)').filter({ hasText: 'file1.txt' })).toBeVisible({ timeout: 5000 });
 
       // Select a file
       const textFile = window.locator('.file-row:not(.folder)').first();
       await expect(textFile).toBeVisible({ timeout: 5000 });
       await textFile.click();
-      await window.waitForTimeout(500);
+      await expect(textFile).toHaveClass(/selected/);
 
       // Selection should update
       const selection = window.locator('.status-bar-selection');
@@ -68,13 +69,14 @@ test.describe('UI Features', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
+      await expect(window.locator('.file-row:not(.folder)').filter({ hasText: 'file1.txt' })).toBeVisible({ timeout: 5000 });
 
       // Select a file
       const textFile = window.locator('.file-row:not(.folder)').first();
       await expect(textFile).toBeVisible({ timeout: 5000 });
       await textFile.click();
-      await window.waitForTimeout(500);
+      await expect(textFile).toHaveClass(/selected/);
 
       // Should show size in selection info (format: "1 selected (X B/KB/MB)")
       const selection = window.locator('.status-bar-selection');
@@ -86,28 +88,28 @@ test.describe('UI Features', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
+      await expect(window.locator('.file-row:not(.folder)').filter({ hasText: 'file1.txt' })).toBeVisible({ timeout: 5000 });
 
       // Select first file
       const files = window.locator('.file-row:not(.folder)');
       const firstFile = files.first();
       await expect(firstFile).toBeVisible({ timeout: 5000 });
       await firstFile.click();
-      await window.waitForTimeout(300);
+      await expect(firstFile).toHaveClass(/selected/);
 
       // Ctrl+click to add second file to selection
       const secondFile = files.nth(1);
-      if (await secondFile.isVisible()) {
-        await secondFile.click({ modifiers: ['Control'] });
-        await window.waitForTimeout(500);
+      await expect(secondFile).toBeVisible({ timeout: 5000 });
+      await secondFile.click({ modifiers: ['Control'] });
+      await expect(secondFile).toHaveClass(/selected/);
 
-        // Should show 2 selected
-        const selection = window.locator('.status-bar-selection');
-        await expect(selection).toContainText(/2\s*selected/i);
+      // Should show 2 selected
+      const selection = window.locator('.status-bar-selection');
+      await expect(selection).toContainText(/2\s*selected/i);
 
-        // Screenshot showing multiselect
-        await window.screenshot({ path: 'test-results/status-bar-multiselect.png' });
-      }
+      // Screenshot showing multiselect
+      await window.screenshot({ path: 'test-results/status-bar-multiselect.png' });
     });
 
     test('should indicate when more items are available', async ({ window }) => {
@@ -116,8 +118,7 @@ test.describe('UI Features', () => {
       await expect(itemCount).toBeVisible();
 
       // Should either show "X items" or "X items loaded (more available)"
-      const text = await itemCount.textContent();
-      expect(text).toMatch(/\d+\s*item/i);
+      await expect(itemCount).toHaveText(/\d+\s*item/i);
     });
   });
 
@@ -131,7 +132,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible({ timeout: 15000 });
     });
 
     test('should show Properties button disabled when no file selected', async ({ window }) => {
@@ -146,13 +148,13 @@ test.describe('UI Features', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // Select a file (config.json)
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await expect(configFile).toBeVisible({ timeout: 5000 });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Properties button should be enabled
       const propertiesBtn = window.locator('button[title*="properties" i]');
@@ -164,17 +166,16 @@ test.describe('UI Features', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await expect(configFile).toBeVisible({ timeout: 5000 });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Click Properties button
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Dialog should open
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /properties/i });
@@ -188,15 +189,14 @@ test.describe('UI Features', () => {
       // Navigate and select config.json (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Should show the file name
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /properties/i });
@@ -207,15 +207,14 @@ test.describe('UI Features', () => {
       // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Should show S3 URL
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /properties/i });
@@ -226,15 +225,14 @@ test.describe('UI Features', () => {
       // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Should have Copy buttons
       const copyButtons = window.locator('.property-copy-btn, button').filter({ hasText: /copy/i });
@@ -245,20 +243,18 @@ test.describe('UI Features', () => {
       // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Click Close button
       const closeBtn = window.locator('.dialog-btn-confirm, .dialog button').filter({ hasText: /close/i });
       await closeBtn.click();
-      await window.waitForTimeout(500);
 
       // Dialog should be closed
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /properties/i });
@@ -269,15 +265,14 @@ test.describe('UI Features', () => {
       // Navigate and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       const propertiesBtn = window.locator('button[title*="properties" i]');
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Verify dialog is open
       const dialogOverlay = window.locator('.dialog-overlay');
@@ -286,7 +281,6 @@ test.describe('UI Features', () => {
       // Click on dialog overlay outside the dialog to close it (similar to escape)
       // This tests the overlay click-to-close functionality which is more reliable
       await dialogOverlay.click({ position: { x: 10, y: 10 } });
-      await window.waitForTimeout(500);
 
       // Dialog should be closed
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /properties/i });
@@ -298,24 +292,15 @@ test.describe('UI Features', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
 
-      // Single click should select (not navigate for the first click without holding modifiers)
-      // Wait and click again to ensure selection
+      // Single click selects the folder without navigating
       await documentsFolder.click();
-      await window.waitForTimeout(300);
+      await expect(documentsFolder).toHaveClass(/selected/);
 
-      // The folder might auto-navigate, but Properties should still work
-      // Navigate back and select differently - use the properties button check
+      // A single click selects a folder without navigating, so Properties is enabled
       const propertiesBtn = window.locator('button[title*="properties" i]');
-
-      // If Properties is disabled, the folder navigated. Skip this specific test.
-      const isEnabled = await propertiesBtn.isEnabled();
-      if (!isEnabled) {
-        test.skip();
-        return;
-      }
+      await expect(propertiesBtn).toBeEnabled();
 
       await propertiesBtn.click();
-      await window.waitForTimeout(1000);
 
       // Dialog should show "Folder Properties"
       const dialog = window.locator('.dialog-properties, .dialog').filter({ hasText: /folder/i });
@@ -336,7 +321,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible({ timeout: 15000 });
     });
 
     test('should have New File button visible in toolbar', async ({ window }) => {
@@ -353,7 +339,6 @@ test.describe('UI Features', () => {
     test('should open New File dialog when button clicked', async ({ window }) => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Dialog should open
       const dialog = window.locator('.dialog').filter({ hasText: /new file/i });
@@ -366,7 +351,6 @@ test.describe('UI Features', () => {
     test('should show default filename in New File dialog', async ({ window }) => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Input should have default name
       const input = window.locator('.dialog-input, .dialog input[type="text"]');
@@ -376,7 +360,6 @@ test.describe('UI Features', () => {
     test('should show preview path in New File dialog', async ({ window }) => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Should show preview of what will be created
       const preview = window.locator('.new-item-preview, .preview-path');
@@ -386,12 +369,10 @@ test.describe('UI Features', () => {
     test('should close New File dialog with Cancel button', async ({ window }) => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Click Cancel
       const cancelBtn = window.locator('.dialog-btn-cancel, .dialog button').filter({ hasText: /cancel/i });
       await cancelBtn.click();
-      await window.waitForTimeout(500);
 
       // Dialog should be closed
       const dialog = window.locator('.dialog').filter({ hasText: /new file/i });
@@ -401,12 +382,10 @@ test.describe('UI Features', () => {
     test('should disable Create button when name is empty', async ({ window }) => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Clear the input
       const input = window.locator('.dialog-input, .dialog input[type="text"]');
       await input.fill('');
-      await window.waitForTimeout(300);
 
       // Create button should be disabled
       const createBtn = window.locator('.dialog-btn-confirm, .dialog button').filter({ hasText: /create/i });
@@ -424,7 +403,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible({ timeout: 15000 });
     });
 
     test('should have New Folder button visible in toolbar', async ({ window }) => {
@@ -440,7 +420,6 @@ test.describe('UI Features', () => {
     test('should open New Folder dialog when button clicked', async ({ window }) => {
       const newFolderBtn = window.locator('button[title*="new"][title*="folder" i], button[title*="Create new"][title*="folder" i]');
       await newFolderBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Dialog should open
       const dialog = window.locator('.dialog').filter({ hasText: /new folder/i });
@@ -453,7 +432,6 @@ test.describe('UI Features', () => {
     test('should show default folder name in New Folder dialog', async ({ window }) => {
       const newFolderBtn = window.locator('button[title*="new"][title*="folder" i], button[title*="Create new"][title*="folder" i]');
       await newFolderBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Input should have default name
       const input = window.locator('.dialog-input, .dialog input[type="text"]');
@@ -463,23 +441,19 @@ test.describe('UI Features', () => {
     test('should show preview path with trailing slash for folder', async ({ window }) => {
       const newFolderBtn = window.locator('button[title*="new"][title*="folder" i], button[title*="Create new"][title*="folder" i]');
       await newFolderBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Preview should show path ending with /
       const preview = window.locator('.preview-path');
-      const previewText = await preview.textContent();
-      expect(previewText).toMatch(/\/$/);
+      await expect(preview).toHaveText(/\/$/);
     });
 
     test('should close New Folder dialog with Cancel button', async ({ window }) => {
       const newFolderBtn = window.locator('button[title*="new"][title*="folder" i], button[title*="Create new"][title*="folder" i]');
       await newFolderBtn.first().click();
-      await window.waitForTimeout(500);
 
       // Click Cancel
       const cancelBtn = window.locator('.dialog-btn-cancel, .dialog button').filter({ hasText: /cancel/i });
       await cancelBtn.click();
-      await window.waitForTimeout(500);
 
       // Dialog should be closed
       const dialog = window.locator('.dialog').filter({ hasText: /new folder/i });
