@@ -15,12 +15,12 @@ test.describe('File Viewers', () => {
 
       // Select the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should enable edit button when file is selected', async ({ window }) => {
@@ -207,13 +207,13 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into data folder (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
     });
 
     test('should enable CSV viewer button for CSV files', async ({ window }) => {
@@ -385,13 +385,13 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into data folder (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
     });
 
     test('should enable JSON viewer button for JSON files', async ({ window }) => {
@@ -613,13 +613,13 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into data folder (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
     });
 
     test('should enable YAML viewer button for YAML files', async ({ window }) => {
@@ -795,12 +795,12 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into images folder (double-click to navigate)
       const imagesFolder = window.locator('.file-row.folder').filter({ hasText: 'images' });
       await imagesFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('images');
     });
 
     test('should enable image preview button for image files', async ({ window }) => {
@@ -821,13 +821,13 @@ test.describe('File Viewers', () => {
       // Go back to root
       const upButton = window.locator('.go-up-btn');
       await upButton.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into data folder (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // Select JSON file
       const jsonFile = window.locator('.file-row.file').filter({ hasText: 'config.json' });
@@ -1025,7 +1025,7 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should disable parquet viewer button for non-parquet files', async ({ window }) => {
@@ -1033,7 +1033,7 @@ test.describe('File Viewers', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // Select JSON file
       const jsonFile = window.locator('.file-row.file').filter({ hasText: 'config.json' });
@@ -1068,7 +1068,6 @@ test.describe('File Viewers', () => {
       // Refresh to see the new file
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the parquet file
       const parquetFile = window.locator('.file-row.file').filter({ hasText: parquetFileName });
@@ -1104,7 +1103,7 @@ test.describe('File Viewers', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should show all viewer buttons in toolbar', async ({ window }) => {
@@ -1112,7 +1111,7 @@ test.describe('File Viewers', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // Check all viewer buttons are present in toolbar
       // Edit (title contains "edit" - either "Edit file" or "Select a file to edit")
@@ -1148,7 +1147,7 @@ test.describe('File Viewers', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // Select JSON file
       const jsonFile = window.locator('.file-row.file').filter({ hasText: 'config.json' });
@@ -1175,7 +1174,7 @@ test.describe('File Viewers', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 15000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       // First select JSON file
       const jsonFile = window.locator('.file-row.file').filter({ hasText: 'config.json' });
