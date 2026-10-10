@@ -96,7 +96,7 @@ describe('ParquetViewer', () => {
   });
 
   describe('file size validation', () => {
-    it('shows error for files exceeding max size (100MB)', async () => {
+    it('shows error for files exceeding max size (50MB)', async () => {
       const largeFileProps = {
         ...defaultProps,
         fileSize: 150 * 1024 * 1024, // 150MB

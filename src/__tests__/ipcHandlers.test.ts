@@ -374,6 +374,7 @@ describe('S3 IPC handlers', () => {
   });
 
   it('s3:download-content gunzips .gz keys and wraps failures', async () => {
+    m(s3.getFileSize).mockResolvedValue({ success: true, size: 10 });
     m(s3.downloadContent).mockResolvedValueOnce({ success: true, content: 'plain' });
     expect(await call('s3:download-content', 'b', 'a.txt')).toEqual({ success: true, content: 'plain' });
 
@@ -389,6 +390,7 @@ describe('S3 IPC handlers', () => {
   });
 
   it('s3:download-binary-content returns a Uint8Array or the service error', async () => {
+    m(s3.getFileSize).mockResolvedValue({ success: true, size: 10 });
     m(s3.downloadBinaryContent).mockResolvedValueOnce({ success: true, data: Buffer.from([1, 2, 3]) });
     const ok = await call('s3:download-binary-content', 'b', 'k');
     expect(ok.success).toBe(true);

@@ -21,9 +21,9 @@ interface ParquetData {
 }
 
 /**
- * Maximum file size for parquet preview (100MB)
+ * Maximum file size for parquet preview (50MB, the main-process content-read cap)
  */
-const MAX_PARQUET_SIZE = 100 * 1024 * 1024;
+const MAX_PARQUET_SIZE = 50 * 1024 * 1024;
 
 /**
  * Initial rows to load

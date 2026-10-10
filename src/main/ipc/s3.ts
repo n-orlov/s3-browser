@@ -33,6 +33,7 @@ import {
 } from '../services/s3Service';
 import { getCurrentProfileCredentials } from './credentials';
 import { isGzipFile, decompressGzip, compressGzip } from '../services/gzipUtils';
+import { getMaxContentBytes, contentTooLargeMessage } from '../contentLimits';
 
 // Abort controllers for cancellable operations
 const abortControllers = new Map<string, AbortController>();
@@ -65,6 +66,26 @@ function getCurrentProfile(): string {
     throw new Error('No AWS profile selected. Please select a profile first.');
   }
   return profile.name;
+}
+
+/**
+ * HEADs the object and returns an error result when its ContentLength exceeds
+ * the content-read cap (or the HEAD itself fails); null when a download may go on.
+ */
+async function rejectOversized(
+  profileName: string,
+  bucket: string,
+  key: string
+): Promise<{ success: false; error: string } | null> {
+  const head = await getFileSize(profileName, bucket, key);
+  if (!head.success) {
+    return { success: false, error: head.error || 'Failed to read file size' };
+  }
+  const limit = getMaxContentBytes();
+  if ((head.size ?? 0) > limit) {
+    return { success: false, error: contentTooLargeMessage(head.size ?? 0, limit) };
+  }
+  return null;
 }
 
 /**
@@ -426,6 +447,11 @@ export function registerS3Ipc(): void {
       try {
         const profileName = getCurrentProfile();
 
+        const tooLarge = await rejectOversized(profileName, bucket, key);
+        if (tooLarge) {
+          return tooLarge;
+        }
+
         // For .gz files, download as binary and decompress
         if (isGzipFile(key)) {
           const result = await downloadBinaryContent(profileName, bucket, key);
@@ -473,6 +499,10 @@ export function registerS3Ipc(): void {
     async (_event, bucket: string, key: string): Promise<{ success: boolean; data?: Uint8Array; error?: string }> => {
       try {
         const profileName = getCurrentProfile();
+        const tooLarge = await rejectOversized(profileName, bucket, key);
+        if (tooLarge) {
+          return tooLarge;
+        }
         const result = await downloadBinaryContent(profileName, bucket, key);
         if (result.success && result.data) {
           // Convert Buffer to Uint8Array for IPC transfer

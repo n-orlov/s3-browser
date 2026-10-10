@@ -63,15 +63,17 @@ Result shapes: `FileOperationResult` is `{ success: boolean; error?: string }`. 
 | `s3:rename-file` | `bucket: string`, `sourceKey: string`, `newName: string` | `FileOperationResult`; copies to the same parent prefix under the new name, then deletes the source |
 | `s3:copy-file` | `sourceBucket: string`, `sourceKey: string`, `destinationBucket: string`, `destinationKey: string` | `FileOperationResult` |
 | `s3:upload-content` | `bucket: string`, `key: string`, `content: string` | `FileOperationResult`; gzip-compresses the content when the key ends in `.gz` |
-| `s3:download-content` | `bucket: string`, `key: string` | `{ success; content?: string; error? }`; gunzips keys ending in `.gz` |
+| `s3:download-content` | `bucket: string`, `key: string` | `{ success; content?: string; error? }`; gunzips keys ending in `.gz`; size-capped (see below) |
 | `s3:get-file-size` | `bucket: string`, `key: string` | `{ success; size?: number; error? }` |
-| `s3:download-binary-content` | `bucket: string`, `key: string` | `{ success; data?: Uint8Array; error? }` |
+| `s3:download-binary-content` | `bucket: string`, `key: string` | `{ success; data?: Uint8Array; error? }`; size-capped (see below) |
 | `s3:show-open-dialog` | none | `string[] \| null`; native multi-file open dialog, `null` when cancelled |
 | `s3:open-downloads-folder` | none | `void`; opens the downloads folder in the system file manager |
 | `s3:show-file-in-folder` | `filePath: string` | `void`; reveals the file in the system file manager |
 | `s3:get-object-metadata` | `bucket: string`, `key: string` | `{ success; metadata?: ObjectMetadata; error? }` |
 | `s3:create-file` | `bucket: string`, `key: string` | `FileOperationResult`; creates an empty object |
 | `s3:create-folder` | `bucket: string`, `prefix: string` | `FileOperationResult`; creates a zero-byte folder marker object |
+
+**Content-read size cap.** `s3:download-content` (text and gzip) and `s3:download-binary-content` (binary, parquet, image) send a HEAD request first and compare `ContentLength` with the cap, 50 MB (`50 * 1024 * 1024` bytes) by default, defined in `src/main/contentLimits.ts` and overridable with the positive-integer environment variable `S3_BROWSER_MAX_CONTENT_BYTES` (bytes). An object above the cap resolves to `{ success: false, error }` where `error` names the limit, and no `GetObject` request is made. The cap applies to the stored size, so a `.gz` object is measured compressed. A failing HEAD resolves to `{ success: false, error }` with the service message and no download follows.
 
 ## 3. Security model
 
