@@ -13,7 +13,6 @@ type DeepMock<T> = {
 
 // Mock electronAPI for renderer tests
 const mockElectronAPI = {
-  getAppVersion: vi.fn(() => Promise.resolve('0.1.0')),
   platform: 'linux' as NodeJS.Platform,
   appState: {
     load: vi.fn(() =>

@@ -142,9 +142,6 @@ export interface AppStateData {
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
-  // App info
-  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-
   // Platform info
   platform: process.platform,
 
@@ -265,7 +262,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 declare global {
   interface Window {
     electronAPI: {
-      getAppVersion: () => Promise<string>;
       platform: NodeJS.Platform;
       appState: {
         load: () => Promise<AppStateData>;
