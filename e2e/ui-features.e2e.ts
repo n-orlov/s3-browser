@@ -471,7 +471,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible();
     });
 
     test('should have toast container present in DOM', async ({ window }) => {
@@ -483,16 +484,15 @@ test.describe('UI Features', () => {
       // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Click Copy URL button
       const copyBtn = window.locator('button[title*="copy" i][title*="url" i]');
       await copyBtn.click();
-      await window.waitForTimeout(1000);
 
       // Toast should appear
       const toast = window.locator('.toast');
@@ -506,16 +506,15 @@ test.describe('UI Features', () => {
       // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Click Copy URL button
       const copyBtn = window.locator('button[title*="copy" i][title*="url" i]');
       await copyBtn.click();
-      await window.waitForTimeout(1000);
 
       // Toast should have a title
       const toastTitle = window.locator('.toast-title');
@@ -526,37 +525,34 @@ test.describe('UI Features', () => {
       // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Click Copy URL button to trigger toast
       const copyBtn = window.locator('button[title*="copy" i][title*="url" i]');
       await copyBtn.click();
-      await window.waitForTimeout(1000);
 
       // Click dismiss button on toast
       const dismissBtn = window.locator('.toast-dismiss');
-      if (await dismissBtn.first().isVisible()) {
-        await dismissBtn.first().click();
-        await window.waitForTimeout(500);
+      await expect(dismissBtn.first()).toBeVisible();
+      await dismissBtn.first().click();
 
-        // Toast should be dismissed
-        await expect(window.locator('.toast').first()).not.toBeVisible({ timeout: 3000 });
-      }
+      // Toast should be dismissed
+      await expect(window.locator('.toast').first()).not.toBeVisible({ timeout: 3000 });
     });
 
     test('should auto-dismiss toast after duration', async ({ window }) => {
       // Navigate to data folder and select a file (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
 
       const configFile = window.locator('.file-row:not(.folder)').filter({ hasText: 'config.json' });
       await configFile.click();
-      await window.waitForTimeout(500);
+      await expect(configFile).toHaveClass(/selected/);
 
       // Click Copy URL button to trigger toast
       const copyBtn = window.locator('button[title*="copy" i][title*="url" i]');
@@ -566,11 +562,9 @@ test.describe('UI Features', () => {
       const toast = window.locator('.toast');
       await expect(toast.first()).toBeVisible({ timeout: 5000 });
 
-      // Wait for auto-dismiss (default is 5 seconds)
-      await window.waitForTimeout(6000);
-
-      // Toast should be gone
-      await expect(toast.first()).not.toBeVisible({ timeout: 2000 });
+      // Toast auto-dismisses after its default 5 s duration; the web-first
+      // assertion polls until it is gone (default expect timeout covers it)
+      await expect(toast.first()).not.toBeVisible();
     });
   });
 
@@ -600,7 +594,6 @@ test.describe('UI Features', () => {
 
       // Filter for "secondary"
       await filterInput.fill('SECONDARY'); // uppercase to test case-insensitivity
-      await window.waitForTimeout(500);
 
       // Only secondary bucket should be visible
       const secondaryBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.secondary });
@@ -619,12 +612,11 @@ test.describe('UI Features', () => {
 
       // Filter for "bucket" - should match all buckets (test-bucket, secondary-bucket, empty-bucket)
       await filterInput.fill('bucket');
-      await window.waitForTimeout(500);
 
       // All buckets contain "bucket", so all should be visible
       const bucketItems = window.locator('.bucket-item');
-      const count = await bucketItems.count();
-      expect(count).toBe(3);
+      await expect(bucketItems).toHaveCount(3);
+      expect(await bucketItems.count()).toBe(3);
     });
 
     test('should show filter hint with bucket count', async ({ window }) => {
@@ -636,7 +628,6 @@ test.describe('UI Features', () => {
     test('should update filter hint when filtering', async ({ window }) => {
       const filterInput = window.locator('.bucket-filter-input');
       await filterInput.fill('secondary');
-      await window.waitForTimeout(500);
 
       const filterHint = window.locator('.bucket-filter-hint');
       await expect(filterHint).toContainText('1 of 3');
@@ -645,7 +636,6 @@ test.describe('UI Features', () => {
     test('should show clear button when filter has text', async ({ window }) => {
       const filterInput = window.locator('.bucket-filter-input');
       await filterInput.fill('test');
-      await window.waitForTimeout(300);
 
       const clearBtn = window.locator('.bucket-filter-clear');
       await expect(clearBtn).toBeVisible();
@@ -654,19 +644,17 @@ test.describe('UI Features', () => {
     test('should clear filter when clear button clicked', async ({ window }) => {
       const filterInput = window.locator('.bucket-filter-input');
       await filterInput.fill('test');
-      await window.waitForTimeout(300);
 
       const clearBtn = window.locator('.bucket-filter-clear');
       await clearBtn.click();
-      await window.waitForTimeout(300);
 
       // Filter should be cleared
       await expect(filterInput).toHaveValue('');
 
       // All buckets should be visible
       const bucketItems = window.locator('.bucket-item');
-      const count = await bucketItems.count();
-      expect(count).toBe(3);
+      await expect(bucketItems).toHaveCount(3);
+      expect(await bucketItems.count()).toBe(3);
     });
   });
 
@@ -680,17 +668,18 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible();
 
       // Navigate to data folder which has various file types (double-click to navigate)
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
       await dataFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('data');
     });
 
     test('should display quick filter input', async ({ window }) => {
-      const searchInput = window.locator('.file-list-search-input, input[placeholder*="filter" i]');
+      const searchInput = window.locator('.file-list-search-input');
       await expect(searchInput.first()).toBeVisible();
 
       // Screenshot showing filter controls
@@ -698,54 +687,50 @@ test.describe('UI Features', () => {
     });
 
     test('should filter files by name using quick filter', async ({ window }) => {
-      const searchInput = window.locator('.file-list-search-input, input[placeholder*="filter" i]');
+      const searchInput = window.locator('.file-list-search-input');
       await searchInput.first().fill('config');
-      await window.waitForTimeout(500);
 
       // Should show files containing "config"
       const configFiles = window.locator('.file-row').filter({ hasText: /config/i });
+      await expect(configFiles.first()).toBeVisible();
       const count = await configFiles.count();
       expect(count).toBeGreaterThan(0);
+
+      // Rows that do not match the query are filtered out
+      await expect(window.locator('.file-row').filter({ hasNotText: /config/i })).toHaveCount(0);
 
       // Screenshot showing filtered results
       await window.screenshot({ path: 'test-results/file-list-quick-filter.png' });
     });
 
     test('should show clear button when quick filter has text', async ({ window }) => {
-      const searchInput = window.locator('.file-list-search-input, input[placeholder*="filter" i]');
+      const searchInput = window.locator('.file-list-search-input');
       await searchInput.first().fill('config');
-      await window.waitForTimeout(500);
 
-      // Look for clear button (may use different class name or text)
+      // The clear button is rendered as soon as the query is non-empty
       const clearBtn = window.locator('.file-list-search-clear, .file-list-controls button[title*="clear" i]');
-      // If clear button exists, verify visibility; if not, the feature might show X in a different way
-      if (await clearBtn.count() > 0) {
-        await expect(clearBtn.first()).toBeVisible();
-      } else {
-        // Clear functionality might be integrated differently - just verify filter works
-        const configFiles = window.locator('.file-row').filter({ hasText: /config/i });
-        expect(await configFiles.count()).toBeGreaterThan(0);
-      }
+      await expect(clearBtn.first()).toBeVisible();
+
+      // And the filter itself applied: config files are still listed
+      const configFiles = window.locator('.file-row').filter({ hasText: /config/i });
+      await expect(configFiles.first()).toBeVisible();
+      expect(await configFiles.count()).toBeGreaterThan(0);
     });
 
     test('should clear quick filter when clear button clicked', async ({ window }) => {
-      const searchInput = window.locator('.file-list-search-input, input[placeholder*="filter" i]');
+      const searchInput = window.locator('.file-list-search-input');
       await searchInput.first().fill('config');
-      await window.waitForTimeout(500);
 
-      // Look for clear button (may use different class name or text)
+      await expect(searchInput.first()).toHaveValue('config');
+
+      // The clear button is rendered as soon as the query is non-empty
       const clearBtn = window.locator('.file-list-search-clear, .file-list-controls button[title*="clear" i]');
-      if (await clearBtn.count() > 0 && await clearBtn.first().isVisible()) {
-        await clearBtn.first().click();
-        await window.waitForTimeout(300);
-        // Filter should be cleared
-        await expect(searchInput.first()).toHaveValue('');
-      } else {
-        // Clear by selecting all text and deleting
-        await searchInput.first().fill('');
-        await window.waitForTimeout(300);
-        await expect(searchInput.first()).toHaveValue('');
-      }
+      await expect(clearBtn.first()).toBeVisible();
+      await clearBtn.first().click();
+
+      // Filter should be cleared, and the clear button goes away with it
+      await expect(searchInput.first()).toHaveValue('');
+      await expect(clearBtn.first()).not.toBeVisible();
     });
 
     test('should display file type filter dropdown', async ({ window }) => {
@@ -760,35 +745,34 @@ test.describe('UI Features', () => {
 
     test('should filter by file type when type filter changed', async ({ window }) => {
       // Go back to root to have more diverse files
-      const upBtn = window.locator('.nav-up-btn, button[title*="up" i]');
-      if (await upBtn.isVisible()) {
-        await upBtn.click();
-        await window.waitForTimeout(1000);
-      }
+      const upBtn = window.locator('.go-up-btn, button[title="Go to parent folder"]');
+      await expect(upBtn.first()).toBeVisible();
+      await upBtn.first().click();
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
-      // Navigate to images folder
+      // Navigate to images folder (double-click to navigate)
       const imagesFolder = window.locator('.file-row.folder').filter({ hasText: 'images' });
-      if (await imagesFolder.isVisible()) {
-        await imagesFolder.click();
-        await window.waitForTimeout(1500);
-      }
+      await expect(imagesFolder).toBeVisible();
+      await imagesFolder.dblclick();
+      await expect(window.locator('.content-header h2')).toContainText('images');
+      await expect(window.locator('.file-row:not(.folder)').first()).toBeVisible();
 
       const typeFilter = window.locator('.file-list-type-filter, select[aria-label*="type" i]');
 
       // Select Images filter
       await typeFilter.first().selectOption('images');
-      await window.waitForTimeout(500);
+      await expect(typeFilter.first()).toHaveValue('images');
 
       // Should only show image files (and folders)
       const files = window.locator('.file-row:not(.folder)');
+      const imagePattern = /\.(png|jpg|jpeg|gif|webp|svg|ico|bmp)/i;
+      await expect(files.first()).toContainText(imagePattern);
       const count = await files.count();
+      expect(count).toBeGreaterThan(0);
 
       // All visible files should be images
-      if (count > 0) {
-        // Check at least first file has image extension
-        const firstFile = files.first();
-        const text = await firstFile.textContent();
-        expect(text).toMatch(/\.(png|jpg|jpeg|gif|webp|svg|ico|bmp)/i);
+      for (let i = 0; i < count; i++) {
+        expect(await files.nth(i).textContent()).toMatch(imagePattern);
       }
 
       // Screenshot showing type filter
@@ -800,27 +784,26 @@ test.describe('UI Features', () => {
       await expect(showingCount).toBeVisible();
 
       // Apply a filter
-      const searchInput = window.locator('.file-list-search-input, input[placeholder*="filter" i]');
+      const searchInput = window.locator('.file-list-search-input');
       await searchInput.first().fill('config');
-      await window.waitForTimeout(500);
 
       // Count should show filtered count
-      const text = await showingCount.textContent();
-      expect(text).toMatch(/\d+.*item/i);
+      await expect(showingCount).toHaveText(/\d+ of \d+ items/);
+      expect(await showingCount.textContent()).toMatch(/\d+.*item/i);
     });
 
     test('should sort by name when clicking name column header', async ({ window }) => {
       // Find the name column header
       const nameHeader = window.locator('.file-list-header, th').filter({ hasText: /name/i }).first();
 
-      if (await nameHeader.isVisible()) {
-        await nameHeader.click();
-        await window.waitForTimeout(500);
+      await expect(nameHeader).toBeVisible();
+      await nameHeader.click();
 
-        // Files should be sorted (verify first file is alphabetically first)
-        // Screenshot to show sorted results
-        await window.screenshot({ path: 'test-results/file-list-sort-by-name.png' });
-      }
+      // Name is the default ascending sort, so the click flips it to descending
+      await expect(nameHeader).toContainText('\u25BC');
+
+      // Screenshot to show sorted results
+      await window.screenshot({ path: 'test-results/file-list-sort-by-name.png' });
     });
   });
 
@@ -834,7 +817,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible();
     });
 
     test('should display navigation bar with S3 URL input', async ({ window }) => {
@@ -857,7 +841,7 @@ test.describe('UI Features', () => {
       // Navigate into a folder first (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
 
       // Up button should be visible (class: go-up-btn, title: "Go to parent folder")
       const upBtn = window.locator('.go-up-btn, button[title="Go to parent folder"]');
@@ -868,7 +852,6 @@ test.describe('UI Features', () => {
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Verify we're in documents
       const contentHeader = window.locator('.content-header h2');
@@ -878,11 +861,10 @@ test.describe('UI Features', () => {
       const upBtn = window.locator('.go-up-btn, button[title="Go to parent folder"]');
       await expect(upBtn.first()).toBeVisible();
       await upBtn.first().click();
-      await window.waitForTimeout(2000);
 
       // Should be back at bucket root - header shows just bucket name
       // After going up from documents/, we should be at bucket root
-      await expect(contentHeader).not.toContainText('documents');
+      await expect(contentHeader).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should navigate when S3 URL is entered', async ({ window }) => {
@@ -891,7 +873,6 @@ test.describe('UI Features', () => {
       // Enter a path to navigate
       await urlInput.first().fill(`s3://${TEST_BUCKETS.main}/documents/`);
       await urlInput.first().press('Enter');
-      await window.waitForTimeout(2000);
 
       // Should navigate to documents folder
       const contentHeader = window.locator('.content-header h2');
@@ -912,7 +893,8 @@ test.describe('UI Features', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
+      await expect(window.locator('.file-row.folder').filter({ hasText: 'documents' })).toBeVisible();
     });
 
     test('should have file list area that accepts drops', async ({ window }) => {
