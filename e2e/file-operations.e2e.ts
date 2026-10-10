@@ -15,7 +15,7 @@ test.describe('File Operations', () => {
 
       // Select the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should have upload button enabled when bucket is selected', async ({ window }) => {
@@ -41,7 +41,7 @@ test.describe('File Operations', () => {
       // Navigate into documents folder to have a more isolated test area (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
 
       // Get the file list container - verify it exists and has correct structure
       const fileList = window.locator('.file-list');
@@ -62,12 +62,12 @@ test.describe('File Operations', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should enable download button when file is selected', async ({ window }) => {
@@ -97,7 +97,7 @@ test.describe('File Operations', () => {
       // Go back to root to select a folder
       const upButton = window.locator('.go-up-btn');
       await upButton.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Folders can't be selected for download (they navigate instead)
       // Download button should remain disabled
@@ -117,10 +117,7 @@ test.describe('File Operations', () => {
       const downloadButton = window.locator('button[title*="Download selected"]');
       await downloadButton.click();
 
-      // Wait for operation status to appear (may be brief)
-      await window.waitForTimeout(500);
-
-      // Screenshot to capture download progress
+      // Screenshot right after starting the download (progress may already be gone)
       await window.screenshot({ path: 'test-results/download-progress.png' });
 
       // Wait for completion - should see toast notification
@@ -180,12 +177,12 @@ test.describe('File Operations', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should enable delete button when file is selected', async ({ window }) => {
@@ -241,7 +238,6 @@ test.describe('File Operations', () => {
       // Refresh to see the new file - use specific selector for file list refresh
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the temporary file
       const tempFile = window.locator('.file-row.file').filter({ hasText: tempFileName });
@@ -259,9 +255,6 @@ test.describe('File Operations', () => {
       // Click confirm/delete button
       const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
       await confirmButton.click();
-
-      // Wait for operation to complete
-      await window.waitForTimeout(2000);
 
       // File should no longer be visible
       await expect(tempFile).not.toBeVisible({ timeout: 5000 });
@@ -313,7 +306,6 @@ test.describe('File Operations', () => {
       // Refresh to see new files - use specific selector
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select all temp files
       const file1 = window.locator('.file-row.file').filter({ hasText: fileNames[0] });
@@ -343,9 +335,6 @@ test.describe('File Operations', () => {
       // Confirm deletion
       const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
       await confirmButton.click();
-
-      // Wait for deletion
-      await window.waitForTimeout(2000);
 
       // Files should be gone
       await expect(file1).not.toBeVisible({ timeout: 5000 });
@@ -403,17 +392,16 @@ test.describe('File Operations', () => {
       // Go back to root to see the folder
       const upButton = window.locator('.go-up-btn');
       await upButton.click();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
 
       // Refresh to see the new folder
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // The folder with = sign should be visible
       const specialFolderRow = window.locator('.file-row.folder').filter({ hasText: 'user_id=unknown' });
@@ -437,9 +425,6 @@ test.describe('File Operations', () => {
       const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
       await confirmButton.click();
 
-      // Wait for deletion
-      await window.waitForTimeout(3000);
-
       // Folder should no longer be visible
       await expect(specialFolderRow).not.toBeVisible({ timeout: 5000 });
 
@@ -462,12 +447,12 @@ test.describe('File Operations', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should enable rename button when file is selected', async ({ window }) => {
@@ -526,7 +511,6 @@ test.describe('File Operations', () => {
       // Refresh to see new file - use specific selector
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the file
       const tempFile = window.locator('.file-row.file').filter({ hasText: originalName });
@@ -548,9 +532,6 @@ test.describe('File Operations', () => {
       // Click confirm/rename button
       const confirmButton = dialog.locator('button').filter({ hasText: /rename|confirm|ok|save/i });
       await confirmButton.click();
-
-      // Wait for rename to complete
-      await window.waitForTimeout(2000);
 
       // Old file name should not be visible
       await expect(tempFile).not.toBeVisible({ timeout: 5000 });
@@ -635,12 +616,12 @@ test.describe('File Operations', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (double-click to navigate)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should enable copy URL button when file is selected', async ({ window }) => {
@@ -684,8 +665,8 @@ test.describe('File Operations', () => {
       const file2 = window.locator('.file-row.file').filter({ hasText: 'file2.txt' });
       await file2.click({ modifiers: ['Control'] });
 
-      // Wait for multiselect state to be applied
-      await window.waitForTimeout(500);
+      // Wait for the multiselect state to be applied
+      await expect(window.locator('.file-row.file').filter({ hasText: 'file2.txt' })).toHaveClass(/selected/);
 
       // Copy URL button should be disabled for multi-select
       // The title changes when disabled for multi-select
@@ -715,7 +696,7 @@ test.describe('File Operations', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should have refresh button enabled when bucket is selected', async ({ window }) => {
@@ -744,7 +725,6 @@ test.describe('File Operations', () => {
       // Click refresh - use specific selector
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Now file should be visible
       const newFile = window.locator('.file-row').filter({ hasText: newFileName });
