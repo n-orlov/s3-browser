@@ -2,7 +2,9 @@
 # Run the Playwright Electron e2e suite fully inside containers (no display, no host Electron):
 # a LocalStack container plus a Playwright-image container running Electron under xvfb.
 # Usage: scripts/e2e-docker.sh [playwright args...]   e.g. scripts/e2e-docker.sh e2e/app-launch.e2e.ts
-# Safe to run concurrently (resource names are suffixed with a unique run id).
+# A `--shard=<i>/<n>` (or `--shard <i>/<n>`) argument is forwarded to `playwright test` as every other argument is,
+# and its index <i> is part of the docker network and LocalStack container names.
+# Safe to run concurrently (resource names are suffixed with a unique run id and the shard index).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -10,7 +12,20 @@ cd "$(dirname "$0")/.."
 PLAYWRIGHT_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble"
 LOCALSTACK_IMAGE="localstack/localstack:3.8"
-RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
+
+# Shard index from a --shard=<i>/<n> or --shard <i>/<n> argument ("0" when the run is not sharded).
+SHARD_INDEX=0
+prev=""
+for arg in "$@"; do
+  if [[ "$arg" =~ ^--shard=([0-9]+)/[0-9]+$ ]]; then
+    SHARD_INDEX="${BASH_REMATCH[1]}"
+  elif [[ "$prev" == "--shard" && "$arg" =~ ^([0-9]+)/[0-9]+$ ]]; then
+    SHARD_INDEX="${BASH_REMATCH[1]}"
+  fi
+  prev="$arg"
+done
+
+RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-shard${SHARD_INDEX}-$$"
 NET="s3b-e2e-${RUN_ID}"
 LS="s3b-localstack-${RUN_ID}"
 NPM_CACHE="${S3B_NPM_CACHE:-$HOME/.cache/s3b-e2e-npm}"

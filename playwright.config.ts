@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false, // Electron tests should run sequentially
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 0, // no retries anywhere: a flaky test must fail, not pass on a rerun
   workers: 1, // Single worker for Electron tests
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
