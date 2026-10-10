@@ -21,11 +21,13 @@ describe('Main Process Configuration', () => {
     });
 
     it('should import Menu from electron', () => {
+      // Covering behaviour for the removed `shell` import: windowSecurity.test.ts
+      // ('setWindowOpenHandler ...') tests the open handler that used `shell`.
       const mainTsPath = path.join(__dirname, '../main/index.ts');
       const content = fs.readFileSync(mainTsPath, 'utf-8');
 
       // Verify Menu is imported
-      expect(content).toContain('import { app, BrowserWindow, shell, Menu }');
+      expect(content).toContain('import { app, BrowserWindow, Menu }');
     });
   });
 

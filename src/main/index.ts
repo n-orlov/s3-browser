@@ -1,8 +1,10 @@
-import { app, BrowserWindow, shell, Menu } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { registerCredentialsIpc } from './ipc/credentials';
 import { registerS3Ipc } from './ipc/s3';
 import { registerAppStateIpc } from './ipc/appState';
+import { secureWebContents } from './windowSecurity';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -33,19 +35,17 @@ function createWindow(): void {
     mainWindow?.show();
   });
 
-  // Open external links in default browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  const devUrl = 'http://localhost:5173';
+  const prodFile = path.join(__dirname, '../renderer/index.html');
+  secureWebContents(mainWindow.webContents, isDev ? devUrl : pathToFileURL(prodFile).href);
 
   if (isDev) {
     // In development, load from Vite dev server
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL(devUrl);
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load the built index.html
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    mainWindow.loadFile(prodFile);
   }
 
   mainWindow.on('closed', () => {
