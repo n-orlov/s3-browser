@@ -13,20 +13,20 @@ const workerMock = (name: string) => ({
     }
   },
 });
-vi.mock("monaco-editor/esm/vs/editor/editor.worker?worker&inline", () =>
+vi.mock("monaco-editor/editor/editor.worker?worker&inline", () =>
   workerMock("editor"),
 );
-vi.mock("monaco-editor/esm/vs/language/json/json.worker?worker&inline", () =>
+vi.mock("monaco-editor/language/json/json.worker?worker&inline", () =>
   workerMock("json"),
 );
-vi.mock("monaco-editor/esm/vs/language/css/css.worker?worker&inline", () =>
+vi.mock("monaco-editor/language/css/css.worker?worker&inline", () =>
   workerMock("css"),
 );
-vi.mock("monaco-editor/esm/vs/language/html/html.worker?worker&inline", () =>
+vi.mock("monaco-editor/language/html/html.worker?worker&inline", () =>
   workerMock("html"),
 );
 vi.mock(
-  "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline",
+  "monaco-editor/language/typescript/ts.worker?worker&inline",
   () => workerMock("ts"),
 );
 

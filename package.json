@@ -97,7 +97,7 @@
     "@aws-sdk/credential-providers": "^3.978.0",
     "@monaco-editor/react": "^4.7.0",
     "hyparquet": "^1.24.1",
-    "monaco-editor": "^0.55.1",
+    "monaco-editor": "^0.57.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
