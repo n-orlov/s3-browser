@@ -58,10 +58,8 @@ test.describe('Electron App Launch', () => {
     const dropdown = window.locator('.profile-dropdown');
     await dropdown.selectOption('test');
 
-    // Wait for buckets to load
-    // The app needs time to connect to LocalStack and fetch buckets
-    await window.waitForTimeout(3000);
-
+    // Wait for buckets to load: the web-first assertions below retry until
+    // the app has connected to LocalStack and rendered the bucket list.
     // Look for our test buckets in the sidebar using specific selectors
     // to avoid ambiguity when bucket names appear in multiple places
     const testBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
