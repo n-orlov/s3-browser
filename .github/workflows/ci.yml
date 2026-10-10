@@ -55,6 +55,9 @@ jobs:
       - name: Unit tests with coverage (thresholds enforced)
         run: npm run test:coverage
 
+      - name: CRAP score gate (complexity x coverage)
+        run: npm run crap
+
       - name: Dependency audit (production deps, high+)
         run: npm run audit:prod
 
