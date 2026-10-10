@@ -32,5 +32,22 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
       complexity: 'off',
     },
+  },  {
+    // Fixed sleeps make e2e tests flaky and slow: wait on a web-first assertion (`expect(...).toBeVisible()`,
+    // `expect.poll`) instead. Covered by src/__tests__/e2eNoFixedSleep.test.ts.
+    files: ['e2e/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='waitForTimeout']",
+          message: 'waitForTimeout is forbidden in e2e/: wait on a web-first assertion or expect.poll instead.',
+        },
+        {
+          selector: "CallExpression[callee.property.value='waitForTimeout']",
+          message: 'waitForTimeout is forbidden in e2e/: wait on a web-first assertion or expect.poll instead.',
+        },
+      ],
+    },
   },
 );

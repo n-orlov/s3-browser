@@ -114,6 +114,8 @@ All gates run locally with the `package.json` scripts; CI runs the same commands
 
 **Ratchet gate.** `.ratchet.json` records the quality ceiling and floors: `maxWarnings` (the lint warning ceiling) and `coverageThresholds` (`lines`, `functions`, `branches`, `statements`). `npm run ratchet:check` reads the `--max-warnings` value from the `lint` script in `package.json` and the four `coverage.thresholds` from `vitest.config.ts`, prints one `RATCHET` line per regression and exits `1` when `--max-warnings` is higher than `maxWarnings` or any threshold is lower than its recorded value; it exits `2` when an input is missing or unreadable, and `0` otherwise. A value that is stricter than the record passes and the command prints which `.ratchet.json` entries to tighten; editing `.ratchet.json` to a looser value is the only way to loosen the gate and is not done. Logic is `scripts/ratchet/ratchetCheck.ts`; the CLI is `scripts/ratchet/ratchet.ts` and runs from the repository root.
 
+**No fixed sleeps in e2e.** `eslint.config.mjs` applies `no-restricted-syntax` at severity `error` to `e2e/**` with selectors matching every call of `waitForTimeout` (member or bracket form), so `npm run lint` fails on a fixed sleep; tests wait on web-first assertions or `expect.poll` instead, and the rule is never silenced with `eslint-disable`. `src/__tests__/e2eNoFixedSleep.test.ts` lints fixtures through the ESLint Node API and fails if the rule is removed.
+
 `playwright.config.ts` runs one worker, sequentially, with `retries: 2` when `CI` is set and `0` otherwise, and forbids `test.only` in CI.
 
 ## 5. CI topology
