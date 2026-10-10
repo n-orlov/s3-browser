@@ -15,7 +15,7 @@ test.describe('Folder Interactions', () => {
 
       // Select the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should select folder on single click without navigating', async ({ window }) => {
@@ -29,7 +29,6 @@ test.describe('Folder Interactions', () => {
 
       // Single click on the folder
       await documentsFolder.click();
-      await window.waitForTimeout(500);
 
       // Verify the folder is selected (has selected class)
       await expect(documentsFolder).toHaveClass(/selected/);
@@ -51,7 +50,6 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.click();
-      await window.waitForTimeout(500);
 
       // Verify documents is selected
       await expect(documentsFolder).toHaveClass(/selected/);
@@ -60,7 +58,6 @@ test.describe('Folder Interactions', () => {
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
       await dataFolder.click();
-      await window.waitForTimeout(500);
 
       // Verify data folder is now selected
       await expect(dataFolder).toHaveClass(/selected/);
@@ -81,7 +78,6 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.click();
-      await window.waitForTimeout(500);
 
       // Properties button should now be enabled (shows folder properties)
       await expect(propertiesButton).toBeEnabled();
@@ -95,7 +91,6 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.click();
-      await window.waitForTimeout(500);
 
       // Verify folder is selected visually
       await expect(documentsFolder).toHaveClass(/selected/);
@@ -114,13 +109,13 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.click();
-      await window.waitForTimeout(300);
+      await expect(documentsFolder).toHaveClass(/selected/);
 
       // Ctrl+click to add second folder to selection
       const dataFolder = window.locator('.file-row.folder').filter({ hasText: 'data' });
       await expect(dataFolder).toBeVisible({ timeout: 5000 });
       await dataFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(dataFolder).toHaveClass(/selected|multiselected/);
 
       // Both folders should be selected (either selected or multiselected class)
       await expect(documentsFolder).toHaveClass(/selected|multiselected/);
@@ -147,7 +142,7 @@ test.describe('Folder Interactions', () => {
 
       // Select the main bucket
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should navigate into folder on double click', async ({ window }) => {
@@ -157,7 +152,6 @@ test.describe('Folder Interactions', () => {
 
       // Double click on the folder
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Verify navigation occurred - content header should show documents
       const contentHeader = window.locator('.content-header h2');
@@ -180,7 +174,7 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
 
       // Status bar should show no selection
       const selection = window.locator('.status-bar-selection');
@@ -199,7 +193,6 @@ test.describe('Folder Interactions', () => {
       const nestedFolder = window.locator('.file-row.folder').filter({ hasText: 'nested' });
       await expect(nestedFolder).toBeVisible({ timeout: 5000 });
       await nestedFolder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Verify we're in nested folder
       const breadcrumb = window.locator('.breadcrumb');
@@ -209,7 +202,6 @@ test.describe('Folder Interactions', () => {
       const level1Folder = window.locator('.file-row.folder').filter({ hasText: 'level1' });
       await expect(level1Folder).toBeVisible({ timeout: 5000 });
       await level1Folder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Verify we're in level1
       await expect(breadcrumb).toContainText('level1');
@@ -223,7 +215,6 @@ test.describe('Folder Interactions', () => {
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
 
       // Navigation bar should show the new path
       const navInput = window.locator('.navigation-bar-input');
@@ -244,13 +235,13 @@ test.describe('Folder Interactions', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
 
       // Navigate into documents folder (has files for testing)
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await expect(documentsFolder).toBeVisible({ timeout: 5000 });
       await documentsFolder.dblclick();
-      await window.waitForTimeout(1500);
+      await expect(window.locator('.content-header h2')).toContainText('documents');
     });
 
     test('should trigger download on file double click', async ({ window }) => {
@@ -296,7 +287,9 @@ test.describe('Folder Interactions', () => {
       const readmeFile = window.locator('.file-row.file').filter({ hasText: 'readme.txt' });
       await expect(readmeFile).toBeVisible({ timeout: 5000 });
       await readmeFile.dblclick();
-      await window.waitForTimeout(1000);
+
+      // The download starts (toast) and the view stays where it was
+      await expect(window.locator('.toast').filter({ hasText: /download/i })).toBeVisible();
 
       // Breadcrumb should remain the same (no navigation)
       const breadcrumbAfter = await breadcrumb.textContent();
@@ -326,7 +319,7 @@ test.describe('Folder Interactions', () => {
       const mainBucket = window.locator('.bucket-item').filter({ hasText: TEST_BUCKETS.main });
       await expect(mainBucket).toBeVisible({ timeout: 15000 });
       await mainBucket.click();
-      await window.waitForTimeout(2000);
+      await expect(window.locator('.content-header h2')).toHaveText(TEST_BUCKETS.main);
     });
 
     test('should show folder warning when deleting mixed selection of file and folder', async ({ window }) => {
@@ -345,18 +338,17 @@ test.describe('Folder Interactions', () => {
       // Refresh to see the new file
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the temp file first (this enables delete button)
       const tempFile = window.locator('.file-row.file').filter({ hasText: tempFileName });
       await expect(tempFile).toBeVisible({ timeout: 5000 });
       await tempFile.click();
-      await window.waitForTimeout(300);
+      await expect(tempFile).toHaveClass(/selected/);
 
       // Ctrl+click to add a folder to selection
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(documentsFolder).toHaveClass(/selected|multiselected/);
 
       // Click delete button
       const deleteButton = window.locator('button[title*="Delete"]');
@@ -426,19 +418,18 @@ test.describe('Folder Interactions', () => {
       // Refresh to see the new items
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the root file first
       const tempRootFile = window.locator('.file-row.file').filter({ hasText: tempFileAtRoot.replace('.txt', '') });
       await expect(tempRootFile).toBeVisible({ timeout: 5000 });
       await tempRootFile.click();
-      await window.waitForTimeout(300);
+      await expect(tempRootFile).toHaveClass(/selected/);
 
       // Ctrl+click to add the folder to selection
       const tempFolder = window.locator('.file-row.folder').filter({ hasText: tempFolderName });
       await expect(tempFolder).toBeVisible({ timeout: 5000 });
       await tempFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(tempFolder).toHaveClass(/selected|multiselected/);
 
       // Click delete button
       const deleteButton = window.locator('button[title*="Delete"]');
@@ -457,8 +448,8 @@ test.describe('Folder Interactions', () => {
       const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
       await confirmButton.click();
 
-      // Wait for operation to complete
-      await window.waitForTimeout(3000);
+      // Dialog closes once the delete completes
+      await expect(dialog).not.toBeVisible();
 
       // Both folder and file should no longer be visible
       await expect(tempFolder).not.toBeVisible({ timeout: 5000 });
@@ -499,24 +490,23 @@ test.describe('Folder Interactions', () => {
       // Refresh
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select first file
       const file1 = window.locator('.file-row.file').filter({ hasText: tempFile1.replace('.txt', '') });
       await expect(file1).toBeVisible({ timeout: 5000 });
       await file1.click();
-      await window.waitForTimeout(300);
+      await expect(file1).toHaveClass(/selected/);
 
       // Ctrl+click second file
       const file2 = window.locator('.file-row.file').filter({ hasText: tempFile2.replace('.txt', '') });
       await expect(file2).toBeVisible({ timeout: 5000 });
       await file2.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(file2).toHaveClass(/selected|multiselected/);
 
       // Ctrl+click a folder
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(documentsFolder).toHaveClass(/selected|multiselected/);
 
       // Delete button should show badge with count of all selected items (files + folders)
       const badge = window.locator('.toolbar-badge');
@@ -582,19 +572,18 @@ test.describe('Folder Interactions', () => {
       // Refresh to see the new items
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the enabler file first (enables delete button)
       const enablerFileRow = window.locator('.file-row.file').filter({ hasText: enablerFile.replace('.txt', '') });
       await expect(enablerFileRow).toBeVisible({ timeout: 5000 });
       await enablerFileRow.click();
-      await window.waitForTimeout(300);
+      await expect(enablerFileRow).toHaveClass(/selected/);
 
       // Ctrl+click to add the deep nested folder to selection
       const deepFolder = window.locator('.file-row.folder').filter({ hasText: rootFolderName });
       await expect(deepFolder).toBeVisible({ timeout: 5000 });
       await deepFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(deepFolder).toHaveClass(/selected|multiselected/);
 
       // Click delete button
       const deleteButton = window.locator('button[title*="Delete"]');
@@ -609,8 +598,8 @@ test.describe('Folder Interactions', () => {
       const confirmButton = dialog.locator('button').filter({ hasText: /delete|confirm|yes/i });
       await confirmButton.click();
 
-      // Wait for operation to complete
-      await window.waitForTimeout(5000);
+      // Dialog closes once the delete completes
+      await expect(dialog).not.toBeVisible();
 
       // Both folder and enabler file should no longer be visible
       await expect(deepFolder).not.toBeVisible({ timeout: 5000 });
@@ -655,18 +644,17 @@ test.describe('Folder Interactions', () => {
       // Refresh
       const refreshButton = window.locator('button[title="Refresh file list"]');
       await refreshButton.click();
-      await window.waitForTimeout(2000);
 
       // Select the temp file first
       const tempFile = window.locator('.file-row.file').filter({ hasText: tempFileName.replace('.txt', '') });
       await expect(tempFile).toBeVisible({ timeout: 5000 });
       await tempFile.click();
-      await window.waitForTimeout(300);
+      await expect(tempFile).toHaveClass(/selected/);
 
       // Ctrl+click to add a folder
       const documentsFolder = window.locator('.file-row.folder').filter({ hasText: 'documents' });
       await documentsFolder.click({ modifiers: ['Control'] });
-      await window.waitForTimeout(300);
+      await expect(documentsFolder).toHaveClass(/selected|multiselected/);
 
       // Click delete button
       const deleteButton = window.locator('button[title*="Delete"]');
