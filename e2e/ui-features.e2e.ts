@@ -383,9 +383,11 @@ test.describe('UI Features', () => {
       const newFileBtn = window.locator('button[title*="new"][title*="file" i], button[title*="Create new"][title*="file" i]');
       await newFileBtn.first().click();
 
-      // Clear the input
+      // The dialog seeds its default name after mounting; clear only once it is there
       const input = window.locator('.dialog-input, .dialog input[type="text"]');
+      await expect(input).toHaveValue('new-file.txt');
       await input.fill('');
+      await expect(input).toHaveValue('');
 
       // Create button should be disabled
       const createBtn = window.locator('.dialog-btn-confirm, .dialog button').filter({ hasText: /create/i });
