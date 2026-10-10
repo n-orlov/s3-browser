@@ -58,6 +58,9 @@ jobs:
       - name: CRAP score gate (complexity x coverage)
         run: npm run crap
 
+      - name: Quality ratchet (lint ceiling, coverage thresholds)
+        run: npm run ratchet:check
+
       - name: Dependency audit (production deps, high+)
         run: npm run audit:prod
 
