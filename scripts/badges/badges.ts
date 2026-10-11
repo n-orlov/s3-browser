@@ -97,11 +97,17 @@ function lintBadge(lint: LintCounts | null): Badge {
   return badge('lint', message, color);
 }
 
-function testsBadge(label: string, counts: { passed: number; failed: number; skipped: number } | null): Badge {
+/** Red on any failure: a failed test or (e2e) a report-level error such as a global setup throw, which leaves every stat at zero. */
+function testsBadge(label: string, counts: { passed: number; failed: number; skipped: number; errors?: number } | null): Badge {
   if (!counts) return missing(label);
+  const errors = counts.errors ?? 0;
   const skipped = counts.skipped > 0 ? `, ${counts.skipped} skipped` : '';
-  const message = counts.failed > 0 ? `${counts.failed} failed, ${counts.passed} passed${skipped}` : `${counts.passed} passed${skipped}`;
-  return badge(label, message, counts.failed === 0 ? 'brightgreen' : 'red');
+  const failures = [
+    ...(counts.failed > 0 ? [`${counts.failed} failed`] : []),
+    ...(errors > 0 ? [`${errors} report error${errors === 1 ? '' : 's'}`] : []),
+  ];
+  const message = failures.length > 0 ? `${failures.join(', ')}, ${counts.passed} passed${skipped}` : `${counts.passed} passed${skipped}`;
+  return badge(label, message, failures.length === 0 ? 'brightgreen' : 'red');
 }
 
 function mutationBadge(score: number | null, ratchet: RatchetInput | null): Badge {

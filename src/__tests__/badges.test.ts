@@ -27,7 +27,7 @@ const allGreen: BadgeInput = {
   coverage: { pct: { lines: 92, functions: 90, branches: 82, statements: 91 } },
   crap: { max: 30, functions: 640, over: 0 },
   unit: { total: 100, failed: 0, skipped: 4 },
-  e2e: { passed: 197, failed: 0, skipped: 1 },
+  e2e: { passed: 197, failed: 0, skipped: 1, errors: 0 },
   mutation: 100,
   audit,
 };
@@ -149,11 +149,17 @@ describe("renderBadges: colour boundaries", () => {
 
   it("unit-tests and e2e-tests are red on any failure and green otherwise", () => {
     const unit = (failed: number) => renderBadges({ ...allGreen, unit: { total: 100, failed, skipped: 0 } })["unit-tests"];
-    const e2e = (failed: number) => renderBadges({ ...allGreen, e2e: { passed: 10, failed, skipped: 0 } })["e2e-tests"];
+    const e2e = (failed: number) => renderBadges({ ...allGreen, e2e: { passed: 10, failed, skipped: 0, errors: 0 } })["e2e-tests"];
     expect(unit(0)).toMatchObject({ color: "brightgreen", message: "100 passed" });
     expect(unit(1)).toMatchObject({ color: "red", message: "1 failed, 99 passed" });
     expect(e2e(0)).toMatchObject({ color: "brightgreen", message: "10 passed" });
     expect(e2e(3)).toMatchObject({ color: "red", message: "3 failed, 10 passed" });
+    const withErrors = (failed: number, errors: number, passed = 0) =>
+      renderBadges({ ...allGreen, e2e: { passed, failed, skipped: 0, errors } })["e2e-tests"];
+    // a report-level error (global setup/teardown throw) is a failure even when every stat is zero
+    expect(withErrors(0, 1)).toEqual({ schemaVersion: 1, label: "e2e tests", message: "1 report error, 0 passed", color: "red" });
+    expect(withErrors(0, 2, 40)).toMatchObject({ color: "red", message: "2 report errors, 40 passed" });
+    expect(withErrors(1, 1, 7)).toMatchObject({ color: "red", message: "1 failed, 1 report error, 7 passed" });
     expect(renderBadges(allGreen)["unit-tests"].message).toBe("96 passed, 4 skipped");
   });
 
@@ -369,6 +375,60 @@ describe("badges CLI", () => {
     expect(e2e("out-garbled", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/garbled.json"])).toEqual(na);
     // both present still sum
     expect(e2e("out-both", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/shard2.json"])).toMatchObject({ color: "brightgreen" });
+  });
+
+  describe("a Playwright report with a report-level error", () => {
+    const errorReport = {
+      stats: { expected: 0, unexpected: 0, flaky: 0, skipped: 0 },
+      errors: [{ message: "Independent gate: global setup failed before any test ran" }],
+    };
+    const e2eBadge = (name: string, files: Record<string, unknown>) => {
+      const dir = path.join(root, name);
+      const args = ["--out", "out"];
+      for (const [file, report] of Object.entries(files)) {
+        put(dir, file, JSON.stringify(report));
+        args.push("--e2e", file);
+      }
+      expect(run(dir, args).status).toBe(0);
+      return readOut(path.join(dir, "out"), "e2e-tests");
+    };
+    const passing = { stats: { expected: 295, unexpected: 0, flaky: 0, skipped: 1 } };
+
+    it("is red, not '0 passed' green, when it is the only shard", () => {
+      expect(e2eBadge("setup-error", { "r.json": errorReport })).toEqual({
+        schemaVersion: 1, label: "e2e tests", message: "1 report error, 0 passed", color: "red",
+      });
+    });
+
+    it("keeps the sum red when it sits beside a passing shard, in either order", () => {
+      const expected = { schemaVersion: 1, label: "e2e tests", message: "1 report error, 295 passed, 1 skipped", color: "red" };
+      expect(e2eBadge("mixed-a", { "a.json": errorReport, "b.json": passing })).toEqual(expected);
+      expect(e2eBadge("mixed-b", { "a.json": passing, "b.json": errorReport })).toEqual(expected);
+    });
+
+    it("is red for a teardown error after passing tests, and sums errors over shards", () => {
+      const teardown = { stats: { expected: 12, unexpected: 0, flaky: 0, skipped: 0 }, errors: [{ message: "teardown failed" }] };
+      expect(e2eBadge("teardown", { "r.json": teardown })).toMatchObject({ color: "red", message: "1 report error, 12 passed" });
+      expect(e2eBadge("two-errors", { "a.json": teardown, "b.json": teardown })).toMatchObject({ color: "red", message: "2 report errors, 24 passed" });
+    });
+
+    it("is red for the genuine report Playwright writes when globalSetup throws", () => {
+      const dir = path.join(root, "real-playwright");
+      put(dir, "setup.ts", "export default async function () { throw new Error('Independent gate: global setup failed before any test ran'); }\n");
+      put(dir, "pw.config.ts", "export default { testDir: '.', globalSetup: './setup.ts', reporter: [['json', { outputFile: 'results.json' }]] };\n");
+      const playwright = path.resolve(__dirname, "../../node_modules/playwright/cli.js");
+      const ran = spawnSync(process.execPath, [playwright, "test", "--config", path.join(dir, "pw.config.ts")], { cwd: dir, encoding: "utf8" });
+      expect(ran.status).toBe(1);
+      const report = JSON.parse(readFileSync(path.join(dir, "results.json"), "utf8")) as { stats: Record<string, number>; errors: unknown[] };
+      expect(report.errors).toHaveLength(1);
+      expect([report.stats.expected, report.stats.unexpected, report.stats.skipped, report.stats.flaky]).toEqual([0, 0, 0, 0]);
+      expect(run(dir, ["--out", "out", "--e2e", "results.json"]).status).toBe(0);
+      expect(readOut(path.join(dir, "out"), "e2e-tests")).toMatchObject({ color: "red", message: "1 report error, 0 passed" });
+    });
+
+    it("stays green for an empty errors array", () => {
+      expect(e2eBadge("empty-errors", { "r.json": { ...passing, errors: [] } })).toMatchObject({ color: "brightgreen", message: "295 passed, 1 skipped" });
+    });
   });
 
   it("exits 2 with usage when --out is missing", () => {

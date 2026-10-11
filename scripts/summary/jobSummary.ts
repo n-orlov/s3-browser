@@ -34,6 +34,8 @@ export interface E2eCounts {
   passed: number;
   failed: number;
   skipped: number;
+  /** Report-level failures (the top-level `errors` array: a global setup/teardown throw, a worker crash, no tests found). */
+  errors: number;
 }
 
 export interface E2eInput {
@@ -72,12 +74,21 @@ export function parseCrapSummary(text: string): CrapTotals {
   return { max: num(raw.max), functions: num(raw.functions), over: num(raw.over) };
 }
 
-/** Reads the `stats` block of a Playwright JSON report (`expected`/`unexpected`/`flaky`/`skipped`). */
+/**
+ * Reads the `stats` block of a Playwright JSON report (`expected`/`unexpected`/`flaky`/`skipped`) and the length
+ * of its top-level `errors` array. A run that fails before or outside any test (global setup, global teardown)
+ * has all-zero stats and only that array, so `errors` is what keeps it from reading as a pass.
+ */
 export function parsePlaywrightCounts(text: string): E2eCounts {
-  const stats = (JSON.parse(text) as { stats?: Record<string, unknown> }).stats;
+  const report = JSON.parse(text) as { stats?: Record<string, unknown>; errors?: unknown };
+  const stats = report.stats;
   if (!stats) throw new Error('Playwright JSON report has no "stats"');
-  return { passed: num(stats.expected) + num(stats.flaky), failed: num(stats.unexpected), skipped: num(stats.skipped) };
+  const errors = Array.isArray(report.errors) ? report.errors.length : 0;
+  return { passed: num(stats.expected) + num(stats.flaky), failed: num(stats.unexpected), skipped: num(stats.skipped), errors };
 }
+
+/** True when the counts hold any failure: a failed test or a report-level error. */
+export const e2eHasFailure = (counts: E2eCounts): boolean => counts.failed > 0 || counts.errors > 0;
 
 const mark = (ok: boolean): string => (ok ? '✅' : '❌');
 const pct = (value: number): string => `${Math.round(value * 100) / 100}%`;
@@ -115,8 +126,9 @@ export function renderQualitySummary(input: QualityInput): string {
 export function renderE2eSummary(input: E2eInput): string {
   const lines: string[] = [`## e2e shard ${input.shard}`, ''];
   if (input.counts) {
-    const { passed, failed, skipped } = input.counts;
-    lines.push(`${mark(failed === 0)} ${passed} passed, ${failed} failed, ${skipped} skipped`);
+    const { passed, failed, skipped, errors } = input.counts;
+    const reportErrors = errors > 0 ? `, ${errors} report error${errors === 1 ? '' : 's'}` : '';
+    lines.push(`${mark(!e2eHasFailure(input.counts))} ${passed} passed, ${failed} failed, ${skipped} skipped${reportErrors}`);
   } else {
     lines.push(MISSING);
   }

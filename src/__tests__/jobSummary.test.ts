@@ -7,6 +7,7 @@ import {
   parseCoverageSummary,
   parseCrapSummary,
   parseJunitTotals,
+  e2eHasFailure,
   parsePlaywrightCounts,
   renderE2eSummary,
   renderQualitySummary,
@@ -54,9 +55,9 @@ describe("job summary renderer", () => {
   });
 
   it("case 3, an e2e shard with failed tests shows its passed, failed and skipped counts", () => {
-    const markdown = renderE2eSummary({ shard: "2/2", counts: { passed: 95, failed: 3, skipped: 1 } });
+    const markdown = renderE2eSummary({ shard: "2/2", counts: { passed: 95, failed: 3, skipped: 1, errors: 0 } });
     expect(missingLines(markdown, ["## e2e shard 2/2", "❌ 95 passed, 3 failed, 1 skipped"])).toEqual([]);
-    expect(renderE2eSummary({ shard: "1/2", counts: { passed: 98, failed: 0, skipped: 0 } })).toContain("✅ 98 passed, 0 failed, 0 skipped");
+    expect(renderE2eSummary({ shard: "1/2", counts: { passed: 98, failed: 0, skipped: 0, errors: 0 } })).toContain("✅ 98 passed, 0 failed, 0 skipped");
   });
 
   it("detects a renderer that drops a line it should print (negative cases)", () => {
@@ -110,7 +111,7 @@ describe("job summary renderer, exact markdown", () => {
   });
 
   it("renders the whole e2e summary with the blank line after its heading", () => {
-    expect(renderE2eSummary({ shard: "2/2", counts: { passed: 95, failed: 3, skipped: 1 } })).toBe(
+    expect(renderE2eSummary({ shard: "2/2", counts: { passed: 95, failed: 3, skipped: 1, errors: 0 } })).toBe(
       "## e2e shard 2/2\n\n❌ 95 passed, 3 failed, 1 skipped\n",
     );
   });
@@ -161,13 +162,31 @@ describe("job summary report parsers", () => {
 
   it("reads the CRAP totals and Playwright stats (flaky counts as passed)", () => {
     expect(parseCrapSummary('{"max":30,"functions":5,"over":1}')).toEqual({ max: 30, functions: 5, over: 1 });
-    expect(parsePlaywrightCounts('{"stats":{"expected":7,"flaky":1,"unexpected":2,"skipped":3}}')).toEqual({ passed: 8, failed: 2, skipped: 3 });
+    expect(parsePlaywrightCounts('{"stats":{"expected":7,"flaky":1,"unexpected":2,"skipped":3}}')).toEqual({ passed: 8, failed: 2, skipped: 3, errors: 0 });
     expect(() => parsePlaywrightCounts("{}")).toThrow('Playwright JSON report has no "stats"');
+  });
+
+  it("counts the top-level errors array, the only trace of a global setup or teardown failure", () => {
+    const stats = '"stats":{"expected":0,"flaky":0,"unexpected":0,"skipped":0}';
+    expect(parsePlaywrightCounts(`{${stats},"errors":[{"message":"Independent gate: global setup failed before any test ran"}]}`)).toEqual({
+      passed: 0, failed: 0, skipped: 0, errors: 1,
+    });
+    expect(parsePlaywrightCounts(`{"stats":{"expected":9,"unexpected":0},"errors":[{},{}]}`)).toMatchObject({ passed: 9, failed: 0, errors: 2 });
+    expect(parsePlaywrightCounts(`{${stats},"errors":[]}`).errors).toBe(0);
+    expect(parsePlaywrightCounts(`{${stats},"errors":"boom"}`).errors).toBe(0);
+    expect(e2eHasFailure({ passed: 5, failed: 0, skipped: 0, errors: 0 })).toBe(false);
+    expect(e2eHasFailure({ passed: 5, failed: 1, skipped: 0, errors: 0 })).toBe(true);
+    expect(e2eHasFailure({ passed: 0, failed: 0, skipped: 0, errors: 1 })).toBe(true);
+  });
+
+  it("marks an e2e shard with report-level errors failed even when every test passed", () => {
+    expect(renderE2eSummary({ shard: "1/2", counts: { passed: 0, failed: 0, skipped: 0, errors: 1 } })).toContain("❌ 0 passed, 0 failed, 0 skipped, 1 report error\n");
+    expect(renderE2eSummary({ shard: "1/2", counts: { passed: 98, failed: 0, skipped: 0, errors: 3 } })).toContain("❌ 98 passed, 0 failed, 0 skipped, 3 report errors");
   });
 
   it("reads non-numeric report fields as 0", () => {
     expect(parseCrapSummary('{"max":"30","functions":null,"over":1e999}')).toEqual({ max: 0, functions: 0, over: 0 });
-    expect(parsePlaywrightCounts('{"stats":{"expected":"7","flaky":null,"unexpected":1e999}}')).toEqual({ passed: 0, failed: 0, skipped: 0 });
+    expect(parsePlaywrightCounts('{"stats":{"expected":"7","flaky":null,"unexpected":1e999}}')).toEqual({ passed: 0, failed: 0, skipped: 0, errors: 0 });
   });
 });
 

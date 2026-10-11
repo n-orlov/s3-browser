@@ -45,6 +45,7 @@ function sumE2e(files: string[]): E2eCounts | null {
     passed: all.reduce((sum, entry) => sum + entry.passed, 0),
     failed: all.reduce((sum, entry) => sum + entry.failed, 0),
     skipped: all.reduce((sum, entry) => sum + entry.skipped, 0),
+    errors: all.reduce((sum, entry) => sum + entry.errors, 0),
   };
 }
 
