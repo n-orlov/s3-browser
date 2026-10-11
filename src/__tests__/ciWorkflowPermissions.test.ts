@@ -4,9 +4,13 @@ import path from "path";
 import { parse } from "yaml";
 
 type Permissions = string | Record<string, string> | null | undefined;
+interface Step {
+  run?: string;
+}
 interface Job {
   if?: string | boolean;
   permissions?: Permissions;
+  steps?: Step[];
 }
 interface Workflow {
   on?: unknown;
@@ -114,6 +118,55 @@ function permissionProblems(workflow: Workflow): string[] {
   return problems;
 }
 
+/** A step that renders, copies or pushes badge files: its `run` mentions `badges` (the CLI, the directory or a path). */
+const BADGE_STEP = /badges/;
+
+/** Jobs holding a badge step that a pull_request event can reach (a badge push must be unreachable from one). */
+function badgeReachabilityProblems(workflow: Workflow): string[] {
+  const problems: string[] = [];
+  const pullEvents = triggers(workflow).filter(
+    (e) => e === "pull_request" || e === "pull_request_target",
+  );
+  for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
+    if (!(job.steps ?? []).some((s) => BADGE_STEP.test(s.run ?? ""))) continue;
+    try {
+      for (const event of pullEvents) {
+        if (canRunFor(job.if, event)) {
+          problems.push(
+            `${name}: writes or pushes badge files and is reachable from ${event}`,
+          );
+        }
+      }
+    } catch (e) {
+      problems.push(`${name}: ${(e as Error).message}`);
+    }
+  }
+  return problems;
+}
+
+/** What ci.yml's publish job must do for the badges: render them and restore the previous mutation badge. */
+function publishBadgeProblems(workflow: Workflow): string[] {
+  const steps = workflow.jobs?.publish?.steps;
+  if (!steps) return ["ci.yml has no publish job"];
+  const problems: string[] = [];
+  if (!steps.some((s) => /\bnpm run\b[^\n]*\bbadges\b(?!:)/.test(s.run ?? ""))) {
+    problems.push("publish has no step whose run invokes npm run badges");
+  }
+  if (
+    !steps.some((s) =>
+      /\bgit (?:show|checkout)\b[^\n]*:badges\/mutation\.json/.test(s.run ?? "") ||
+      (/\bgit (?:show|checkout)\b/.test(s.run ?? "") &&
+        /\bgh-pages\b/.test(s.run ?? "") &&
+        /badges\/mutation\.json/.test(s.run ?? "")),
+    )
+  ) {
+    problems.push(
+      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
+    );
+  }
+  return problems;
+}
+
 const WORKFLOWS_DIR = path.resolve(__dirname, "../../.github/workflows");
 const WORKFLOWS = readdirSync(WORKFLOWS_DIR)
   .filter((f) => /\.ya?ml$/.test(f))
@@ -133,6 +186,87 @@ describe.each(WORKFLOWS)("%s workflow permissions", (file) => {
       readFileSync(path.join(WORKFLOWS_DIR, file), "utf8"),
     ) as Workflow;
     expect(permissionProblems(workflow)).toEqual([]);
+  });
+});
+
+describe.each(WORKFLOWS)("%s badge steps", (file) => {
+  it("keeps every step that writes or pushes badge files in a job a pull_request cannot reach", () => {
+    const workflow = parse(
+      readFileSync(path.join(WORKFLOWS_DIR, file), "utf8"),
+    ) as Workflow;
+    expect(badgeReachabilityProblems(workflow)).toEqual([]);
+  });
+});
+
+describe("ci.yml publish job badges", () => {
+  const ciText = readFileSync(path.join(WORKFLOWS_DIR, "ci.yml"), "utf8");
+  const ci = (): Workflow => parse(ciText) as Workflow;
+
+  it("renders the badges with npm run badges and restores badges/mutation.json from the previous gh-pages commit", () => {
+    expect(publishBadgeProblems(ci())).toEqual([]);
+    expect(badgeReachabilityProblems(ci())).toEqual([]);
+    expect(Object.keys(ci().jobs ?? {})).toContain("publish");
+  });
+
+  it("flags a ci.yml copy whose publish job lacks the badge step", () => {
+    const wf = ci();
+    wf.jobs!.publish.steps = wf.jobs!.publish.steps!.filter(
+      (s) => !/npm run[^\n]*badges/.test(s.run ?? ""),
+    );
+    expect(publishBadgeProblems(wf)).toEqual([
+      "publish has no step whose run invokes npm run badges",
+    ]);
+  });
+
+  it("flags a ci.yml copy whose publish job lacks the restore step", () => {
+    const wf = ci();
+    wf.jobs!.publish.steps = wf.jobs!.publish.steps!.filter(
+      (s) => !/git show/.test(s.run ?? ""),
+    );
+    expect(publishBadgeProblems(wf)).toEqual([
+      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
+    ]);
+  });
+
+  it("flags a restore that reads a different file than badges/mutation.json", () => {
+    const wf = ci();
+    for (const step of wf.jobs!.publish.steps!) {
+      if (step.run) step.run = step.run.replaceAll("mutation.json", "other.json");
+    }
+    expect(publishBadgeProblems(wf)).toContain(
+      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
+    );
+  });
+
+  it("flags a badge push in a job a pull_request can reach", () => {
+    const wf = ci();
+    delete wf.jobs!.publish.if;
+    expect(badgeReachabilityProblems(wf)).toEqual([
+      "publish: writes or pushes badge files and is reachable from pull_request",
+    ]);
+    const other: Workflow = {
+      on: ["push", "pull_request"],
+      jobs: {
+        badge: {
+          if: "github.event_name != 'push'",
+          steps: [{ run: "npm run badges -- --out b && git push origin gh-pages" }],
+        },
+      },
+    };
+    expect(badgeReachabilityProblems(other)).toHaveLength(1);
+  });
+
+  it("accepts a badge push in a push-only job", () => {
+    const other: Workflow = {
+      on: ["push", "pull_request"],
+      jobs: {
+        badge: {
+          if: "github.event_name == 'push'",
+          steps: [{ run: "git push origin gh-pages # badges/" }],
+        },
+      },
+    };
+    expect(badgeReachabilityProblems(other)).toEqual([]);
   });
 });
 

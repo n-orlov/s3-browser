@@ -356,15 +356,60 @@ jobs:
           name: allure-report
           path: published-report
 
+      # Inputs for the badges. A pattern download matches nothing (and does not fail) when an artifact is missing,
+      # and the renderer then writes `n/a` for that badge.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-report
+          path: coverage
+        continue-on-error: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unit-junit
+          path: junit
+        continue-on-error: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: e2e-test-results-*
+          path: e2e-results
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+
+      - name: Render the shields endpoint badges (badges/*.json)
+        run: |
+          mkdir -p reports
+          npm audit --omit=dev --json > reports/audit.json || true
+          e2e_args=()
+          for results in e2e-results/*/results.json; do
+            if [ -f "$results" ]; then e2e_args+=(--e2e "$results"); fi
+          done
+          npm run --silent badges -- --out published-badges "${e2e_args[@]}"
+
+      # The mutation badge is written by mutation.yml, not by this workflow, and the branch is rebuilt from scratch
+      # below, so the previous badge is read back from the last gh-pages commit; before the first mutation run
+      # there is none and the `n/a` file stays.
+      - name: Carry over the previous badges/mutation.json from gh-pages
+        run: |
+          if git fetch --quiet --depth=1 origin gh-pages \
+            && git show FETCH_HEAD:badges/mutation.json > previous-mutation.json 2> /dev/null; then
+            cp previous-mutation.json published-badges/mutation.json
+          fi
+
       # The report directory already holds history.jsonl (previous runs plus this one), so the branch is rebuilt as
       # a single commit each time instead of growing a binary history.
-      - name: Push the report to the gh-pages branch
+      - name: Push the report and the badges to the gh-pages branch
         run: |
           touch published-report/.nojekyll
+          mkdir -p published-report/badges
+          cp -a published-badges/. published-report/badges/
           git switch --orphan gh-pages
           git rm -rf --quiet . || true
           cp -a published-report/. .
-          rm -rf published-report
+          rm -rf published-report published-badges previous-mutation.json e2e-results coverage junit reports
           git add --all
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit --quiet -m "Allure report for ${GITHUB_SHA}"
