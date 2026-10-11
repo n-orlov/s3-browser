@@ -504,12 +504,16 @@ export async function uploadFile(
   const client = getS3Client(profileName);
 
   try {
-    // Check if the source file exists
-    const stats = await fs.promises.stat(sourcePath);
-    const totalSize = stats.size;
-
-    // Read file content
-    const fileContent = await fs.promises.readFile(sourcePath);
+    // Open once and read through the handle: a separate stat(path) followed by
+    // readFile(path) lets the file change in between (check-then-use race).
+    const handle = await fs.promises.open(sourcePath, 'r');
+    let fileContent: Buffer;
+    try {
+      fileContent = await handle.readFile();
+    } finally {
+      await handle.close();
+    }
+    const totalSize = fileContent.length;
 
     // Determine content type based on extension
     const contentType = getContentType(key);

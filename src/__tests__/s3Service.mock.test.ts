@@ -74,6 +74,7 @@ import {
   buildDownloadProgress,
   toErrorMessage,
   uploadContent,
+  uploadFile,
   deleteFile,
   deleteFiles,
   deletePrefix,
@@ -571,6 +572,56 @@ describe('S3 Service Mock Integration Tests', () => {
       );
 
       expect(result.success).toBe(true);
+    });
+
+    describe('uploadFile', () => {
+      let dir: string;
+      beforeEach(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 's3b-upload-'));
+      });
+      afterEach(() => {
+        fs.rmSync(dir, { recursive: true, force: true });
+        vi.restoreAllMocks();
+      });
+
+      it('uploads the file bytes and reports 100% with the bytes actually read', async () => {
+        s3Mock.on(PutObjectCommand).resolves({});
+        const file = path.join(dir, 'a.txt');
+        fs.writeFileSync(file, 'hello upload');
+        const onProgress = vi.fn();
+
+        const result = await uploadFile('test-profile', 'test-bucket', 'a.txt', file, onProgress);
+
+        expect(result).toEqual({ success: true });
+        const put = s3Mock.commandCalls(PutObjectCommand)[0].args[0].input;
+        expect(Buffer.from(put.Body as Buffer).toString()).toBe('hello upload');
+        expect(onProgress).toHaveBeenCalledWith({ loaded: 12, total: 12, percentage: 100 });
+      });
+
+      it('does not check the path with stat before reading it (check-then-use race)', async () => {
+        s3Mock.on(PutObjectCommand).resolves({});
+        const file = path.join(dir, 'b.txt');
+        fs.writeFileSync(file, 'x');
+        const statSpy = vi.spyOn(fs.promises, 'stat');
+        const readSpy = vi.spyOn(fs.promises, 'readFile');
+
+        const result = await uploadFile('test-profile', 'test-bucket', 'b.txt', file);
+
+        expect(result.success).toBe(true);
+        expect(statSpy).not.toHaveBeenCalledWith(file);
+        expect(readSpy).not.toHaveBeenCalledWith(file);
+      });
+
+      it('fails cleanly for a missing file', async () => {
+        const result = await uploadFile(
+          'test-profile',
+          'test-bucket',
+          'c.txt',
+          path.join(dir, 'missing.txt')
+        );
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('ENOENT');
+      });
     });
 
     it('should upload buffer content successfully', async () => {
