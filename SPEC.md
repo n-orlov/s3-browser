@@ -99,7 +99,7 @@ All gates run locally with the `package.json` scripts; CI runs the same commands
 | --- | --- | --- |
 | `typecheck` | `tsc -p tsconfig.typecheck.json` | Type-checks `src`, `e2e` and the config files, tests included. |
 | `lint` | `eslint . --max-warnings 0` | ESLint at zero warnings: any warning fails the gate. |
-| `test:coverage` | `vitest run --coverage` | Unit tests (jsdom) with V8 coverage; thresholds in `vitest.config.ts` are lines 80, functions 78, branches 70, statements 78. `src/main/index.ts` and `src/preload/index.ts` are excluded from coverage. |
+| `test:coverage` | `vitest run --coverage` | Unit tests (jsdom) with V8 coverage; thresholds in `vitest.config.ts` are lines 84, functions 83, branches 72, statements 83. `src/main/index.ts` and `src/preload/index.ts` are excluded from coverage. |
 | `crap` | `node scripts/crap/crap.ts` | CRAP gate, run after `test:coverage` (see below). |
 | `ratchet:check` | `node scripts/ratchet/ratchet.ts` | Ratchet gate, run after `test:coverage` (see below). |
 | `audit:prod` | `npm audit --omit=dev --audit-level=high` | Fails on a high or critical advisory in production dependencies. |

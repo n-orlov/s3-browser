@@ -199,9 +199,12 @@ describe('ratchet:check CLI', () => {
   it('passes on the committed tree', () => {
     const result = spawnSync(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', cli], { cwd: repo, encoding: 'utf8' });
     expect(result.status).toBe(0);
-    // The warning ceiling is recorded as 0; the floors may not move below `base`.
+    // The warning ceiling is recorded as 0; the floors may not move below the locked values.
     const committed = parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'));
-    expect(committed.coverageThresholds).toEqual(base.coverageThresholds);
+    const locked = { lines: 84, functions: 83, branches: 72, statements: 83 };
+    for (const key of Object.keys(locked) as (keyof typeof locked)[]) {
+      expect(committed.coverageThresholds[key]).toBeGreaterThanOrEqual(locked[key]);
+    }
     expect(committed.maxWarnings).toBe(0);
     expect(committed.crapBaselineMax).toBe(0);
     expect(readCrapBaselineSize(readFileSync(path.join(repo, 'crap-baseline.json'), 'utf8'))).toBe(0);
