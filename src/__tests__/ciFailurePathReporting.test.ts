@@ -66,10 +66,12 @@ describe("vitest coverage on a failing run", () => {
     writeFileSync(path.join(dir, "src/__tests__/setup.ts"), "");
     writeFileSync(path.join(dir, "src/lib.ts"), "export const inc = (a: number) => a + 1;\n");
     for (const [name, body] of Object.entries(tests)) writeFileSync(path.join(dir, "src/__tests__", name), body);
+    // The repo's real coverage block, run in the node environment with only the default reporter so each probe starts fast.
     writeFileSync(
       path.join(dir, "vitest.config.mts"),
-      `import base from '../vitest.config';\nimport { mergeConfig } from 'vitest/config';\n` +
-        `export default mergeConfig(base, { test: { setupFiles: [], reporters: ['default'], coverage: { reportsDirectory: 'cov', thresholds: {} ${configOverride} } } });\n`,
+      `import base from '../vitest.config';\n` +
+        `const test = base.test ?? {};\n` +
+        `export default { ...base, plugins: [], test: { ...test, environment: 'node', setupFiles: [], reporters: ['default'], coverage: { ...test.coverage, reportsDirectory: 'cov', thresholds: {} ${configOverride} } } };\n`,
     );
     const result = spawnSync(
       path.join(root, "node_modules/.bin/vitest"),
@@ -98,17 +100,23 @@ describe("vitest coverage on a failing run", () => {
     }
   });
 
-  it("writes coverage when one file fails and another passes, and when a suite fails to load", () => {
-    for (const tests of [{ "a.test.ts": FAILING, "b.test.ts": PASSING }, { "a.test.ts": BROKEN_SUITE, "b.test.ts": PASSING }]) {
-      const { status, dir } = runProject(tests);
-      try {
-        expect(status).not.toBe(0);
-        expect(existsSync(path.join(dir, "cov/coverage-summary.json"))).toBe(true);
-        expect(existsSync(path.join(dir, "cov/lcov.info"))).toBe(true);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
+  function expectCoverageOnRedRun(tests: Record<string, string>): void {
+    const { status, dir } = runProject(tests);
+    try {
+      expect(status).not.toBe(0);
+      expect(existsSync(path.join(dir, "cov/coverage-summary.json"))).toBe(true);
+      expect(existsSync(path.join(dir, "cov/lcov.info"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
+  }
+
+  it("writes coverage when one file fails and another passes", () => {
+    expectCoverageOnRedRun({ "a.test.ts": FAILING, "b.test.ts": PASSING });
+  });
+
+  it("writes coverage when a suite fails to load", () => {
+    expectCoverageOnRedRun({ "a.test.ts": BROKEN_SUITE, "b.test.ts": PASSING });
   });
 
   it("writes no coverage for a failing run once reportOnFailure is off (negative control)", () => {
