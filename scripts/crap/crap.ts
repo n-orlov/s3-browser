@@ -1,7 +1,7 @@
 // CRAP gate: `npm run crap` (check) / `npm run crap -- --write-baseline` (regenerate the baseline).
 // Run `npm run test:coverage` first; coverage comes from coverage/coverage-final.json.
 import { ESLint } from 'eslint';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { toMetrics, type FileCoverage, type FunctionComplexity } from './crapReport.ts';
 import { DEFAULT_CRAP_MAX, judgeCrap, scoreFunctions, type CrapBaseline, type FunctionMetrics } from './crapScore.ts';
@@ -9,6 +9,7 @@ import { functionRanges, type FunctionFacts } from './functionRanges.ts';
 
 const root = process.cwd();
 const COVERAGE_FILE = path.join(root, 'coverage', 'coverage-final.json');
+const SUMMARY_FILE = path.join(root, 'coverage', 'crap-summary.json');
 const BASELINE_FILE = path.join(root, 'crap-baseline.json');
 const SOURCE_DIRS = ['src/main', 'src/preload', 'src/renderer', 'src/shared'];
 const TEST_FILES = ['**/__tests__/**', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/*.d.ts'];
@@ -77,6 +78,13 @@ function readBaseline(): CrapBaseline {
   return JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) as CrapBaseline;
 }
 
+/** Machine-readable totals for the CI job summary (scripts/summary). Written before the verdict so a red gate keeps it. */
+function writeSummary(max: number, metrics: readonly FunctionMetrics[]): void {
+  const over = scoreFunctions(metrics).filter((fn) => fn.crap > max).length;
+  mkdirSync(path.dirname(SUMMARY_FILE), { recursive: true });
+  writeFileSync(SUMMARY_FILE, `${JSON.stringify({ max, functions: metrics.length, over })}\n`);
+}
+
 async function main(): Promise<void> {
   const max = readMax();
   const metrics = await collect();
@@ -90,6 +98,7 @@ async function main(): Promise<void> {
     console.log(`Wrote ${over.length} function(s) over CRAP ${max} to crap-baseline.json`);
     return;
   }
+  writeSummary(max, metrics);
   const baseline = readBaseline();
   const verdict = judgeCrap(metrics, { max, baseline });
   const byScore = [...verdict.violations].sort((a, b) => b.crap - a.crap);

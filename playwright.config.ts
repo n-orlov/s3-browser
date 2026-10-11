@@ -14,6 +14,7 @@ export default defineConfig({
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
     ['allure-playwright', { resultsDir: 'allure-results' }],
+    ['json', { outputFile: 'test-results/results.json' }],
   ],
 
   // Global setup/teardown for LocalStack

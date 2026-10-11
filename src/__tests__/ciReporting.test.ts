@@ -8,7 +8,7 @@ import vitestConfig from "../../vitest.config";
 type Step = { uses?: string; if?: string; with?: { name?: string; path?: string; "retention-days"?: number } };
 type Job = { steps?: Step[] };
 
-const REQUIRED_REPORTERS = ["html", "list", "allure-playwright"];
+const REQUIRED_REPORTERS = ["html", "list", "allure-playwright", "json"];
 const REQUIRED_UPLOAD_PATHS = ["playwright-report/", "test-results/", "allure-results/"];
 
 /** Names of the reporters a Playwright config declares. */
@@ -53,9 +53,10 @@ describe("playwright.config.ts reporters", () => {
   });
 
   it("flags a removed allure-playwright or list reporter (negative cases)", () => {
-    expect(reporterProblems({ reporter: [["html"], ["list"]] })).toEqual(["missing reporter allure-playwright"]);
-    expect(reporterProblems({ reporter: [["html"], ["allure-playwright"]] })).toEqual(["missing reporter list"]);
-    expect(reporterProblems({ reporter: [["html"], ["list"], ["allure-playwright"]] })).toEqual([]);
+    expect(reporterProblems({ reporter: [["html"], ["list"]] })).toEqual(["missing reporter allure-playwright", "missing reporter json"]);
+    expect(reporterProblems({ reporter: [["html"], ["allure-playwright"], ["json"]] })).toEqual(["missing reporter list"]);
+    expect(reporterProblems({ reporter: [["html"], ["list"], ["allure-playwright"], ["json"]] })).toEqual([]);
+    expect(reporterProblems({ reporter: [["html"], ["list"], ["allure-playwright"]] })).toEqual(["missing reporter json"]);
   });
 
   it("keeps the unchanged runtime settings", () => {
@@ -171,5 +172,36 @@ describe("ci.yml quality report uploads", () => {
       expect(qualityUploadProblems(swap(upload(paths[i], { if: undefined })))).toHaveLength(1);
       expect(qualityUploadProblems(wf(good.filter((_, j) => j !== i)))).toHaveLength(1);
     }
+  });
+});
+
+/** Problems with the job-summary step of a job: it must run `scripts/summary/summary.ts <kind>` with `if: always()`. */
+function summaryStepProblems(workflow: unknown, jobName: string, kind: string): string[] {
+  const job = (workflow as { jobs?: Record<string, { steps?: (Step & { run?: string })[] }> })?.jobs?.[jobName];
+  if (!job) return [`no ${jobName} job`];
+  const step = (job.steps ?? []).find((s) => (s.run ?? "").includes("scripts/summary/summary.ts"));
+  if (!step) return [`${jobName} has no job-summary step`];
+  const problems: string[] = [];
+  if (step.if?.trim() !== "always()") problems.push(`${jobName} job-summary step must use if: always(), got ${step.if}`);
+  if (!new RegExp(`summary\\.ts\\s+${kind}\\b`).test(step.run ?? "")) problems.push(`${jobName} job-summary step must run the ${kind} summary`);
+  return problems;
+}
+
+describe("ci.yml job summaries", () => {
+  it("runs the summary CLI in the quality job and in each e2e shard with if: always()", () => {
+    expect(summaryStepProblems(ci, "quality", "quality")).toEqual([]);
+    expect(summaryStepProblems(ci, "e2e", "e2e")).toEqual([]);
+    const e2eRun = (ci as { jobs: { e2e: { steps: { run?: string }[] } } }).jobs.e2e.steps.find((s) => s.run?.includes("summary.ts"))?.run;
+    expect(e2eRun).toMatch(/\$\{\{\s*matrix\.shard\s*\}\}/);
+  });
+
+  it("flags a summary step that is missing, loses if: always() or runs the wrong summary (negative cases)", () => {
+    const wf = (step: Record<string, unknown> | null) => ({ jobs: { quality: { steps: step ? [step] : [] } } });
+    const good = { if: "always()", run: "node scripts/summary/summary.ts quality" };
+    expect(summaryStepProblems(wf(good), "quality", "quality")).toEqual([]);
+    expect(summaryStepProblems(wf(null), "quality", "quality")).toHaveLength(1);
+    expect(summaryStepProblems(wf({ ...good, if: "failure()" }), "quality", "quality")).toHaveLength(1);
+    expect(summaryStepProblems(wf({ run: good.run }), "quality", "quality")).toHaveLength(1);
+    expect(summaryStepProblems(wf({ ...good, run: "node scripts/summary/summary.ts e2e 1/2" }), "quality", "quality")).toHaveLength(1);
   });
 });
