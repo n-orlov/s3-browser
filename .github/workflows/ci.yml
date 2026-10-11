@@ -389,7 +389,7 @@ jobs:
           done
           npm run --silent badges -- --out published-badges "${e2e_args[@]}"
 
-      # The mutation badge is written by mutation.yml, not by this workflow, and the branch is rebuilt from scratch
+      # The mutation badge is written by the separate mutation workflow, not by this one, and the branch is rebuilt from scratch
       # below, so the previous badge is read back from the last gh-pages commit; before the first mutation run
       # there is none and the `n/a` file stays.
       - name: Carry over the previous badges/mutation.json from gh-pages
