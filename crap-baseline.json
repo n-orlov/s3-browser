@@ -1,5 +1,4 @@
 {
-  "src/renderer/components/FileList.tsx:FileList.handleItemClick": 50.64421074023268,
   "src/renderer/components/TextEditor.tsx:TextEditor.handleKeyDown": 42,
   "src/renderer/hooks/useS3.ts:useS3.loadBuckets": 56,
   "src/renderer/hooks/useS3.ts:useS3.loadObjects": 110

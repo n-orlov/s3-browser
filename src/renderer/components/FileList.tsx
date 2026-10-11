@@ -9,6 +9,7 @@ import FileListControls, {
 import { usePendingFileSelection, type PendingFileSelection } from './usePendingFileSelection';
 import { useResettingState } from './useResettingState';
 import { useObjectListing } from './useObjectListing';
+import { computeClickSelection, isCtrlOrCmdPressed } from '../utils/fileSelection';
 import { FOLDER_ICON, getIconForExtension, getKeyExtension } from '../utils/fileIcons';
 
 export interface S3Object {
@@ -203,49 +204,20 @@ function FileList({
   );
 
   const handleItemClick = (item: S3Object, index: number, event: React.MouseEvent) => {
-    // Handle multiselect with modifier keys - works for both files and folders
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
-
-    if (event.shiftKey && lastClickedIndexRef.current >= 0) {
-      // Shift+click: range selection (includes both files and folders)
-      const start = Math.min(lastClickedIndexRef.current, index);
-      const end = Math.max(lastClickedIndexRef.current, index);
-      const rangeItems = displayedItems.slice(start, end + 1);
-
-      if (isCtrlOrCmd) {
-        // Shift+Ctrl/Cmd: add range to existing selection
-        const existingKeys = new Set(selectedFiles.map(f => f.key));
-        const newSelection = [...selectedFiles];
-        for (const rangeItem of rangeItems) {
-          if (!existingKeys.has(rangeItem.key)) {
-            newSelection.push(rangeItem);
-          }
-        }
-        onSelectFiles(newSelection);
-      } else {
-        // Shift only: replace selection with range
-        onSelectFiles(rangeItems);
-      }
-      // Set the primary selected file to the clicked item
-      onSelectFile(item);
-    } else if (isCtrlOrCmd) {
-      // Ctrl/Cmd+click: toggle selection
-      const isSelected = selectedFiles.some(f => f.key === item.key);
-      if (isSelected) {
-        const newSelection = selectedFiles.filter(f => f.key !== item.key);
-        onSelectFiles(newSelection);
-        onSelectFile(newSelection.length > 0 ? newSelection[newSelection.length - 1] : null);
-      } else {
-        onSelectFiles([...selectedFiles, item]);
-        onSelectFile(item);
-      }
-      lastClickedIndexRef.current = index;
-    } else {
-      // Single click: select only this item (same behavior for files and folders)
-      onSelectFile(item);
-      onSelectFiles([item]);
-      lastClickedIndexRef.current = index;
+    const result = computeClickSelection({
+      item,
+      index,
+      lastClickedIndex: lastClickedIndexRef.current,
+      displayedItems,
+      selectedFiles,
+      isShift: event.shiftKey,
+      isCtrlOrCmd: isCtrlOrCmdPressed(isMac, event),
+    });
+    onSelectFiles(result.selectedFiles);
+    onSelectFile(result.primary);
+    if (result.lastClickedIndex !== null) {
+      lastClickedIndexRef.current = result.lastClickedIndex;
     }
   };
 

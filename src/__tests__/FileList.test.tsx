@@ -327,6 +327,94 @@ describe('FileList', () => {
     });
   });
 
+  describe('multi-selection with modifier keys', () => {
+    const keysOf = (calls: unknown[][]) => (calls[calls.length - 1][0] as S3Object[]).map((f) => f.key);
+    const names = ['a.txt', 'b.txt', 'c.txt', 'd.txt'];
+
+    const setup = async (selectedFiles: S3Object[] = []) => {
+      mockElectronAPI.s3.listObjects.mockResolvedValue({
+        success: true,
+        result: {
+          objects: names.map((key) => ({ key, size: 10, isPrefix: false })),
+          prefixes: [],
+          continuationToken: undefined,
+          isTruncated: false,
+          prefix: '',
+          keyCount: names.length,
+        },
+      });
+      const onSelectFile = vi.fn();
+      const onSelectFiles = vi.fn();
+      render(
+        <FileList
+          {...createDefaultProps({
+            currentProfile: 'test-profile',
+            selectedBucket: 'my-bucket',
+            onSelectFile,
+            onSelectFiles,
+            selectedFiles,
+          })}
+        />
+      );
+      await screen.findByText('a.txt');
+      return { onSelectFile, onSelectFiles };
+    };
+
+    it('shift+click selects the range from the last clicked row', async () => {
+      const { onSelectFile, onSelectFiles } = await setup();
+      fireEvent.click(screen.getByText('a.txt'));
+      fireEvent.click(screen.getByText('c.txt'), { shiftKey: true });
+
+      expect(keysOf(onSelectFiles.mock.calls)).toEqual(['a.txt', 'b.txt', 'c.txt']);
+      expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'c.txt' }));
+    });
+
+    it('shift+click keeps the anchor, so a second shift+click ranges from the first click', async () => {
+      const { onSelectFiles } = await setup();
+      fireEvent.click(screen.getByText('b.txt'));
+      fireEvent.click(screen.getByText('d.txt'), { shiftKey: true });
+      fireEvent.click(screen.getByText('a.txt'), { shiftKey: true });
+
+      expect(keysOf(onSelectFiles.mock.calls)).toEqual(['a.txt', 'b.txt']);
+    });
+
+    it('ctrl+click adds an unselected row to the selection', async () => {
+      const a: S3Object = { key: 'a.txt', size: 10, isPrefix: false };
+      const { onSelectFile, onSelectFiles } = await setup([a]);
+      fireEvent.click(screen.getByText('c.txt'), { ctrlKey: true });
+
+      expect(keysOf(onSelectFiles.mock.calls)).toEqual(['a.txt', 'c.txt']);
+      expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'c.txt' }));
+    });
+
+    it('ctrl+click removes a selected row and makes the last remaining row primary', async () => {
+      const selected: S3Object[] = ['a.txt', 'b.txt', 'c.txt'].map((key) => ({ key, size: 10, isPrefix: false }));
+      const { onSelectFile, onSelectFiles } = await setup(selected);
+      fireEvent.click(screen.getByText('b.txt'), { ctrlKey: true });
+
+      expect(keysOf(onSelectFiles.mock.calls)).toEqual(['a.txt', 'c.txt']);
+      expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'c.txt' }));
+    });
+
+    it('ctrl+click on the only selected row clears the primary selection', async () => {
+      const a: S3Object = { key: 'a.txt', size: 10, isPrefix: false };
+      const { onSelectFile, onSelectFiles } = await setup([a]);
+      fireEvent.click(screen.getByText('a.txt'), { ctrlKey: true });
+
+      expect(onSelectFiles).toHaveBeenLastCalledWith([]);
+      expect(onSelectFile).toHaveBeenLastCalledWith(null);
+    });
+
+    it('shift+ctrl+click adds the range to the existing selection without duplicates', async () => {
+      const c: S3Object = { key: 'c.txt', size: 10, isPrefix: false };
+      const { onSelectFiles } = await setup([c]);
+      fireEvent.click(screen.getByText('b.txt'));
+      fireEvent.click(screen.getByText('d.txt'), { shiftKey: true, ctrlKey: true });
+
+      expect(keysOf(onSelectFiles.mock.calls)).toEqual(['c.txt', 'b.txt', 'd.txt']);
+    });
+  });
+
   describe('error handling', () => {
     it('shows error message on API failure', async () => {
       mockElectronAPI.s3.listObjects.mockResolvedValue({
