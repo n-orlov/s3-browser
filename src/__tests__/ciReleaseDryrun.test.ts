@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { spawnSync } from "child_process";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { execFile, spawnSync } from "child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import os from "os";
 import path from "path";
@@ -109,46 +109,74 @@ const RELEASE_PATHS = ["package.json", "build/**", "electron-builder*", ".github
 
 const filterStep = ci.jobs?.changes?.steps?.find((s) => s.id === "filter");
 
-/** Runs the `changes` filter step in a throwaway git repo whose second commit touches `changed`; returns its `release` output. */
-function releaseOutput(event: string, changed: string[]): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "changes-"));
-  try {
-    const git = (...args: string[]) => {
-      const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: dir, encoding: "utf8" });
-      if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
-      return r.stdout.trim();
-    };
-    git("init", "-q");
-    writeFileSync(path.join(dir, "README.md"), "base");
-    git("add", "-A");
-    git("commit", "-q", "-m", "base");
-    const base = git("rev-parse", "HEAD");
-    for (const file of changed) {
-      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
-      writeFileSync(path.join(dir, file), "x");
-    }
-    writeFileSync(path.join(dir, "README.md"), "head");
-    git("add", "-A");
-    git("commit", "-q", "-m", "head");
-    const head = git("rev-parse", "HEAD");
-    const output = path.join(dir, "..", `${path.basename(dir)}.out`);
-    writeFileSync(output, "");
-    const env: Record<string, string> = { PATH: process.env.PATH ?? "", GITHUB_OUTPUT: output };
-    for (const [name, value] of Object.entries(filterStep?.env ?? {})) {
-      env[name] = value
-        .replace(/\$\{\{\s*github\.event_name\s*\}\}/, event)
-        .replace(/\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/, base)
-        .replace(/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/, head);
-    }
-    const r = spawnSync("bash", ["-e", "-c", filterStep?.run ?? "exit 99"], { cwd: dir, env, encoding: "utf8" });
-    expect(r.status, r.stderr).toBe(0);
-    const out = readFileSync(output, "utf8");
-    rmSync(output);
-    return out.trim();
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+const HITS = ["package.json", "build/vite.config.ts", "build/deep/er/file.txt", "electron-builder.yml", ".github/workflows/release.yml", "vite.config.ts", "tsconfig.json", "tsconfig.main.json"];
+const MISSES = ["src/main/index.ts", ".github/workflows/ci.yml", "docs/package.json.md", "src/vite.config.ts", "tsconfig.txt", "e2e/build.e2e.ts"];
+const MIXED = ["src/a.ts", "tsconfig.preload.json"];
+
+/** The `release` output the `changes` filter step wrote for one pull request case. */
+const outputs = new Map<string, string>();
+let repoDir = "";
+
+/** One throwaway repo: a base commit, then one commit per case that touches only that case's files. Returns `label base head` lines. */
+function buildRepo(dir: string, cases: Record<string, string[]>): { label: string; base: string; head: string }[] {
+  const lines = Object.entries(cases).map(([label, files], i) => {
+    const writes = files.map((f) => `mkdir -p "$(dirname '${f}')" && echo ${i} > '${f}'`).join(" && ");
+    return `base=$(git rev-parse HEAD) && ${writes} && git add -A && git commit -q -m '${label}' && echo "${label} $base $(git rev-parse HEAD)"`;
+  });
+  const script = ["set -e", "git init -q", "echo base > README.md", "git add -A", "git commit -q -m base", ...lines].join("\n");
+  const r = spawnSync("bash", ["-e", "-c", script], {
+    cwd: dir,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
+  });
+  if (r.status !== 0) throw new Error(`building the probe repo failed: ${r.stderr}`);
+  return r.stdout
+    .trim()
+    .split("\n")
+    .map((l) => {
+      const [label, base, head] = l.split(" ");
+      return { label, base, head };
+    });
 }
+
+/** Runs the `changes` filter step's script the way Actions would; resolves to the `release=...` line it appended to GITHUB_OUTPUT. */
+function runFilter(dir: string, event: string, base: string, head: string): Promise<string> {
+  const output = path.join(dir, "..", `${path.basename(dir)}-${event}-${head.slice(0, 8)}.out`);
+  writeFileSync(output, "");
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "", GITHUB_OUTPUT: output };
+  for (const [name, value] of Object.entries(filterStep?.env ?? {})) {
+    env[name] = value
+      .replace(/\$\{\{\s*github\.event_name\s*\}\}/, event)
+      .replace(/\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/, base)
+      .replace(/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/, head);
+  }
+  return new Promise((resolve, reject) => {
+    execFile("bash", ["-e", "-c", filterStep?.run ?? "exit 99"], { cwd: dir, env }, (error, _stdout, stderr) => {
+      if (error) return reject(new Error(`filter step failed: ${stderr}`));
+      const out = readFileSync(output, "utf8").trim();
+      rmSync(output);
+      resolve(out);
+    });
+  });
+}
+
+// Each case is a real run of the workflow's own script, so all of them run concurrently in beforeAll (a handful of
+// bash and git processes each) instead of one after another inside the 5-second per-test bound on a loaded CI host.
+beforeAll(async () => {
+  repoDir = mkdtempSync(path.join(os.tmpdir(), "changes-"));
+  const cases: Record<string, string[]> = { mixed: MIXED, other: ["README.md"] };
+  HITS.forEach((f, i) => (cases[`hit${i}`] = [f]));
+  MISSES.forEach((f, i) => (cases[`miss${i}`] = [f]));
+  const commits = buildRepo(repoDir, cases);
+  const events = ["push", "schedule", "workflow_dispatch"];
+  const runs = [
+    ...commits.map(({ label, base, head }) => ({ key: label, event: "pull_request", base, head })),
+    ...events.map((event) => ({ key: event, event, base: "", head: "" })),
+  ];
+  const results = await Promise.all(runs.map((r) => runFilter(repoDir, r.event, r.base, r.head)));
+  runs.forEach((r, i) => outputs.set(r.key, results[i]));
+});
+afterAll(() => rmSync(repoDir, { recursive: true, force: true }));
 
 /** Runs the gate step's script with the given results of the four needs; returns the exit code. */
 function gateExit(releaseDryrun: string): number {
@@ -181,15 +209,14 @@ describe("ci.yml release-dryrun triggers and gate interaction", () => {
   });
 
   it("builds on push, schedule and manual runs without looking at changed files", () => {
-    for (const event of ["push", "schedule", "workflow_dispatch"]) expect(releaseOutput(event, ["README.md"]), event).toBe("release=true");
+    for (const event of ["push", "schedule", "workflow_dispatch"]) expect(outputs.get(event), event).toBe("release=true");
   });
 
   it("builds a pull request only when it changes one of the six path patterns", () => {
-    const hits = ["package.json", "build/vite.config.ts", "build/deep/er/file.txt", "electron-builder.yml", ".github/workflows/release.yml", "vite.config.ts", "tsconfig.json", "tsconfig.main.json"];
-    for (const file of hits) expect(releaseOutput("pull_request", [file]), file).toBe("release=true");
-    const misses = ["src/main/index.ts", ".github/workflows/ci.yml", "docs/package.json.md", "src/vite.config.ts", "tsconfig.txt", "e2e/build.e2e.ts"];
-    for (const file of misses) expect(releaseOutput("pull_request", [file]), file).toBe("release=false");
-    expect(releaseOutput("pull_request", ["src/a.ts", "tsconfig.preload.json"])).toBe("release=true");
+    HITS.forEach((file, i) => expect(outputs.get(`hit${i}`), file).toBe("release=true"));
+    MISSES.forEach((file, i) => expect(outputs.get(`miss${i}`), file).toBe("release=false"));
+    expect(outputs.get("other")).toBe("release=false");
+    expect(outputs.get("mixed")).toBe("release=true");
   });
 
   it("makes gate need release-dryrun: skipped and success pass, failure and cancelled fail", () => {
