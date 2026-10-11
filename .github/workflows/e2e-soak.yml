@@ -1,0 +1,79 @@
+name: E2E soak
+
+# Nightly soak of the full Playwright e2e suite: every test runs `repeat` times (`--repeat-each`, default 3) on the
+# owner's self-hosted runners, split over the same 2 shards as ci.yml. playwright.config.ts keeps `retries: 0`, so a
+# test that fails even once in the repeats fails the shard instead of passing on a rerun; that is the point of a soak.
+# Only `schedule` and `workflow_dispatch` trigger it (never a pull request, never a fork), so nothing from outside the
+# repository executes on the self-hosted runners. Default token is read-only; no secrets are used.
+# Not part of ci.yml's `gate` (nothing in ci.yml `needs` it).
+
+on:
+  # Every night at 02:17 UTC, run on the default branch.
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: 'Times each e2e test is repeated (passed to --repeat-each)'
+        required: false
+        default: '3'
+        type: string
+
+permissions:
+  contents: read
+
+# The same group ci.yml uses for a push to master (and for its own scheduled run, which also runs on the default
+# branch), so a soak and a push CI never run side by side on the single self-hosted runner. Never cancels a run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    name: e2e soak shard ${{ matrix.shard }}/2 (Electron + LocalStack in containers)
+    runs-on: [self-hosted, linux, x64, s3-browser]
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+
+      - name: Run the Playwright e2e suite in containers, repeated
+        env:
+          CI: 'true'
+          REPEAT: ${{ inputs.repeat || '3' }}
+        run: |
+          if ! [[ "$REPEAT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "repeat must be a positive integer, got: $REPEAT" >&2
+            exit 1
+          fi
+          ./scripts/e2e-docker.sh --repeat-each="$REPEAT" --shard=${{ matrix.shard }}/2
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: soak-playwright-report-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: soak-test-results-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: soak-allure-results-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 14
