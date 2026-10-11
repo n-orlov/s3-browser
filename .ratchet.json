@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 11,
+  "maxWarnings": 10,
   "coverageThresholds": {
     "lines": 80,
     "functions": 78,

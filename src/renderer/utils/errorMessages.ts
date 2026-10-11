@@ -10,176 +10,178 @@ export interface ParsedError {
   isRetryable: boolean;
 }
 
-/**
- * Parses an error message and returns a user-friendly error object
- */
-export function parseError(error: unknown): ParsedError {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
+export interface ErrorRule {
+  /** Lower-case substrings; the rule matches when any is contained in the message. */
+  patterns: readonly string[];
+  result: ParsedError;
+}
 
-  // Access Denied / Permission errors
-  if (
-    lowerMessage.includes('accessdenied') ||
-    lowerMessage.includes('access denied') ||
-    lowerMessage.includes('forbidden')
-  ) {
-    return {
+/** Substrings that identify a network / connection failure. */
+export const NETWORK_PATTERNS: readonly string[] = [
+  'network',
+  'enotfound',
+  'econnrefused',
+  'econnreset',
+  'etimedout',
+  'timeout',
+  'socket hang up',
+];
+
+/**
+ * Ordered error rules: the first rule with a matching pattern wins.
+ */
+export const ERROR_RULES: readonly ErrorRule[] = [
+  {
+    // Access Denied / Permission errors
+    patterns: ['accessdenied', 'access denied', 'forbidden'],
+    result: {
       title: 'Access Denied',
       message: 'You do not have permission to access this resource.',
       suggestion: 'Check your AWS credentials or contact your administrator.',
       isRetryable: false,
-    };
-  }
-
-  // Invalid credentials
-  if (
-    lowerMessage.includes('invalidsignature') ||
-    lowerMessage.includes('invalid signature') ||
-    lowerMessage.includes('signaturedoesnotmatch') ||
-    lowerMessage.includes('invalidaccesskeyid')
-  ) {
-    return {
+    },
+  },
+  {
+    // Invalid credentials
+    patterns: ['invalidsignature', 'invalid signature', 'signaturedoesnotmatch', 'invalidaccesskeyid'],
+    result: {
       title: 'Invalid Credentials',
       message: 'Your AWS credentials appear to be invalid or expired.',
       suggestion: 'Try refreshing your credentials or selecting a different profile.',
       isRetryable: false,
-    };
-  }
-
-  // Expired credentials
-  if (
-    lowerMessage.includes('expiredtoken') ||
-    lowerMessage.includes('expired token') ||
-    lowerMessage.includes('token has expired')
-  ) {
-    return {
+    },
+  },
+  {
+    // Expired credentials
+    patterns: ['expiredtoken', 'expired token', 'token has expired'],
+    result: {
       title: 'Credentials Expired',
       message: 'Your AWS session token has expired.',
       suggestion: 'Please refresh your credentials and try again.',
       isRetryable: false,
-    };
-  }
-
-  // Bucket not found
-  if (
-    lowerMessage.includes('nosuchbucket') ||
-    lowerMessage.includes('no such bucket')
-  ) {
-    return {
+    },
+  },
+  {
+    // Bucket not found
+    patterns: ['nosuchbucket', 'no such bucket'],
+    result: {
       title: 'Bucket Not Found',
       message: 'The requested bucket does not exist.',
       suggestion: 'Verify the bucket name and region are correct.',
       isRetryable: false,
-    };
-  }
-
-  // Object/Key not found
-  if (
-    lowerMessage.includes('nosuchkey') ||
-    lowerMessage.includes('no such key') ||
-    lowerMessage.includes('not found')
-  ) {
-    return {
+    },
+  },
+  {
+    // Object/Key not found
+    patterns: ['nosuchkey', 'no such key', 'not found'],
+    result: {
       title: 'File Not Found',
       message: 'The requested file could not be found.',
       suggestion: 'The file may have been deleted or moved.',
       isRetryable: false,
-    };
-  }
-
-  // Network / Connection errors
-  if (
-    lowerMessage.includes('network') ||
-    lowerMessage.includes('enotfound') ||
-    lowerMessage.includes('econnrefused') ||
-    lowerMessage.includes('econnreset') ||
-    lowerMessage.includes('etimedout') ||
-    lowerMessage.includes('timeout') ||
-    lowerMessage.includes('socket hang up')
-  ) {
-    return {
+    },
+  },
+  {
+    // Network / Connection errors
+    patterns: NETWORK_PATTERNS,
+    result: {
       title: 'Connection Error',
       message: 'Could not connect to AWS S3.',
       suggestion: 'Check your internet connection and try again.',
       isRetryable: true,
-    };
-  }
-
-  // Throttling
-  if (
-    lowerMessage.includes('slowdown') ||
-    lowerMessage.includes('throttl') ||
-    lowerMessage.includes('toomanyrequests')
-  ) {
-    return {
+    },
+  },
+  {
+    // Throttling
+    patterns: ['slowdown', 'throttl', 'toomanyrequests'],
+    result: {
       title: 'Too Many Requests',
       message: 'AWS is temporarily throttling requests.',
       suggestion: 'Please wait a moment and try again.',
       isRetryable: true,
-    };
-  }
-
-  // Service unavailable
-  if (
-    lowerMessage.includes('serviceunavailable') ||
-    lowerMessage.includes('service unavailable') ||
-    lowerMessage.includes('internalerror') ||
-    lowerMessage.includes('internal error')
-  ) {
-    return {
+    },
+  },
+  {
+    // Service unavailable
+    patterns: ['serviceunavailable', 'service unavailable', 'internalerror', 'internal error'],
+    result: {
       title: 'Service Unavailable',
       message: 'AWS S3 is temporarily unavailable.',
       suggestion: 'Please try again in a few moments.',
       isRetryable: true,
-    };
-  }
-
-  // Region mismatch
-  if (
-    lowerMessage.includes('permanentredirect') ||
-    lowerMessage.includes('region') ||
-    lowerMessage.includes('authorizationheadermalformed')
-  ) {
-    return {
+    },
+  },
+  {
+    // Region mismatch
+    patterns: ['permanentredirect', 'region', 'authorizationheadermalformed'],
+    result: {
       title: 'Region Mismatch',
       message: 'The bucket is in a different region than expected.',
       suggestion: 'Try configuring the correct region in your AWS profile.',
       isRetryable: false,
-    };
-  }
-
-  // File too large
-  if (
-    lowerMessage.includes('entitytoolarge') ||
-    lowerMessage.includes('too large')
-  ) {
-    return {
+    },
+  },
+  {
+    // File too large
+    patterns: ['entitytoolarge', 'too large'],
+    result: {
       title: 'File Too Large',
       message: 'The file exceeds the maximum allowed size.',
       suggestion: 'Try uploading a smaller file or use multipart upload.',
       isRetryable: false,
-    };
-  }
-
-  // Aborted / Cancelled
-  if (
-    lowerMessage.includes('abort') ||
-    lowerMessage.includes('cancel')
-  ) {
-    return {
+    },
+  },
+  {
+    // Aborted / Cancelled
+    patterns: ['abort', 'cancel'],
+    result: {
       title: 'Operation Cancelled',
       message: 'The operation was cancelled.',
       isRetryable: false,
-    };
-  }
+    },
+  },
+];
 
-  // Default / Unknown error
+/**
+ * Extracts the message text from an unknown thrown value
+ */
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * True when the lower-cased message contains any of the given substrings
+ */
+export function matchesAnyPattern(lowerMessage: string, patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => lowerMessage.includes(pattern));
+}
+
+/**
+ * Finds the first rule whose patterns match the lower-cased message
+ */
+export function findErrorRule(lowerMessage: string): ErrorRule | undefined {
+  return ERROR_RULES.find((rule) => matchesAnyPattern(lowerMessage, rule.patterns));
+}
+
+/**
+ * Builds the fallback error for a message no rule matched
+ */
+export function buildDefaultError(message: string): ParsedError {
   return {
     title: 'Error',
     message: message || 'An unknown error occurred.',
     suggestion: 'Please try again. If the problem persists, check your configuration.',
     isRetryable: true,
   };
+}
+
+/**
+ * Parses an error message and returns a user-friendly error object
+ */
+export function parseError(error: unknown): ParsedError {
+  const message = getErrorMessage(error);
+  const rule = findErrorRule(message.toLowerCase());
+  return rule ? { ...rule.result } : buildDefaultError(message);
 }
 
 /**
@@ -194,19 +196,8 @@ export function getShortErrorMessage(error: unknown): string {
  * Determines if an error is likely network-related
  */
 export function isNetworkError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
-
-  return (
-    lowerMessage.includes('network') ||
-    lowerMessage.includes('enotfound') ||
-    lowerMessage.includes('econnrefused') ||
-    lowerMessage.includes('econnreset') ||
-    lowerMessage.includes('etimedout') ||
-    lowerMessage.includes('timeout') ||
-    lowerMessage.includes('socket hang up') ||
-    lowerMessage.includes('fetch failed')
-  );
+  const lowerMessage = getErrorMessage(error).toLowerCase();
+  return matchesAnyPattern(lowerMessage, NETWORK_PATTERNS) || lowerMessage.includes('fetch failed');
 }
 
 /**
