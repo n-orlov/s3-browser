@@ -55,6 +55,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The lint badge shows ESLint's own warning/error count, so the result is also written as JSON. `|| true`: the
+      # gate above has already judged the run; this step only records it, and a missing file renders `n/a`.
+      - name: ESLint result for the lint badge
+        if: ${{ !cancelled() }}
+        run: npx eslint . --format json --output-file reports/eslint.json || true
+
       # `!cancelled()` on the tests and the CRAP score: an earlier red step (typecheck, lint, a failing test)
       # must not stop the unit and coverage evidence the job summary and the report are built from.
       - name: Unit tests with coverage (thresholds enforced)
@@ -94,6 +100,14 @@ jobs:
           name: unit-allure-results
           path: allure-results-unit/
           retention-days: 7
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: eslint-result
+          path: reports/eslint.json
+          retention-days: 7
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -368,6 +382,12 @@ jobs:
         with:
           name: unit-junit
           path: junit
+        continue-on-error: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: eslint-result
+          path: reports
         continue-on-error: true
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

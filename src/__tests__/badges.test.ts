@@ -8,6 +8,7 @@ import {
   colorForThreshold,
   mutationScoreOf,
   parseAuditCounts,
+  parseEslintCounts,
   parseRatchetInput,
   renderBadges,
   staticBadges,
@@ -22,6 +23,7 @@ const ratchet = {
 const audit = { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 };
 const allGreen: BadgeInput = {
   ratchet,
+  lint: { errors: 0, warnings: 0 },
   coverage: { pct: { lines: 92, functions: 90, branches: 82, statements: 91 } },
   crap: { max: 30, functions: 640, over: 0 },
   unit: { total: 100, failed: 0, skipped: 4 },
@@ -44,7 +46,7 @@ describe("renderBadges: schema", () => {
   });
 
   it("renders every badge as n/a lightgrey when its inputs are missing", () => {
-    const badges = renderBadges({ ratchet: null, coverage: null, crap: null, unit: null, e2e: null, mutation: null, audit: null });
+    const badges = renderBadges({ ratchet: null, lint: null, coverage: null, crap: null, unit: null, e2e: null, mutation: null, audit: null });
     for (const name of BADGE_NAMES) {
       expect(badges[name], name).toEqual({ ...SHAPE, message: "n/a", color: "lightgrey" });
     }
@@ -94,10 +96,40 @@ describe("renderBadges: colour boundaries", () => {
     expect(at(1).message).toBe("1 over 30");
   });
 
-  it("lint is green only at 0 warnings", () => {
-    const at = (maxWarnings: number) => renderBadges({ ...allGreen, ratchet: { ...ratchet, maxWarnings } }).lint;
+  it("lint shows ESLint's warning count and is green only at 0 warnings and 0 errors", () => {
+    const at = (warnings: number, errors = 0) => renderBadges({ ...allGreen, lint: { errors, warnings } }).lint;
     expect(at(0)).toMatchObject({ color: "brightgreen", message: "0 warnings" });
-    expect(at(1).color).toBe("red");
+    expect(at(1)).toMatchObject({ color: "yellow", message: "1 warning" });
+    expect(at(7)).toMatchObject({ color: "yellow", message: "7 warnings" });
+    expect(at(0, 2)).toMatchObject({ color: "red", message: "2 errors, 0 warnings" });
+    expect(at(3, 1)).toMatchObject({ color: "red", message: "1 error, 3 warnings" });
+  });
+
+  it("lint ignores the .ratchet.json ceiling: a ceiling of 5 with 0 warnings is green 0, a ceiling of 0 with 4 warnings is not green", () => {
+    const withCeiling = (maxWarnings: number, warnings: number) =>
+      renderBadges({ ...allGreen, ratchet: { ...ratchet, maxWarnings }, lint: { errors: 0, warnings } }).lint;
+    expect(withCeiling(5, 0)).toMatchObject({ color: "brightgreen", message: "0 warnings" });
+    expect(withCeiling(0, 4)).toMatchObject({ color: "yellow", message: "4 warnings" });
+  });
+
+  it("lint is n/a lightgrey without an ESLint result, even when .ratchet.json is present", () => {
+    expect(renderBadges({ ...allGreen, lint: null }).lint).toEqual({ ...SHAPE, label: "lint", message: "n/a", color: "lightgrey" });
+  });
+
+  it("every other badge is n/a lightgrey when only its own input is missing", () => {
+    const without: [keyof BadgeInput, string][] = [
+      ["coverage", "coverage-lines"],
+      ["crap", "crap"],
+      ["unit", "unit-tests"],
+      ["e2e", "e2e-tests"],
+      ["mutation", "mutation"],
+      ["audit", "audit"],
+      ["lint", "lint"],
+    ];
+    for (const [key, name] of without) {
+      const badges = renderBadges({ ...allGreen, [key]: null });
+      expect(badges[name as keyof typeof badges], name).toMatchObject({ message: "n/a", color: "lightgrey" });
+    }
   });
 
   it("audit is green only at 0 vulnerabilities, red on a high or critical one", () => {
@@ -191,6 +223,22 @@ describe("static badges come from package.json", () => {
   });
 });
 
+describe("parseEslintCounts", () => {
+  const file = (errorCount: number, warningCount: number) => ({ filePath: "x.ts", messages: [], errorCount, fatalErrorCount: 0, warningCount });
+  it("sums the error and warning counts over every file", () => {
+    expect(parseEslintCounts(JSON.stringify([file(0, 2), file(1, 0), file(0, 3)]))).toEqual({ errors: 1, warnings: 5 });
+  });
+  it("reads an empty result as zero and zero", () => {
+    expect(parseEslintCounts("[]")).toEqual({ errors: 0, warnings: 0 });
+  });
+  it("rejects output that is not an ESLint result", () => {
+    expect(() => parseEslintCounts("{}")).toThrow(/array/);
+    expect(() => parseEslintCounts("[{}]")).toThrow(/errorCount/);
+    expect(() => parseEslintCounts("[null]")).toThrow(/errorCount/);
+    expect(() => parseEslintCounts("nope")).toThrow();
+  });
+});
+
 describe("badges CLI", () => {
   const cli = path.resolve(__dirname, "../../scripts/badges/render.ts");
   const run = (dir: string, args: string[]) =>
@@ -217,6 +265,8 @@ describe("badges CLI", () => {
     put(populated, "test-results/shard1.json", JSON.stringify({ stats: { expected: 4, unexpected: 0, flaky: 0, skipped: 1 } }));
     put(populated, "test-results/shard2.json", JSON.stringify({ stats: { expected: 5, unexpected: 0, flaky: 1, skipped: 0 } }));
     put(populated, "reports/mutation/mutation.json", JSON.stringify({ files: { "a.ts": { mutants: [{ status: "Killed" }, { status: "Survived" }] } } }));
+    put(populated, "reports/eslint.json", JSON.stringify([{ errorCount: 0, warningCount: 2 }, { errorCount: 0, warningCount: 1 }]));
+    put(populated, "custom/lint.json", JSON.stringify([{ errorCount: 0, warningCount: 0 }]));
     put(populated, "reports/audit.json", JSON.stringify({ metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } } }));
     full = run(populated, ["--out", "out", "--e2e", "test-results/shard1.json", "--e2e", "test-results/shard2.json"]);
     const blank = path.join(root, "blank");
@@ -238,7 +288,7 @@ describe("badges CLI", () => {
     expect(readOut(out, "coverage-functions").color).toBe("red");
     expect(readOut(out, "coverage-branches").color).toBe("yellow");
     expect(readOut(out, "crap").color).toBe("brightgreen");
-    expect(readOut(out, "lint").color).toBe("brightgreen");
+    expect(readOut(out, "lint")).toEqual({ schemaVersion: 1, label: "lint", message: "3 warnings", color: "yellow" });
     expect(readOut(out, "unit-tests")).toMatchObject({ color: "red", message: "1 failed, 7 passed, 2 skipped" });
     expect(readOut(out, "e2e-tests")).toMatchObject({ color: "brightgreen", message: "10 passed, 1 skipped" });
     expect(readOut(out, "mutation")).toMatchObject({ color: "red", message: "50%" });
@@ -252,10 +302,29 @@ describe("badges CLI", () => {
     for (const name of BADGE_NAMES) expect(readOut(out, name)).toMatchObject({ schemaVersion: 1, message: "n/a", color: "lightgrey" });
   });
 
+  it("reads the ESLint result from --eslint, and never the .ratchet.json ceiling", () => {
+    const dir = path.join(root, "populated");
+    expect(run(dir, ["--out", "out-custom", "--eslint", "custom/lint.json"]).status).toBe(0);
+    expect(readOut(path.join(dir, "out-custom"), "lint")).toMatchObject({ message: "0 warnings", color: "brightgreen" });
+    expect(run(dir, ["--out", "out-missing", "--eslint", "custom/absent.json"]).status).toBe(0);
+    expect(readOut(path.join(dir, "out-missing"), "lint")).toEqual({ schemaVersion: 1, label: "lint", message: "n/a", color: "lightgrey" });
+    const ratchetOnly = path.join(root, "ratchet-only");
+    put(ratchetOnly, ".ratchet.json", JSON.stringify(ratchet));
+    expect(run(ratchetOnly, ["--out", "out"]).status).toBe(0);
+    expect(readOut(path.join(ratchetOnly, "out"), "lint").message).toBe("n/a");
+    expect(readOut(path.join(ratchetOnly, "out"), "crap").message).toBe("n/a");
+  });
+
   it("treats an unreadable input as missing and says so on stderr", () => {
     expect(bad.status).toBe(0);
     expect(bad.stderr).toContain("badges: .ratchet.json:");
     expect(readOut(path.join(root, "broken/out"), "lint").message).toBe("n/a");
+    const garbled = path.join(root, "garbled");
+    put(garbled, "reports/eslint.json", "{\"not\": \"an array\"}");
+    const result = run(garbled, ["--out", "out"]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("badges: reports/eslint.json:");
+    expect(readOut(path.join(garbled, "out"), "lint")).toMatchObject({ message: "n/a", color: "lightgrey" });
   });
 
   it("exits 2 with usage when --out is missing", () => {

@@ -6,6 +6,8 @@ import { parse } from "yaml";
 type Permissions = string | Record<string, string> | null | undefined;
 interface Step {
   run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
 }
 interface Job {
   if?: string | boolean;
@@ -167,6 +169,28 @@ function publishBadgeProblems(workflow: Workflow): string[] {
   return problems;
 }
 
+/**
+ * The lint badge shows ESLint's own count, so `quality` must write `eslint --format json` to reports/eslint.json and
+ * upload it as `eslint-result`, and `publish` must download that artifact into `reports/` for the renderer.
+ */
+function eslintResultProblems(workflow: Workflow): string[] {
+  const problems: string[] = [];
+  const quality = workflow.jobs?.quality?.steps ?? [];
+  const publish = workflow.jobs?.publish?.steps ?? [];
+  const isArtifact = (step: Step, action: string): boolean =>
+    (step.uses ?? "").startsWith(`actions/${action}-artifact@`) && step.with?.name === "eslint-result";
+  if (!quality.some((s) => /\beslint\b/.test(s.run ?? "") && /--format[ =]json/.test(s.run ?? "") && /reports\/eslint\.json/.test(s.run ?? ""))) {
+    problems.push("quality has no step writing eslint --format json to reports/eslint.json");
+  }
+  if (!quality.some((s) => isArtifact(s, "upload") && s.with?.path === "reports/eslint.json")) {
+    problems.push("quality does not upload reports/eslint.json as artifact eslint-result");
+  }
+  if (!publish.some((s) => isArtifact(s, "download") && s.with?.path === "reports")) {
+    problems.push("publish does not download artifact eslint-result into reports/");
+  }
+  return problems;
+}
+
 const WORKFLOWS_DIR = path.resolve(__dirname, "../../.github/workflows");
 const WORKFLOWS = readdirSync(WORKFLOWS_DIR)
   .filter((f) => /\.ya?ml$/.test(f))
@@ -206,6 +230,24 @@ describe("ci.yml publish job badges", () => {
     expect(publishBadgeProblems(ci())).toEqual([]);
     expect(badgeReachabilityProblems(ci())).toEqual([]);
     expect(Object.keys(ci().jobs ?? {})).toContain("publish");
+  });
+
+  it("feeds the lint badge from an ESLint JSON result: quality writes and uploads it, publish downloads it", () => {
+    expect(eslintResultProblems(ci())).toEqual([]);
+    const text = ciText.slice(ciText.indexOf("  publish:"));
+    expect(text).not.toMatch(/maxWarnings/);
+  });
+
+  it("flags a ci.yml copy without the ESLint JSON step, its upload or its download", () => {
+    const noRun = ci();
+    noRun.jobs!.quality.steps = noRun.jobs!.quality.steps!.filter((s) => !/--format json/.test(s.run ?? ""));
+    expect(eslintResultProblems(noRun)).toEqual(["quality has no step writing eslint --format json to reports/eslint.json"]);
+    const noUpload = ci();
+    noUpload.jobs!.quality.steps = noUpload.jobs!.quality.steps!.filter((s) => s.with?.name !== "eslint-result");
+    expect(eslintResultProblems(noUpload)).toEqual(["quality does not upload reports/eslint.json as artifact eslint-result"]);
+    const noDownload = ci();
+    noDownload.jobs!.publish.steps = noDownload.jobs!.publish.steps!.filter((s) => s.with?.name !== "eslint-result");
+    expect(eslintResultProblems(noDownload)).toEqual(["publish does not download artifact eslint-result into reports/"]);
   });
 
   it("flags a ci.yml copy whose publish job lacks the badge step", () => {

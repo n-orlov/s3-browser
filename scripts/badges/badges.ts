@@ -45,9 +45,17 @@ export interface AuditCounts {
   total: number;
 }
 
+/** Totals of an ESLint JSON result (`eslint --format json`). */
+export interface LintCounts {
+  errors: number;
+  warnings: number;
+}
+
 /** Each part is `null` when its input was not produced. */
 export interface BadgeInput {
   ratchet: RatchetInput | null;
+  /** ESLint's own result: the warning and error counts of the last lint run, not the configured ceiling. */
+  lint: LintCounts | null;
   coverage: CoverageTotals | null;
   crap: CrapTotals | null;
   unit: UnitTotals | null;
@@ -80,9 +88,13 @@ function crapBadge(crap: CrapTotals | null): Badge {
   return badge('crap', `${crap.over} over ${crap.max}`, crap.over === 0 ? 'brightgreen' : 'red');
 }
 
-function lintBadge(ratchet: RatchetInput | null): Badge {
-  if (!ratchet) return missing('lint');
-  return badge('lint', `${ratchet.maxWarnings} warnings`, ratchet.maxWarnings === 0 ? 'brightgreen' : 'red');
+/** Green only at zero warnings and zero errors; errors are red, warnings alone yellow. */
+function lintBadge(lint: LintCounts | null): Badge {
+  if (!lint) return missing('lint');
+  const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
+  const message = lint.errors > 0 ? `${plural(lint.errors, 'error')}, ${plural(lint.warnings, 'warning')}` : plural(lint.warnings, 'warning');
+  const color: BadgeColor = lint.errors > 0 ? 'red' : lint.warnings > 0 ? 'yellow' : 'brightgreen';
+  return badge('lint', message, color);
 }
 
 function testsBadge(label: string, counts: { passed: number; failed: number; skipped: number } | null): Badge {
@@ -112,7 +124,7 @@ export function renderBadges(input: BadgeInput): Record<BadgeName, Badge> {
     'coverage-functions': coverageBadge('functions', input),
     'coverage-statements': coverageBadge('statements', input),
     crap: crapBadge(input.crap),
-    lint: lintBadge(input.ratchet),
+    lint: lintBadge(input.lint),
     'unit-tests': testsBadge('unit tests', input.unit && { passed: input.unit.total - input.unit.failed - input.unit.skipped, ...input.unit }),
     'e2e-tests': testsBadge('e2e tests', input.e2e),
     mutation: mutationBadge(input.mutation, input.ratchet),
@@ -178,4 +190,20 @@ export function parseRatchetInput(text: string): RatchetInput {
       statements: num(thresholds.statements),
     },
   };
+}
+
+/** Sums `errorCount` and `warningCount` over the files of an `eslint --format json` result. */
+export function parseEslintCounts(text: string): LintCounts {
+  const results: unknown = JSON.parse(text);
+  if (!Array.isArray(results)) throw new Error('ESLint JSON is not an array of file results');
+  let errors = 0;
+  let warnings = 0;
+  for (const entry of results as { errorCount?: unknown; fatalErrorCount?: unknown; warningCount?: unknown }[]) {
+    if (!entry || typeof entry !== 'object' || !Number.isFinite(entry.errorCount) || !Number.isFinite(entry.warningCount)) {
+      throw new Error('ESLint JSON entry has no errorCount/warningCount');
+    }
+    errors += entry.errorCount as number;
+    warnings += entry.warningCount as number;
+  }
+  return { errors, warnings };
 }

@@ -1,7 +1,8 @@
 // `npm run badges -- --out <dir>`: reads the report files the job summary reads (plus the mutation report, the
 // npm audit JSON and .ratchet.json) and writes one shields.io endpoint JSON file per badge into <dir>.
 // Options: --e2e <file> (repeatable, Playwright JSON per shard; default test-results/results.json),
-// --mutation <file> (default reports/mutation/mutation.json), --audit <file> (default reports/audit.json).
+// --mutation <file> (default reports/mutation/mutation.json), --audit <file> (default reports/audit.json),
+// --eslint <file> (ESLint `--format json` output, default reports/eslint.json).
 // A missing or unreadable input yields an `n/a` badge, never a failure. Run from the repository root.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import { parseArgs } from 'node:util';
 import {
   mutationScoreOf,
   parseAuditCounts,
+  parseEslintCounts,
   parseRatchetInput,
   renderBadges,
   type BadgeInput,
@@ -53,11 +55,13 @@ try {
       e2e: { type: 'string', multiple: true },
       mutation: { type: 'string' },
       audit: { type: 'string' },
+      eslint: { type: 'string' },
     },
   });
-  if (!values.out) throw new Error('usage: badges.ts --out <dir> [--e2e <file>]... [--mutation <file>] [--audit <file>]');
+  if (!values.out) throw new Error('usage: badges.ts --out <dir> [--e2e <file>]... [--mutation <file>] [--audit <file>] [--eslint <file>]');
   const input: BadgeInput = {
     ratchet: load('.ratchet.json', parseRatchetInput),
+    lint: load(values.eslint ?? 'reports/eslint.json', parseEslintCounts),
     coverage: load('coverage/coverage-summary.json', parseCoverageSummary),
     crap: load('coverage/crap-summary.json', parseCrapSummary),
     unit: load('junit/junit.xml', parseJunitTotals),
