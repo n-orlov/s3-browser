@@ -1,4 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  type Token,
+  type TokenType,
+  splitInlineComment,
+  tokenizePrefixed,
+  classifyScalar,
+  commentTokens,
+} from '../utils/yamlTokens';
 
 export interface YamlViewerProps {
   bucket: string;
@@ -21,16 +29,6 @@ function formatSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-}
-
-/**
- * Token types for YAML syntax highlighting
- */
-type TokenType = 'key' | 'string' | 'number' | 'boolean' | 'null' | 'comment' | 'anchor' | 'alias' | 'tag' | 'literal' | 'default';
-
-interface Token {
-  type: TokenType;
-  value: string;
 }
 
 /**
@@ -113,12 +111,12 @@ function tokenizeLine(line: string): Token[] {
  * Tokenize a value portion of YAML
  */
 function tokenizeValue(value: string): Token[] {
+  if (!value) {
+    return [];
+  }
+
   const tokens: Token[] = [];
   const trimmed = value.trim();
-
-  if (!value) {
-    return tokens;
-  }
 
   // Preserve leading whitespace
   const leadingSpace = value.match(/^(\s*)/)?.[1] || '';
@@ -126,123 +124,18 @@ function tokenizeValue(value: string): Token[] {
     tokens.push({ type: 'default', value: leadingSpace });
   }
 
-  // Handle inline comment
-  const commentIdx = findCommentStart(trimmed);
-  const valueWithoutComment = commentIdx >= 0 ? trimmed.substring(0, commentIdx).trim() : trimmed;
-  const comment = commentIdx >= 0 ? trimmed.substring(commentIdx) : '';
+  const { content, comment } = splitInlineComment(trimmed);
 
-  if (valueWithoutComment) {
-    // Anchor
-    if (valueWithoutComment.startsWith('&')) {
-      const anchorMatch = valueWithoutComment.match(/^(&[\w-]+)(.*)$/);
-      if (anchorMatch) {
-        tokens.push({ type: 'anchor', value: anchorMatch[1] });
-        if (anchorMatch[2]) {
-          tokens.push(...tokenizeValue(anchorMatch[2]));
-        }
-        if (comment) {
-          tokens.push({ type: 'default', value: ' ' });
-          tokens.push({ type: 'comment', value: comment });
-        }
-        return tokens;
-      }
+  if (content) {
+    const prefixed = tokenizePrefixed(content, comment, tokenizeValue);
+    if (prefixed) {
+      return [...tokens, ...prefixed];
     }
-
-    // Alias
-    if (valueWithoutComment.startsWith('*')) {
-      const aliasMatch = valueWithoutComment.match(/^(\*[\w-]+)(.*)$/);
-      if (aliasMatch) {
-        tokens.push({ type: 'alias', value: aliasMatch[1] });
-        if (aliasMatch[2]) {
-          tokens.push(...tokenizeValue(aliasMatch[2]));
-        }
-        if (comment) {
-          tokens.push({ type: 'default', value: ' ' });
-          tokens.push({ type: 'comment', value: comment });
-        }
-        return tokens;
-      }
-    }
-
-    // Tag
-    if (valueWithoutComment.startsWith('!')) {
-      const tagMatch = valueWithoutComment.match(/^(![\w!/<>.-]*)\s*(.*)$/);
-      if (tagMatch) {
-        tokens.push({ type: 'tag', value: tagMatch[1] });
-        if (tagMatch[2]) {
-          tokens.push({ type: 'default', value: ' ' });
-          tokens.push(...tokenizeValue(tagMatch[2]));
-        }
-        if (comment) {
-          tokens.push({ type: 'default', value: ' ' });
-          tokens.push({ type: 'comment', value: comment });
-        }
-        return tokens;
-      }
-    }
-
-    // Block literal indicator (| or >) as a value
-    if (/^[|>][+-]?\d*$/.test(valueWithoutComment)) {
-      tokens.push({ type: 'literal', value: valueWithoutComment });
-    }
-    // Quoted string
-    else if ((valueWithoutComment.startsWith('"') && valueWithoutComment.endsWith('"')) ||
-        (valueWithoutComment.startsWith("'") && valueWithoutComment.endsWith("'"))) {
-      tokens.push({ type: 'string', value: valueWithoutComment });
-    }
-    // Boolean
-    else if (/^(true|false|yes|no|on|off)$/i.test(valueWithoutComment)) {
-      tokens.push({ type: 'boolean', value: valueWithoutComment });
-    }
-    // Null
-    else if (/^(null|~)$/i.test(valueWithoutComment)) {
-      tokens.push({ type: 'null', value: valueWithoutComment });
-    }
-    // Number
-    else if (/^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/.test(valueWithoutComment) ||
-             /^0x[0-9a-fA-F]+$/.test(valueWithoutComment) ||
-             /^0o[0-7]+$/.test(valueWithoutComment)) {
-      tokens.push({ type: 'number', value: valueWithoutComment });
-    }
-    // Plain string or other
-    else {
-      tokens.push({ type: 'string', value: valueWithoutComment });
-    }
+    tokens.push({ type: classifyScalar(content), value: content });
   }
 
-  // Add comment if present
-  if (comment) {
-    tokens.push({ type: 'default', value: ' ' });
-    tokens.push({ type: 'comment', value: comment });
-  }
-
+  tokens.push(...commentTokens(comment));
   return tokens;
-}
-
-/**
- * Find the start of an inline comment (not inside quotes)
- */
-function findCommentStart(text: string): number {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const prevChar = i > 0 ? text[i - 1] : '';
-
-    if (char === '"' && !inSingleQuote && prevChar !== '\\') {
-      inDoubleQuote = !inDoubleQuote;
-    } else if (char === "'" && !inDoubleQuote && prevChar !== '\\') {
-      inSingleQuote = !inSingleQuote;
-    } else if (char === '#' && !inSingleQuote && !inDoubleQuote) {
-      // Make sure there's a space before # or it's at start
-      if (i === 0 || /\s/.test(prevChar)) {
-        return i;
-      }
-    }
-  }
-
-  return -1;
 }
 
 /**
