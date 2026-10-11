@@ -266,6 +266,67 @@ describe('App', () => {
       window.removeEventListener('s3-refresh-files', refreshHandler);
     });
 
+    describe('creating a new item', () => {
+      async function openNewItemDialog(toolbarTitle: string) {
+        renderApp();
+        await waitFor(() => expect(screen.getByText('test-bucket')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('test-bucket'));
+        await waitFor(() => expect(screen.getByText('file.txt')).toBeInTheDocument());
+        fireEvent.click(await screen.findByTitle(toolbarTitle));
+        return screen.findByLabelText('Name:');
+      }
+
+      async function submit(name: string) {
+        const input = await screen.findByLabelText('Name:');
+        fireEvent.change(input, { target: { value: name } });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+        });
+      }
+
+      it('creates a file under the bucket root, refreshes and toasts success', async () => {
+        const refreshHandler = vi.fn();
+        window.addEventListener('s3-refresh-files', refreshHandler);
+        mockElectronAPI.s3.createFile.mockResolvedValue({ success: true });
+        await openNewItemDialog('Create new empty file');
+        refreshHandler.mockClear();
+        await submit('notes.txt');
+        expect(mockElectronAPI.s3.createFile).toHaveBeenCalledWith('test-bucket', 'notes.txt');
+        expect(mockElectronAPI.s3.createFolder).not.toHaveBeenCalled();
+        expect(await screen.findByText('File Created')).toBeInTheDocument();
+        expect(refreshHandler).toHaveBeenCalled();
+        expect(screen.queryByLabelText('Name:')).not.toBeInTheDocument();
+        window.removeEventListener('s3-refresh-files', refreshHandler);
+      });
+
+      it('creates a folder, refreshes and toasts success', async () => {
+        const refreshHandler = vi.fn();
+        window.addEventListener('s3-refresh-files', refreshHandler);
+        mockElectronAPI.s3.createFolder.mockResolvedValue({ success: true });
+        await openNewItemDialog('Create new folder');
+        refreshHandler.mockClear();
+        await submit('docs');
+        expect(mockElectronAPI.s3.createFolder).toHaveBeenCalledWith('test-bucket', 'docs');
+        expect(mockElectronAPI.s3.createFile).not.toHaveBeenCalled();
+        expect(await screen.findByText('Folder Created')).toBeInTheDocument();
+        expect(refreshHandler).toHaveBeenCalled();
+        window.removeEventListener('s3-refresh-files', refreshHandler);
+      });
+
+      it('toasts the error and does not refresh when creation fails', async () => {
+        const refreshHandler = vi.fn();
+        window.addEventListener('s3-refresh-files', refreshHandler);
+        mockElectronAPI.s3.createFile.mockResolvedValue({ success: false, error: 'Access denied' });
+        await openNewItemDialog('Create new empty file');
+        refreshHandler.mockClear();
+        await submit('notes.txt');
+        expect(await screen.findByText('Creation Failed')).toBeInTheDocument();
+        expect(screen.getByText('Access denied')).toBeInTheDocument();
+        expect(refreshHandler).not.toHaveBeenCalled();
+        window.removeEventListener('s3-refresh-files', refreshHandler);
+      });
+    });
+
     describe('deleting the selection', () => {
       async function selectFileAndOpenDelete() {
         renderApp();

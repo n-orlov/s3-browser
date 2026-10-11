@@ -13,6 +13,7 @@ import NewItemDialog, { type NewItemType } from './components/NewItemDialog';
 import OperationStatus from './components/OperationStatus';
 import StatusBar from './components/StatusBar';
 import { FileViewers, SelectedFileInfo } from './components/AppParts';
+import { createNewItem, getNewItemToast } from './utils/newItem';
 import {
   buildNewItemKey,
   getDeleteDisplayName,
@@ -351,31 +352,13 @@ function App(): React.ReactElement {
 
       const key = buildNewItemKey(currentPrefix, name);
 
-      let result;
-      if (newItemType === 'file') {
-        result = await window.electronAPI.s3.createFile(selectedBucket, key);
-      } else {
-        result = await window.electronAPI.s3.createFolder(selectedBucket, key);
-      }
-
+      const result = await createNewItem(window.electronAPI.s3, selectedBucket, key, newItemType);
+      addToast(getNewItemToast(newItemType, name, result));
       if (result.success) {
-        addToast({
-          type: 'success',
-          title: newItemType === 'file' ? 'File Created' : 'Folder Created',
-          message: name,
-          duration: 3000,
-        });
         // Refresh the file list
         window.dispatchEvent(new Event('s3-refresh-files'));
         // Set pending selection to auto-select the new item
         setPendingFileSelection(getNewItemSelectionKey(key, newItemType));
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Creation Failed',
-          message: result.error || 'Unknown error',
-          duration: 5000,
-        });
       }
     },
     [selectedBucket, currentPrefix, newItemType, addToast]
