@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useResettingState } from './useResettingState';
 
 export type NewItemType = 'file' | 'folder';
 
@@ -17,16 +18,20 @@ function NewItemDialog({
   onConfirm,
   onCancel,
 }: NewItemDialogProps): React.ReactElement | null {
-  const [name, setName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const defaultFileName = 'new-file.txt';
   const defaultFolderName = 'new-folder';
+  // Every open (and every item type while open) starts from the type's default name; a name typed
+  // before the dialog was closed is discarded.
+  const [name, setName] = useResettingState(
+    itemType === 'file' ? defaultFileName : defaultFolderName,
+    isOpen ? `open:${itemType}` : 'closed'
+  );
 
   useEffect(() => {
     if (isOpen) {
       const defaultName = itemType === 'file' ? defaultFileName : defaultFolderName;
-      setName(defaultName);
       // Focus and select the name
       setTimeout(() => {
         if (inputRef.current) {

@@ -266,4 +266,54 @@ describe('NewItemDialog', () => {
       expect(mockOnConfirm).toHaveBeenCalledWith('test.txt');
     });
   });
+
+  describe('re-opening the dialog', () => {
+    const renderDialog = (isOpen: boolean, itemType: 'file' | 'folder') => (
+      <NewItemDialog
+        isOpen={isOpen}
+        itemType={itemType}
+        currentPrefix=""
+        onConfirm={mockOnConfirm}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    it('resets the name to the file default, discarding text typed before it was closed', async () => {
+      const { rerender } = render(renderDialog(true, 'file'));
+      const input = screen.getByRole('textbox');
+      await userEvent.clear(input);
+      await userEvent.type(input, 'typed-before-close.md');
+      expect(input).toHaveValue('typed-before-close.md');
+
+      rerender(renderDialog(false, 'file'));
+      rerender(renderDialog(true, 'file'));
+
+      expect(screen.getByRole('textbox')).toHaveValue('new-file.txt');
+    });
+
+    it('resets the name to the folder default, discarding text typed before it was closed', async () => {
+      const { rerender } = render(renderDialog(true, 'folder'));
+      const input = screen.getByRole('textbox');
+      await userEvent.clear(input);
+      await userEvent.type(input, 'typed-folder');
+
+      rerender(renderDialog(false, 'folder'));
+      rerender(renderDialog(true, 'folder'));
+
+      expect(screen.getByRole('textbox')).toHaveValue('new-folder');
+    });
+
+    it('uses the default of the new item type when re-opened as the other type', async () => {
+      const { rerender } = render(renderDialog(true, 'file'));
+      await userEvent.type(screen.getByRole('textbox'), 'xyz');
+
+      rerender(renderDialog(false, 'file'));
+      rerender(renderDialog(true, 'folder'));
+      expect(screen.getByRole('textbox')).toHaveValue('new-folder');
+
+      rerender(renderDialog(false, 'folder'));
+      rerender(renderDialog(true, 'file'));
+      expect(screen.getByRole('textbox')).toHaveValue('new-file.txt');
+    });
+  });
 });
