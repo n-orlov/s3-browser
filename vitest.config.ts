@@ -16,6 +16,8 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     coverage: {
       provider: 'v8',
+      // Write the coverage reports even when a test fails, so a red run still has coverage evidence.
+      reportOnFailure: true,
       reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
       exclude: [
         'node_modules/',

@@ -52,10 +52,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `!cancelled()` on the tests and the CRAP score: an earlier red step (typecheck, lint, a failing test)
+      # must not stop the unit and coverage evidence the job summary and the report are built from.
       - name: Unit tests with coverage (thresholds enforced)
+        if: ${{ !cancelled() }}
         run: npm run test:coverage
 
       - name: CRAP score gate (complexity x coverage)
+        if: ${{ !cancelled() }}
         run: npm run crap
 
       - name: Quality ratchet (lint ceiling, coverage thresholds)
