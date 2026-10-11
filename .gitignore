@@ -36,3 +36,5 @@ allure-results-unit/
 junit/
 .coverage-probe-*/
 sbom/
+reports/
+.stryker-tmp/
