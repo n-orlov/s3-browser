@@ -404,6 +404,26 @@ describe('JsonViewer', () => {
       });
     });
 
+    it('expands a collapsed node when a search term matching its contents is entered', async () => {
+      mockElectronAPI.s3.downloadContent.mockResolvedValue({
+        success: true,
+        content: '{"a": {"b": {"deep": "needle"}}}',
+      });
+      render(<JsonViewer {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('b')).toBeInTheDocument();
+      });
+      // "b" sits at depth 2, so it starts collapsed and its child is not rendered
+      expect(screen.queryByText('deep')).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByPlaceholderText('Search in JSON...'), { target: { value: 'needle' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('deep')).toBeInTheDocument();
+      });
+    });
+
     it('shows clear button when searching', async () => {
       render(<JsonViewer {...defaultProps} />);
 

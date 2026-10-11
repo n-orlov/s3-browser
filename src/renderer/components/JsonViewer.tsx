@@ -106,6 +106,27 @@ function JsonValue({ value, searchTerm }: { value: unknown; searchTerm?: string 
 }
 
 /**
+ * Expansion state for a tree node. Auto-expands when the search term (or value) changes and the
+ * node matches; adjusts state during render, keyed on the previous inputs, instead of in an effect.
+ */
+function useAutoExpand(
+  initial: boolean,
+  searchTerm: string,
+  value: unknown,
+  matchesSearch: boolean
+): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+  const [isExpanded, setIsExpanded] = useState(initial);
+  const [prevInputs, setPrevInputs] = useState({ searchTerm, value });
+  if (prevInputs.searchTerm !== searchTerm || prevInputs.value !== value) {
+    setPrevInputs({ searchTerm, value });
+    if (matchesSearch) {
+      setIsExpanded(true);
+    }
+  }
+  return [isExpanded, setIsExpanded];
+}
+
+/**
  * A collapsible tree node for JSON objects/arrays
  */
 function JsonTreeNode({
@@ -118,14 +139,12 @@ function JsonTreeNode({
 }: JsonTreeNodeProps): React.ReactElement {
   // Auto-expand if matches search
   const matchesSearch = nodeMatchesSearch(value, searchTerm);
-  const [isExpanded, setIsExpanded] = useState(shouldStartExpanded(defaultExpanded, matchesSearch));
-
-  // Update expansion when search changes
-  useEffect(() => {
-    if (searchTerm && nodeMatchesSearch(value, searchTerm)) {
-      setIsExpanded(true);
-    }
-  }, [searchTerm, value]);
+  const [isExpanded, setIsExpanded] = useAutoExpand(
+    shouldStartExpanded(defaultExpanded, matchesSearch),
+    searchTerm,
+    value,
+    matchesSearch
+  );
 
   const keyClassName = getKeyClassName(isNameMatch(name, searchTerm));
   const indent = getIndentPx(level);
