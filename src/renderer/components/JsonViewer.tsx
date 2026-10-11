@@ -1,4 +1,15 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  getBrackets,
+  getChildName,
+  getCollapsedHint,
+  getIndentPx,
+  getKeyClassName,
+  getNodeEntries,
+  isNameMatch,
+  isToggleKey,
+  shouldStartExpanded,
+} from '../utils/jsonTree';
 
 export interface JsonViewerProps {
   bucket: string;
@@ -106,8 +117,8 @@ function JsonTreeNode({
   searchTerm = '',
 }: JsonTreeNodeProps): React.ReactElement {
   // Auto-expand if matches search
-  const matchesSearch = searchTerm && nodeMatchesSearch(value, searchTerm);
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded || matchesSearch);
+  const matchesSearch = nodeMatchesSearch(value, searchTerm);
+  const [isExpanded, setIsExpanded] = useState(shouldStartExpanded(defaultExpanded, matchesSearch));
 
   // Update expansion when search changes
   useEffect(() => {
@@ -116,14 +127,14 @@ function JsonTreeNode({
     }
   }, [searchTerm, value]);
 
-  const isNameMatch = searchTerm && name.toLowerCase().includes(searchTerm.toLowerCase());
-  const indent = level * 16;
+  const keyClassName = getKeyClassName(isNameMatch(name, searchTerm));
+  const indent = getIndentPx(level);
 
   // Primitive values
-  if (value === null || typeof value !== 'object') {
+  if (typeof value !== 'object' || value === null) {
     return (
       <div className="json-tree-line" style={{ paddingLeft: `${indent}px` }}>
-        <span className={`json-key ${isNameMatch ? 'json-match' : ''}`}>{name}</span>
+        <span className={keyClassName}>{name}</span>
         <span className="json-colon">: </span>
         <JsonValue value={value} searchTerm={searchTerm} />
         {!isLast && <span className="json-comma">,</span>}
@@ -132,18 +143,15 @@ function JsonTreeNode({
   }
 
   const isArray = Array.isArray(value);
-  const entries = isArray
-    ? value.map((v, i) => [String(i), v] as [string, unknown])
-    : Object.entries(value as Record<string, unknown>);
-  const bracketOpen = isArray ? '[' : '{';
-  const bracketClose = isArray ? ']' : '}';
+  const entries = getNodeEntries(value);
+  const { open: bracketOpen, close: bracketClose } = getBrackets(isArray);
   const isEmpty = entries.length === 0;
 
   // Empty object/array
   if (isEmpty) {
     return (
       <div className="json-tree-line" style={{ paddingLeft: `${indent}px` }}>
-        <span className={`json-key ${isNameMatch ? 'json-match' : ''}`}>{name}</span>
+        <span className={keyClassName}>{name}</span>
         <span className="json-colon">: </span>
         <span className="json-bracket">{bracketOpen}{bracketClose}</span>
         {!isLast && <span className="json-comma">,</span>}
@@ -161,7 +169,7 @@ function JsonTreeNode({
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (isToggleKey(e.key)) {
             setIsExpanded(!isExpanded);
           }
         }}
@@ -169,13 +177,13 @@ function JsonTreeNode({
         <span className={`json-tree-toggle ${isExpanded ? 'expanded' : ''}`}>
           {isExpanded ? '▼' : '▶'}
         </span>
-        <span className={`json-key ${isNameMatch ? 'json-match' : ''}`}>{name}</span>
+        <span className={keyClassName}>{name}</span>
         <span className="json-colon">: </span>
         <span className="json-bracket">{bracketOpen}</span>
         {!isExpanded && (
           <>
             <span className="json-collapsed-hint">
-              {isArray ? `${entries.length} items` : `${entries.length} keys`}
+              {getCollapsedHint(isArray, entries.length)}
             </span>
             <span className="json-bracket">{bracketClose}</span>
             {!isLast && <span className="json-comma">,</span>}
@@ -187,7 +195,7 @@ function JsonTreeNode({
           {entries.map(([key, val], idx) => (
             <JsonTreeNode
               key={key}
-              name={isArray ? `[${key}]` : key}
+              name={getChildName(key, isArray)}
               value={val}
               level={level + 1}
               isLast={idx === entries.length - 1}
