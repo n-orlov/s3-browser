@@ -285,3 +285,145 @@ describe("ci.yml report job", () => {
     expect(mutate((j) => ((j.steps ?? [])[0] as { with: { pattern: string } }).with.pattern = "unit-*")).toHaveLength(2);
   });
 });
+
+type PublishJob = ReportJob & { name?: string };
+type Workflow = { permissions?: Record<string, string>; jobs?: Record<string, PublishJob> };
+
+const PAGES_URL = "https://n-orlov.github.io/s3-browser/";
+const PUSH_STEP = /\bgit\s+push\b/;
+
+/** True when `condition` is a conjunction (no `||`) that includes the given `==` comparison. */
+function requires(condition: string, left: string, right: string): boolean {
+  if (condition.includes("||")) return false;
+  const clause = new RegExp(`(^|&&)\\s*${left.replace(/\./g, "\\.")}\\s*==\\s*'${right.replace(/[/]/g, "\\/")}'\\s*(&&|$)`);
+  return clause.test(condition.replace(/\s+/g, " ").trim());
+}
+
+/** Jobs a pull_request event can reach: every job whose condition does not require a push event. */
+function pullRequestReachableJobs(workflow: Workflow): string[] {
+  return Object.entries(workflow.jobs ?? {})
+    .filter(([, job]) => !requires(job.if ?? "", "github.event_name", "push"))
+    .map(([name]) => name);
+}
+
+/** One problem per reachable job holding a permission wider than read (job-level, else the workflow's). */
+function pullRequestWritePermissionProblems(workflow: Workflow): string[] {
+  const problems: string[] = [];
+  for (const name of pullRequestReachableJobs(workflow)) {
+    const job = workflow.jobs?.[name] ?? {};
+    for (const [scope, level] of Object.entries(job.permissions ?? workflow.permissions ?? {})) {
+      if (level !== "read" && level !== "none") problems.push(`${name} is reachable from a pull request but has ${scope}: ${level}`);
+    }
+  }
+  return problems;
+}
+
+/** One problem per way the job holding the gh-pages push deviates from: separate from report, push-to-master only, contents: write, links the site. */
+function publishJobProblems(workflow: Workflow): string[] {
+  const jobs = workflow.jobs ?? {};
+  const entry = Object.entries(jobs).find(([, job]) => (job.steps ?? []).some((s) => PUSH_STEP.test(s.run ?? "")));
+  if (!entry) return ["no job pushes the report to gh-pages"];
+  const [name, job] = entry;
+  const problems: string[] = [];
+  if (name === "report") problems.push("the publish step must not sit in the report job");
+  const pushStep = (job.steps ?? []).find((s) => PUSH_STEP.test(s.run ?? ""));
+  const condition = `${job.if ?? ""} && ${pushStep?.if ?? ""}`.replace(/(^\s*&&\s*)|(\s*&&\s*$)/g, "");
+  if (!requires(condition, "github.event_name", "push")) problems.push(`${name} must require github.event_name == 'push'`);
+  if (!requires(condition, "github.ref", "refs/heads/master")) problems.push(`${name} must require github.ref == 'refs/heads/master'`);
+  if (job.permissions?.contents !== "write") problems.push(`${name} needs permissions contents: write, got ${job.permissions?.contents}`);
+  if (!pushStep?.run?.includes("gh-pages")) problems.push("the push must target gh-pages");
+  const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+  if (!needs.includes("report")) problems.push(`${name} must need report`);
+  if (!(job.steps ?? []).some((s) => s.run?.includes(PAGES_URL) && s.run.includes("GITHUB_STEP_SUMMARY"))) {
+    problems.push(`${name} must link ${PAGES_URL} in its job summary`);
+  }
+  return problems;
+}
+
+/** The report job must seed allure-report/history.jsonl from the gh-pages branch before generating. */
+function historyProblems(workflow: Workflow): string[] {
+  const steps = workflow.jobs?.report?.steps ?? [];
+  const problems: string[] = [];
+  const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout@") && (s as { with?: { ref?: string } }).with?.ref === "gh-pages");
+  if (!checkout) problems.push("report does not check out gh-pages for the previous history");
+  const generate = steps.findIndex((s) => /\ballure\b[^\n]*\bgenerate\b/.test(s.run ?? ""));
+  const copy = steps.findIndex((s) => /previous-pages\/history\.jsonl/.test(s.run ?? ""));
+  if (copy < 0 || generate < 0 || copy > generate || !/previous-pages\/history\.jsonl[^\n]*allure-report/.test(steps[copy]?.run ?? "")) {
+    problems.push("report must copy the previous history.jsonl into allure-report before generating");
+  }
+  return problems;
+}
+
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+
+describe("ci.yml publish job", () => {
+  it("pushes the merged report to gh-pages only for a push to master, from a job with contents: write", () => {
+    expect(publishJobProblems(ci)).toEqual([]);
+    expect((ci as Workflow).jobs?.publish).toBeDefined();
+  });
+
+  it("carries the previous Allure history forward through the report job and the config", () => {
+    expect(historyProblems(ci)).toEqual([]);
+    const config = readFileSync(path.join(root, "scripts/allurerc.mjs"), "utf8");
+    expect(config).toMatch(/appendHistory:\s*true/);
+    expect(config).toMatch(/historyPath:\s*'\.\/allure-report\/history\.jsonl'/);
+  });
+
+  it("gives no job reachable from a pull_request any write permission, and the publish job is not reachable", () => {
+    expect(pullRequestWritePermissionProblems(ci)).toEqual([]);
+    expect(pullRequestReachableJobs(ci)).not.toContain("publish");
+    expect(pullRequestReachableJobs(ci)).toEqual(expect.arrayContaining(["quality", "e2e", "report"]));
+  });
+
+  it("flags a publish step that loses its push-to-master condition, its write permission or its separate job (negative cases)", () => {
+    const mutate = (fn: (wf: Workflow) => void) => {
+      const wf = clone(ci) as Workflow;
+      fn(wf);
+      return publishJobProblems(wf);
+    };
+    const publish = (wf: Workflow) => wf.jobs!.publish;
+    expect(mutate((wf) => delete publish(wf).if)).toHaveLength(2);
+    expect(mutate((wf) => (publish(wf).if = "github.event_name == 'push'"))).toEqual(["publish must require github.ref == 'refs/heads/master'"]);
+    expect(mutate((wf) => (publish(wf).if = "github.ref == 'refs/heads/master'"))).toEqual(["publish must require github.event_name == 'push'"]);
+    expect(mutate((wf) => (publish(wf).if = "github.event_name == 'push' || github.ref == 'refs/heads/master'"))).toHaveLength(2);
+    expect(mutate((wf) => (publish(wf).permissions = { contents: "read" }))).toHaveLength(1);
+    expect(mutate((wf) => delete publish(wf).permissions)).toHaveLength(1);
+    expect(mutate((wf) => delete publish(wf).needs)).toEqual(["publish must need report"]);
+    expect(mutate((wf) => (publish(wf).steps = publish(wf).steps!.filter((s) => !s.run?.includes(PAGES_URL))))).toHaveLength(1);
+    // Moving the publish step into the pull-request-reachable report job is flagged.
+    expect(mutate((wf) => {
+      wf.jobs!.report.steps!.push(...publish(wf).steps!);
+      delete wf.jobs!.publish;
+    })).toContain("the publish step must not sit in the report job");
+    // A step-level condition can stand in for the job-level one.
+    expect(mutate((wf) => {
+      const step = publish(wf).steps!.find((s) => PUSH_STEP.test(s.run ?? ""))!;
+      step.if = publish(wf).if;
+      delete publish(wf).if;
+    })).toEqual([]);
+  });
+
+  it("flags a write permission on any job a pull_request can reach (negative cases)", () => {
+    const mutate = (fn: (wf: Workflow) => void) => {
+      const wf = clone(ci) as Workflow;
+      fn(wf);
+      return pullRequestWritePermissionProblems(wf);
+    };
+    expect(mutate((wf) => (wf.jobs!.report.permissions = { contents: "write" }))).toEqual(["report is reachable from a pull request but has contents: write"]);
+    expect(mutate((wf) => (wf.jobs!.quality.permissions = { "pull-requests": "write" }))).toHaveLength(1);
+    expect(mutate((wf) => (wf.permissions = { contents: "write" }))).toHaveLength(2);
+    // Dropping the push condition from publish makes it reachable from a pull request while it holds contents: write.
+    expect(mutate((wf) => delete wf.jobs!.publish.if)).toEqual(["publish is reachable from a pull request but has contents: write"]);
+    expect(mutate((wf) => (wf.jobs!.publish.if = "github.event_name == 'push' || github.event_name == 'pull_request'"))).toHaveLength(1);
+  });
+
+  it("flags a report job that loses the previous-history seeding (negative cases)", () => {
+    const mutate = (fn: (steps: ReportStep[]) => void) => {
+      const wf = clone(ci) as Workflow;
+      fn(wf.jobs!.report.steps!);
+      return historyProblems(wf);
+    };
+    expect(mutate((steps) => steps.splice(steps.findIndex((s) => (s as { with?: { ref?: string } }).with?.ref === "gh-pages"), 1))).toHaveLength(1);
+    expect(mutate((steps) => steps.splice(steps.findIndex((s) => /previous-pages/.test(s.run ?? "")), 1))).toHaveLength(1);
+  });
+});

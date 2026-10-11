@@ -160,6 +160,18 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The previous published report, only to read its history.jsonl; the branch does not exist before the first publish.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: previous-pages
+          persist-credentials: false
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22.x
@@ -169,8 +181,11 @@ jobs:
           pattern: '*allure-results*'
           path: allure-input
 
-      - name: Generate one Allure report from the unit and e2e results
-        run: npx --yes allure@3.20.1 generate allure-input/* --output allure-report
+      - name: Generate one Allure report from the unit and e2e results, with the previous history
+        run: |
+          mkdir -p allure-report
+          if [ -f previous-pages/history.jsonl ]; then cp previous-pages/history.jsonl allure-report/history.jsonl; fi
+          npx --yes allure@3.20.1 generate allure-input/* --config scripts/allurerc.mjs --output allure-report
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -178,3 +193,42 @@ jobs:
           name: allure-report
           path: allure-report/
           retention-days: 14
+
+  publish:
+    name: Publish Allure report to GitHub Pages
+    # Separate from `report` on purpose: job permissions cannot be conditional, so the job that runs for pull
+    # requests stays read-only and only this one, which never runs for a pull request, holds `contents: write`.
+    needs: report
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, linux, x64, s3-browser]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-allure-report
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: allure-report
+          path: published-report
+
+      # The report directory already holds history.jsonl (previous runs plus this one), so the branch is rebuilt as
+      # a single commit each time instead of growing a binary history.
+      - name: Push the report to the gh-pages branch
+        run: |
+          touch published-report/.nojekyll
+          git switch --orphan gh-pages
+          git rm -rf --quiet . || true
+          cp -a published-report/. .
+          rm -rf published-report
+          git add --all
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --quiet -m "Allure report for ${GITHUB_SHA}"
+          git push --force origin gh-pages
+
+      - name: Job summary (link to the published report)
+        run: |
+          echo "Allure report: https://n-orlov.github.io/s3-browser/" >> "$GITHUB_STEP_SUMMARY"
