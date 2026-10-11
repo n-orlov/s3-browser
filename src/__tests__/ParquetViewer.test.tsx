@@ -37,6 +37,12 @@ function columnDataToRows(columnData: Record<string, unknown[]>): Record<string,
   return rows;
 }
 
+function setScrollMetrics(el: Element, scrollTop: number, scrollHeight: number, clientHeight: number) {
+  Object.defineProperty(el, 'scrollTop', { configurable: true, value: scrollTop });
+  Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+  Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+}
+
 describe('ParquetViewer', () => {
   const defaultProps = {
     bucket: 'test-bucket',
@@ -634,6 +640,62 @@ describe('ParquetViewer', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Loaded 3 of 3 rows')).toBeInTheDocument();
+      });
+    });
+
+    describe('scrolling', () => {
+      async function renderWithRows(count: number) {
+        mockElectronAPI.s3.downloadBinaryContent.mockResolvedValue({
+          success: true,
+          data: new Uint8Array([]),
+        });
+        (parquetMetadataAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+          schema: [{ name: 'root' }, { name: 'id' }],
+        });
+        (parquetSchema as ReturnType<typeof vi.fn>).mockReturnValue(createSchemaTree(['id']));
+        const ids = Array.from({ length: count }, (_, i) => i + 1);
+        (parquetRead as ReturnType<typeof vi.fn>).mockImplementation(
+          async ({ onComplete }: { onComplete: (data: Record<string, unknown>[]) => void }) => {
+            onComplete(columnDataToRows({ id: ids }));
+          }
+        );
+        const { container } = render(<ParquetViewer {...defaultProps} />);
+        await waitFor(() => {
+          expect(screen.getByText(`Showing 100 of ${count} rows`)).toBeInTheDocument();
+        });
+        const wrapper = container.querySelector('.parquet-viewer-table-wrapper') as HTMLElement;
+        return wrapper;
+      }
+
+      it('loads the next batch when scrolled near the bottom', async () => {
+        const wrapper = await renderWithRows(250);
+        setScrollMetrics(wrapper, 900, 1200, 200);
+        fireEvent.scroll(wrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText('Showing 200 of 250 rows')).toBeInTheDocument();
+        });
+        expect(wrapper.querySelectorAll('tbody tr')).toHaveLength(200);
+      });
+
+      it('loads only the remaining rows in the last batch', async () => {
+        const wrapper = await renderWithRows(150);
+        setScrollMetrics(wrapper, 900, 1200, 200);
+        fireEvent.scroll(wrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText('Loaded 150 of 150 rows')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('Loading more rows...')).not.toBeInTheDocument();
+      });
+
+      it('does not load more when far from the bottom', async () => {
+        const wrapper = await renderWithRows(250);
+        setScrollMetrics(wrapper, 0, 5000, 200);
+        fireEvent.scroll(wrapper);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(screen.getByText('Showing 100 of 250 rows')).toBeInTheDocument();
       });
     });
   });

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { shouldLoadMore, nextRowBatch } from '../utils/lazyRows';
 
 export interface CsvViewerProps {
   bucket: string;
@@ -23,11 +24,6 @@ const MAX_CSV_SIZE = 50 * 1024 * 1024;
  * Initial rows to load
  */
 const INITIAL_ROWS = 100;
-
-/**
- * Rows to load per batch during lazy loading
- */
-const ROWS_PER_BATCH = 100;
 
 /**
  * Parse CSV content, handling quoted fields with commas and newlines
@@ -177,25 +173,23 @@ function CsvViewer({
 
   // Handle scroll for lazy loading
   const handleScroll = useCallback(() => {
-    if (!tableContainerRef.current || loadingMore || !data) return;
+    const container = tableContainerRef.current;
+    const load = shouldLoadMore({
+      metrics: container,
+      loadingMore,
+      hasData: !!data,
+      displayedCount: displayedRows.length,
+      totalCount: allRowsRef.current.length,
+    });
+    if (!load) return;
 
-    const { scrollTop, scrollHeight, clientHeight } = tableContainerRef.current;
-
-    // Load more when within 200px of bottom
-    if (scrollHeight - scrollTop - clientHeight < 200) {
-      if (displayedRows.length < allRowsRef.current.length) {
-        setLoadingMore(true);
-        // Use setTimeout to simulate async loading and prevent UI freeze
-        setTimeout(() => {
-          const nextBatch = allRowsRef.current.slice(
-            displayedRows.length,
-            displayedRows.length + ROWS_PER_BATCH
-          );
-          setDisplayedRows(prev => [...prev, ...nextBatch]);
-          setLoadingMore(false);
-        }, 0);
-      }
-    }
+    setLoadingMore(true);
+    // Use setTimeout to simulate async loading and prevent UI freeze
+    setTimeout(() => {
+      const batch = nextRowBatch(allRowsRef.current, displayedRows.length);
+      setDisplayedRows(prev => [...prev, ...batch]);
+      setLoadingMore(false);
+    }, 0);
   }, [loadingMore, data, displayedRows.length]);
 
   // Filter rows based on search term

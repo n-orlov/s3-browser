@@ -3,6 +3,12 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import CsvViewer from '../renderer/components/CsvViewer';
 import { mockElectronAPI } from './setup';
 
+function setScrollMetrics(el: Element, scrollTop: number, scrollHeight: number, clientHeight: number) {
+  Object.defineProperty(el, 'scrollTop', { configurable: true, value: scrollTop });
+  Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+  Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+}
+
 describe('CsvViewer', () => {
   const defaultProps = {
     bucket: 'test-bucket',
@@ -433,6 +439,54 @@ describe('CsvViewer', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Loaded 3 of 3 rows')).toBeInTheDocument();
+      });
+    });
+
+    describe('scrolling', () => {
+      async function renderWithRows(count: number) {
+        const rows = ['id'];
+        for (let i = 1; i <= count; i++) rows.push(String(i));
+        mockElectronAPI.s3.downloadContent.mockResolvedValue({
+          success: true,
+          content: rows.join('\n'),
+        });
+        const { container } = render(<CsvViewer {...defaultProps} />);
+        await waitFor(() => {
+          expect(screen.getByText(`Showing 100 of ${count} rows`)).toBeInTheDocument();
+        });
+        const wrapper = container.querySelector('.csv-viewer-table-wrapper') as HTMLElement;
+        return wrapper;
+      }
+
+      it('loads the next batch when scrolled near the bottom', async () => {
+        const wrapper = await renderWithRows(250);
+        setScrollMetrics(wrapper, 900, 1200, 200);
+        fireEvent.scroll(wrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText('Showing 200 of 250 rows')).toBeInTheDocument();
+        });
+        expect(wrapper.querySelectorAll('tbody tr')).toHaveLength(200);
+      });
+
+      it('loads only the remaining rows in the last batch', async () => {
+        const wrapper = await renderWithRows(150);
+        setScrollMetrics(wrapper, 900, 1200, 200);
+        fireEvent.scroll(wrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText('Loaded 150 of 150 rows')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('Loading more rows...')).not.toBeInTheDocument();
+      });
+
+      it('does not load more when far from the bottom', async () => {
+        const wrapper = await renderWithRows(250);
+        setScrollMetrics(wrapper, 0, 5000, 200);
+        fireEvent.scroll(wrapper);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(screen.getByText('Showing 100 of 250 rows')).toBeInTheDocument();
       });
     });
   });
