@@ -315,6 +315,30 @@ describe("badges CLI", () => {
     expect(readOut(path.join(ratchetOnly, "out"), "crap").message).toBe("n/a");
   });
 
+  it("publishes the mutation badge n/a lightgrey, never a green, when its report is absent, unreadable or has no scoreable mutant", () => {
+    const cases: Record<string, string | null> = {
+      absent: null,
+      truncated: '{"files": {"a.ts": {"mutan',
+      "no files key": "{}",
+      "empty files": JSON.stringify({ files: {} }),
+      "only ignored mutants": JSON.stringify({ files: { "a.ts": { mutants: [{ status: "Ignored" }, { status: "CompileError" }] } } }),
+    };
+    for (const [name, report] of Object.entries(cases)) {
+      const dir = path.join(root, `mutation-${name.replace(/ /g, "-")}`);
+      put(dir, ".ratchet.json", JSON.stringify(ratchet));
+      if (report !== null) put(dir, "reports/mutation/mutation.json", report);
+      expect(run(dir, ["--out", "out", "--mutation", "reports/mutation/mutation.json"]).status, name).toBe(0);
+      expect(readOut(path.join(dir, "out"), "mutation"), name).toEqual({ schemaVersion: 1, label: "mutation", message: "n/a", color: "lightgrey" });
+    }
+  });
+
+  it("keeps the real mutation score when only another input is missing", () => {
+    const dir = path.join(root, "populated");
+    expect(run(dir, ["--out", "out-no-audit", "--audit", "reports/absent.json"]).status).toBe(0);
+    expect(readOut(path.join(dir, "out-no-audit"), "audit").message).toBe("n/a");
+    expect(readOut(path.join(dir, "out-no-audit"), "mutation")).toMatchObject({ message: "50%", color: "red" });
+  });
+
   it("treats an unreadable input as missing and says so on stderr", () => {
     expect(bad.status).toBe(0);
     expect(bad.stderr).toContain("badges: .ratchet.json:");

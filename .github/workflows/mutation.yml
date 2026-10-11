@@ -97,7 +97,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # A mutation run that failed before writing reports/mutation uploads nothing, so this download fails. It must not
+      # stop the job: the render and commit steps below still run, and with no mutation.json the badge is published as
+      # n/a / lightgrey instead of the previous run's green staying on gh-pages. A run that did write a report keeps
+      # its real score (red when below the floor); the score then stays until the next mutation run.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
         with:
           name: mutation-report
           path: reports/mutation

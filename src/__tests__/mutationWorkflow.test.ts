@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
-type Step = { name?: string; uses?: string; run?: string; if?: string; with?: Record<string, unknown> };
+type Step = { name?: string; 'continue-on-error'?: boolean; uses?: string; run?: string; if?: string; with?: Record<string, unknown> };
 type Job = {
   'runs-on'?: unknown;
   if?: string;
@@ -180,6 +180,23 @@ describe('mutation.yml publish job (badges/mutation.json on gh-pages)', () => {
     expect(push?.run).not.toMatch(/--orphan|--force|push -f|git rm/);
     expect(push?.run).toContain('git add badges/mutation.json');
     expect(push?.run).not.toMatch(/git add (--all|-A|\.)/);
+  });
+
+  it('survives a missing mutation-report artifact: the download tolerates failure and no step between it and the commit has a failure-sensitive gate', () => {
+    const steps = publish(workflow).steps ?? [];
+    const downloadAt = steps.findIndex((s) => s.uses?.startsWith('actions/download-artifact@'));
+    const renderAt = steps.findIndex((s) => /npm run [^\n]*badges/.test(s.run ?? ''));
+    const commitAt = steps.findIndex((s) => /git push/.test(s.run ?? ''));
+    expect(downloadAt).toBeGreaterThanOrEqual(0);
+    expect(downloadAt).toBeLessThan(renderAt);
+    expect(renderAt).toBeLessThan(commitAt);
+    expect(steps[downloadAt]?.['continue-on-error']).toBe(true);
+    // The render step must name the mutation file explicitly, so a missing one is n/a rather than another file's score.
+    expect(steps[renderAt]?.run).toContain('--mutation reports/mutation/mutation.json');
+    // Steps after the download keep the implicit success() gate only because the download cannot fail the job.
+    for (const step of steps.slice(downloadAt + 1, commitAt + 1)) expect(step.if ?? '').not.toMatch(/failure\(\)|hashFiles/);
+    // The mutation job's report upload must stay unconditional, and the publish job must run after a failed mutation job.
+    expect(publish(workflow).if).toContain('!cancelled()');
   });
 
   it('sees an if that a pull_request could reach as reachable (negative fixture)', () => {
