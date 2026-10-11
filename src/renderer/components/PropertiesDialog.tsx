@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
+import { useResettingState } from './useResettingState';
 import {
   buildFolderMetadata,
   formatSize,
@@ -191,6 +192,64 @@ function PropertiesBody({
   );
 }
 
+interface FetchResult {
+  metadata: ObjectMetadata | null;
+  error: string | null;
+}
+
+const NO_RESULT: FetchResult | null = null;
+
+/**
+ * Loads the properties shown by the dialog. Files fetch metadata from the main process; the
+ * fetched result is state that returns to "nothing yet" whenever the dialog closes or points at
+ * another object (adjusted during render, no effect), and is only set after the awaited fetch
+ * resolves, so a stale response for a previous object is never shown.
+ */
+function useObjectProperties(
+  isOpen: boolean,
+  bucket: string,
+  fileKey: string,
+  isFolder: boolean
+): { loading: boolean; error: string | null; metadata: ObjectMetadata | null } {
+  const fetching = isOpen && !isFolder;
+  const resetKey = fetching ? `open:${bucket}\u0000${fileKey}` : 'idle';
+  const [result, setResult] = useResettingState<FetchResult | null>(NO_RESULT, resetKey);
+
+  useEffect(() => {
+    if (!fetching) return;
+    let cancelled = false;
+    // Fetch metadata from main process
+    window.electronAPI
+      .getObjectMetadata(bucket, fileKey)
+      .then((res: { success: boolean; metadata?: ObjectMetadata; error?: string }) => {
+        if (cancelled) return;
+        if (res.success && res.metadata) {
+          setResult({ metadata: res.metadata, error: null });
+        } else {
+          setResult({ metadata: null, error: getErrorMessage(res.error) });
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setResult({ metadata: null, error: getErrorMessage(err.message) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetching, bucket, fileKey, setResult]);
+
+  const folderMetadata = React.useMemo(
+    () => (isOpen && isFolder ? buildFolderMetadata(bucket, fileKey) : null),
+    [isOpen, isFolder, bucket, fileKey]
+  );
+
+  if (isFolder) return { loading: false, error: null, metadata: folderMetadata };
+  return {
+    loading: fetching && result === null,
+    error: result?.error ?? null,
+    metadata: result?.metadata ?? null,
+  };
+}
+
 function PropertiesDialog({
   isOpen,
   bucket,
@@ -198,37 +257,7 @@ function PropertiesDialog({
   isFolder,
   onClose,
 }: PropertiesDialogProps): React.ReactElement | null {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
-
-  useEffect(() => {
-    if (isOpen && !isFolder) {
-      setLoading(true);
-      setError(null);
-      setMetadata(null);
-
-      // Fetch metadata from main process
-      window.electronAPI
-        .getObjectMetadata(bucket, fileKey)
-        .then((result: { success: boolean; metadata?: ObjectMetadata; error?: string }) => {
-          if (result.success && result.metadata) {
-            setMetadata(result.metadata);
-          } else {
-            setError(getErrorMessage(result.error));
-          }
-        })
-        .catch((err: Error) => {
-          setError(getErrorMessage(err.message));
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else if (isOpen && isFolder) {
-      // For folders, we don't fetch metadata, just show basic info
-      setMetadata(buildFolderMetadata(bucket, fileKey));
-    }
-  }, [isOpen, bucket, fileKey, isFolder]);
+  const { loading, error, metadata } = useObjectProperties(isOpen, bucket, fileKey, isFolder);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

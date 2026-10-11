@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import PropertiesDialog from '../renderer/components/PropertiesDialog';
 
 describe('PropertiesDialog', () => {
@@ -87,6 +87,93 @@ describe('PropertiesDialog', () => {
       expect(screen.getByText('text/plain')).toBeInTheDocument();
       expect(screen.getByText(/1\.18 MB/)).toBeInTheDocument();
       expect(screen.getByText('STANDARD')).toBeInTheDocument();
+    });
+  });
+
+  describe('re-opening for another object', () => {
+    type Deferred = { resolve: (v: unknown) => void };
+    function deferredFetch(): { calls: Deferred[]; fn: typeof window.electronAPI.getObjectMetadata } {
+      const calls: Deferred[] = [];
+      const fn = vi.fn().mockImplementation(
+        () => new Promise((resolve) => calls.push({ resolve }))
+      ) as unknown as typeof window.electronAPI.getObjectMetadata;
+      return { calls, fn };
+    }
+
+    it('fetches metadata for the opened file, showing loading then the data', async () => {
+      const { calls, fn } = deferredFetch();
+      window.electronAPI.getObjectMetadata = fn;
+      render(<PropertiesDialog {...defaultProps} />);
+
+      expect(fn).toHaveBeenCalledWith('test-bucket', 'test-folder/test-file.txt');
+      expect(screen.getByText('Loading metadata...')).toBeInTheDocument();
+      expect(screen.queryByText('STANDARD')).not.toBeInTheDocument();
+
+      calls[0].resolve({ success: true, metadata: mockMetadata });
+      await waitFor(() => expect(screen.getByText('STANDARD')).toBeInTheDocument());
+      expect(screen.queryByText('Loading metadata...')).not.toBeInTheDocument();
+    });
+
+    it('shows loading, not the previous file metadata, when switched to another file', async () => {
+      const { calls, fn } = deferredFetch();
+      window.electronAPI.getObjectMetadata = fn;
+      const { rerender } = render(<PropertiesDialog {...defaultProps} />);
+      calls[0].resolve({ success: true, metadata: mockMetadata });
+      await waitFor(() => expect(screen.getByText('STANDARD')).toBeInTheDocument());
+
+      rerender(<PropertiesDialog {...defaultProps} fileKey="other/second.txt" />);
+
+      expect(fn).toHaveBeenLastCalledWith('test-bucket', 'other/second.txt');
+      expect(screen.getByText('Loading metadata...')).toBeInTheDocument();
+      expect(screen.queryByText('STANDARD')).not.toBeInTheDocument();
+      expect(screen.queryByText('team-a')).not.toBeInTheDocument();
+    });
+
+    it('shows no error from the previous file after re-opening for another file', async () => {
+      const { calls, fn } = deferredFetch();
+      window.electronAPI.getObjectMetadata = fn;
+      const { rerender } = render(<PropertiesDialog {...defaultProps} />);
+      calls[0].resolve({ success: false, error: 'Access denied' });
+      await waitFor(() => expect(screen.getByText(/Error: Access denied/)).toBeInTheDocument());
+
+      rerender(<PropertiesDialog {...defaultProps} isOpen={false} />);
+      rerender(<PropertiesDialog {...defaultProps} fileKey="other/second.txt" />);
+
+      expect(screen.queryByText(/Access denied/)).not.toBeInTheDocument();
+      expect(screen.getByText('Loading metadata...')).toBeInTheDocument();
+      calls[1].resolve({ success: true, metadata: { ...mockMetadata, storageClass: 'GLACIER' } });
+      await waitFor(() => expect(screen.getByText('GLACIER')).toBeInTheDocument());
+    });
+
+    it('ignores a late response for a previously opened file', async () => {
+      const { calls, fn } = deferredFetch();
+      window.electronAPI.getObjectMetadata = fn;
+      const { rerender } = render(<PropertiesDialog {...defaultProps} />);
+      rerender(<PropertiesDialog {...defaultProps} fileKey="other/second.txt" />);
+
+      await act(async () => {
+        calls[0].resolve({ success: true, metadata: { ...mockMetadata, storageClass: 'STALE_CLASS' } });
+      });
+      expect(screen.queryByText('STALE_CLASS')).not.toBeInTheDocument();
+      expect(screen.getByText('Loading metadata...')).toBeInTheDocument();
+
+      calls[1].resolve({ success: true, metadata: { ...mockMetadata, storageClass: 'FRESH_CLASS' } });
+      await waitFor(() => expect(screen.getByText('FRESH_CLASS')).toBeInTheDocument());
+    });
+
+    it('refetches when closed and re-opened for the same file', async () => {
+      const { calls, fn } = deferredFetch();
+      window.electronAPI.getObjectMetadata = fn;
+      const { rerender } = render(<PropertiesDialog {...defaultProps} />);
+      calls[0].resolve({ success: true, metadata: mockMetadata });
+      await waitFor(() => expect(screen.getByText('STANDARD')).toBeInTheDocument());
+
+      rerender(<PropertiesDialog {...defaultProps} isOpen={false} />);
+      rerender(<PropertiesDialog {...defaultProps} />);
+
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Loading metadata...')).toBeInTheDocument();
+      expect(screen.queryByText('STANDARD')).not.toBeInTheDocument();
     });
   });
 
