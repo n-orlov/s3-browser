@@ -67,8 +67,9 @@ describe("README badge block", () => {
   it("has the license, Electron and Node static badges and an Allure report link badge", () => {
     const block = blockOf(readme);
     expect(block).toContain("img.shields.io/badge/license-MIT-blue");
-    expect(block).toMatch(/img\.shields\.io\/badge\/electron-\d+-blue/);
-    expect(block).toMatch(/img\.shields\.io\/badge\/node-%3E%3D\d+-blue/);
+    const images = [...block.matchAll(/!\[[^\]]*\]\((https:[^)]+)\)/g)].map((m) => m[1]);
+    expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/electron-\d+-blue$/.test(url))).toHaveLength(1);
+    expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/node-%3E%3D\d+-blue$/.test(url))).toHaveLength(1);
     expect(block).toContain("[![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)");
   });
 });
