@@ -31,4 +31,29 @@ describe('parseS3Url (pure module)', () => {
     expect(parseS3Url('s3://')).toBeNull();
     expect(parseS3Url('')).toBeNull();
   });
+
+  describe('anchoring and exact shapes', () => {
+    it('rejects inputs with a prefix before the scheme', () => {
+      expect(parseS3Url('xs3://b/k')).toBeNull();
+      expect(parseS3Url(' s3://b/k')).toBeNull();
+      expect(parseS3Url('xhttps://b.s3.amazonaws.com/k')).toBeNull();
+      expect(parseS3Url('see https://s3.amazonaws.com/b/k')).toBeNull();
+    });
+
+    it('rejects inputs whose key contains a line break (the match must reach the end of the input)', () => {
+      expect(parseS3Url('s3://b/k\nx')).toBeNull();
+      expect(parseS3Url('https://b.s3.amazonaws.com/k\nx')).toBeNull();
+      expect(parseS3Url('https://s3.amazonaws.com/b/k\nx')).toBeNull();
+    });
+
+    it('accepts plain http for path style URLs', () => {
+      expect(parseS3Url('http://s3.amazonaws.com/b/k.txt')).toEqual({ bucket: 'b', key: 'k.txt' });
+      expect(parseS3Url('http://s3.eu-west-1.amazonaws.com/b/k.txt')).toEqual({ bucket: 'b', key: 'k.txt' });
+    });
+
+    it('accepts a path style URL that names only the bucket, with no trailing slash', () => {
+      expect(parseS3Url('https://s3.amazonaws.com/b')).toEqual({ bucket: 'b', key: '' });
+      expect(parseS3Url('https://s3.us-east-1.amazonaws.com/b')).toEqual({ bucket: 'b', key: '' });
+    });
+  });
 });
