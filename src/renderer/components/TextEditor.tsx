@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor, { OnMount, OnChange } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
+import { getEditorKeyAction } from '../utils/editorKeys';
 
 export interface TextEditorProps {
   bucket: string;
@@ -200,13 +201,11 @@ function TextEditor({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Ctrl/Cmd + S to save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const action = getEditorKeyAction(e, hasChanges);
+      if (action === 'save') {
         e.preventDefault();
         handleSave();
-      }
-      // Escape to close (if no changes)
-      if (e.key === 'Escape' && !hasChanges) {
+      } else if (action === 'close') {
         onClose();
       }
     },

@@ -378,6 +378,92 @@ describe('TextEditor', () => {
     });
   });
 
+  describe('keyboard shortcuts', () => {
+    async function renderLoaded(content = 'original') {
+      mockElectronAPI.s3.getFileSize.mockResolvedValue({ success: true, size: 100 });
+      mockElectronAPI.s3.downloadContent.mockResolvedValue({ success: true, content });
+      mockElectronAPI.s3.uploadContent.mockResolvedValue({ success: true });
+      render(<TextEditor {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByTestId('monaco-editor')).toBeInTheDocument();
+      });
+      return screen.getByTestId('monaco-editor');
+    }
+
+    it('Ctrl+S saves unsaved changes and prevents the browser default', async () => {
+      const editor = await renderLoaded();
+      fireEvent.change(editor, { target: { value: 'edited' } });
+
+      const notPrevented = fireEvent.keyDown(editor, { key: 's', ctrlKey: true });
+
+      expect(notPrevented).toBe(false);
+      await waitFor(() => {
+        expect(mockElectronAPI.s3.uploadContent).toHaveBeenCalledWith(
+          'test-bucket',
+          'path/to/file.json',
+          'edited'
+        );
+      });
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+    });
+
+    it('Cmd+S saves unsaved changes', async () => {
+      const editor = await renderLoaded();
+      fireEvent.change(editor, { target: { value: 'edited' } });
+
+      fireEvent.keyDown(editor, { key: 's', metaKey: true });
+
+      await waitFor(() => {
+        expect(mockElectronAPI.s3.uploadContent).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('Ctrl+S without changes prevents default but uploads nothing', async () => {
+      const editor = await renderLoaded();
+
+      const notPrevented = fireEvent.keyDown(editor, { key: 's', ctrlKey: true });
+
+      expect(notPrevented).toBe(false);
+      expect(mockElectronAPI.s3.uploadContent).not.toHaveBeenCalled();
+    });
+
+    it('plain "s" does not save', async () => {
+      const editor = await renderLoaded();
+      fireEvent.change(editor, { target: { value: 'edited' } });
+
+      const notPrevented = fireEvent.keyDown(editor, { key: 's' });
+
+      expect(notPrevented).toBe(true);
+      expect(mockElectronAPI.s3.uploadContent).not.toHaveBeenCalled();
+    });
+
+    it('Escape closes when there are no changes', async () => {
+      const editor = await renderLoaded();
+
+      fireEvent.keyDown(editor, { key: 'Escape' });
+
+      expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('Escape does not close when there are unsaved changes', async () => {
+      const editor = await renderLoaded();
+      fireEvent.change(editor, { target: { value: 'edited' } });
+
+      fireEvent.keyDown(editor, { key: 'Escape' });
+
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+    });
+
+    it('other keys do nothing', async () => {
+      const editor = await renderLoaded();
+
+      fireEvent.keyDown(editor, { key: 'Enter' });
+
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+      expect(mockElectronAPI.s3.uploadContent).not.toHaveBeenCalled();
+    });
+  });
+
   describe('language detection', () => {
     const testCases = [
       { fileKey: 'file.json', expectedLanguage: 'json' },
