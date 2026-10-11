@@ -43,7 +43,17 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*"
+      "dist/**/*",
+      "!**/__tests__/**",
+      "!**/*.test.*",
+      "!**/e2e/**",
+      "!**/coverage/**",
+      "!**/*.map",
+      "!**/.env*",
+      "!**/*.pem",
+      "!**/*.key",
+      "!**/credentials",
+      "!**/.npmrc"
     ],
     "win": {
       "target": [
