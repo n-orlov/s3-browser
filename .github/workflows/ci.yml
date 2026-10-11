@@ -194,6 +194,30 @@ jobs:
           path: allure-report/
           retention-days: 14
 
+  gate:
+    name: gate (quality and both e2e shards succeeded)
+    # The single status to protect in branch protection. `if: always()` so it still runs (and fails) when a need
+    # failed, was cancelled or was skipped; a skipped need would otherwise skip this job, which reads as passing.
+    # It checks out and runs nothing from the repository, so it uses a GitHub-hosted runner and no fork can reach
+    # the self-hosted ones through it. The e2e matrix is one need: its result is success only if both shards are.
+    needs: [quality, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Fail unless quality and every e2e shard succeeded
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          status=0
+          for pair in "quality=$QUALITY_RESULT" "e2e=$E2E_RESULT"; do
+            echo "${pair%%=*}: ${pair#*=}"
+            if [ "${pair#*=}" != "success" ]; then status=1; fi
+          done
+          exit "$status"
+
   publish:
     name: Publish Allure report to GitHub Pages
     # Separate from `report` on purpose: job permissions cannot be conditional, so the job that runs for pull

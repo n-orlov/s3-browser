@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
+import { spawnSync } from "child_process";
 import path from "path";
 import { parse } from "yaml";
 import playwrightConfig from "../../playwright.config";
@@ -425,5 +426,67 @@ describe("ci.yml publish job", () => {
     };
     expect(mutate((steps) => steps.splice(steps.findIndex((s) => (s as { with?: { ref?: string } }).with?.ref === "gh-pages"), 1))).toHaveLength(1);
     expect(mutate((steps) => steps.splice(steps.findIndex((s) => /previous-pages/.test(s.run ?? "")), 1))).toHaveLength(1);
+  });
+});
+
+type GateStep = { run?: string; env?: Record<string, string> };
+type GateJob = { needs?: string | string[]; if?: string; steps?: GateStep[] };
+
+/** One problem per way the gate job stops being the single all-or-nothing status. */
+function gateProblems(workflow: unknown): string[] {
+  const job = (workflow as { jobs?: Record<string, GateJob> })?.jobs?.gate;
+  if (!job) return ["no gate job"];
+  const problems: string[] = [];
+  const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+  for (const wanted of ["quality", "e2e"]) if (!needs.includes(wanted)) problems.push(`gate must need ${wanted}`);
+  if (job.if?.trim() !== "always()") problems.push(`gate must use if: always(), got ${job.if}`);
+  const text = JSON.stringify(job.steps ?? []);
+  for (const wanted of ["quality", "e2e"]) {
+    if (!new RegExp(`needs\\.${wanted}\\.result`).test(text)) problems.push(`gate must check needs.${wanted}.result`);
+  }
+  return problems;
+}
+
+/** Runs the gate step's script the way Actions would, with the two results in its environment; returns the exit code. */
+function runGate(workflow: unknown, quality: string, e2e: string): number {
+  const step = (workflow as { jobs: { gate: GateJob } }).jobs.gate.steps?.find((s) => s.run);
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(step?.env ?? {})) {
+    env[name] = value.replace(/\$\{\{\s*needs\.(\w+)\.result\s*\}\}/, (_, need: string) => (need === "quality" ? quality : e2e));
+  }
+  return spawnSync("bash", ["-e", "-c", step?.run ?? "exit 99"], { env: { PATH: process.env.PATH ?? "", ...env } }).status ?? -1;
+}
+
+describe("ci.yml gate job", () => {
+  it("needs quality and e2e, always runs and checks both results", () => {
+    expect(gateProblems(ci)).toEqual([]);
+  });
+
+  it("flags a gate that loses a need, if: always() or a result check (negative cases)", () => {
+    const mutate = (fn: (job: GateJob) => void) => {
+      const wf = clone(ci) as { jobs: { gate: GateJob } };
+      fn(wf.jobs.gate);
+      return gateProblems(wf);
+    };
+    expect(mutate((j) => (j.needs = ["quality"]))).toEqual(["gate must need e2e"]);
+    expect(mutate((j) => (j.needs = ["e2e"]))).toEqual(["gate must need quality"]);
+    expect(mutate((j) => delete j.needs)).toHaveLength(2);
+    expect(mutate((j) => delete j.if)).toHaveLength(1);
+    expect(mutate((j) => (j.if = "success()"))).toHaveLength(1);
+    expect(mutate((j) => (j.if = "always() && github.event_name == 'push'"))).toHaveLength(1);
+    expect(mutate((j) => delete j.steps![0].env!.E2E_RESULT)).toEqual(["gate must check needs.e2e.result"]);
+    expect(mutate((j) => delete j.steps![0].env!.QUALITY_RESULT)).toEqual(["gate must check needs.quality.result"]);
+    expect(mutate((j) => delete j.steps)).toHaveLength(2);
+    expect(gateProblems({ jobs: {} })).toEqual(["no gate job"]);
+  });
+
+  it("passes only for success/success and fails for failure, cancelled or skipped in either position", () => {
+    expect(runGate(ci, "success", "success")).toBe(0);
+    for (const bad of ["failure", "cancelled", "skipped"]) {
+      expect(runGate(ci, bad, "success"), `quality ${bad}`).not.toBe(0);
+      expect(runGate(ci, "success", bad), `e2e ${bad}`).not.toBe(0);
+      expect(runGate(ci, bad, bad), `both ${bad}`).not.toBe(0);
+    }
+    expect(runGate(ci, "failure", "cancelled")).not.toBe(0);
   });
 });
