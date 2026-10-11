@@ -144,6 +144,9 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Smoke-test the AppImage headless (extract, launch under xvfb, window opens)
+        run: ./scripts/smoke-appimage.sh
+
   e2e:
     name: e2e shard ${{ matrix.shard }}/2 (Electron + LocalStack in containers)
     if: >-

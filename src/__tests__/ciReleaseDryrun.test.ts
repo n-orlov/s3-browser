@@ -63,6 +63,22 @@ describe("ci.yml release-dryrun job", () => {
     expect(buildCommands(ci.jobs?.["release-dryrun"])).toEqual(["npm ci", "npm run build", "npx electron-builder --linux -p never"]);
   });
 
+  it("runs the AppImage smoke script after the electron-builder step", () => {
+    const steps = ci.jobs?.["release-dryrun"]?.steps ?? [];
+    const build = steps.findIndex((s) => /npx electron-builder\b/.test(s.run ?? ""));
+    const smoke = steps.findIndex((s) => /scripts\/smoke-appimage\.sh\b/.test(s.run ?? ""));
+    expect(build).toBeGreaterThanOrEqual(0);
+    expect(smoke).toBeGreaterThan(build);
+  });
+
+  it("has a smoke script that extracts the AppImage and launches it under xvfb in the Playwright image", () => {
+    const script = readFileSync(path.join(root, "scripts/smoke-appimage.sh"), "utf8");
+    expect(script).toContain("--appimage-extract");
+    expect(script).toContain("xvfb-run");
+    expect(script).toContain("mcr.microsoft.com/playwright:v");
+    expect(script).toContain("--no-sandbox");
+  });
+
   it("fails when release.yml's package command differs", () => {
     const changed = structuredClone(release);
     for (const s of changed.jobs?.["build-linux"]?.steps ?? []) {
