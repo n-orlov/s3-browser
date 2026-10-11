@@ -1,4 +1,4 @@
-// The ratchet: lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), coverage thresholds may only rise, versus .ratchet.json.
+// The ratchet: lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), coverage thresholds and the mutation break (recorded as at least 80) may only rise, versus .ratchet.json.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -11,13 +11,14 @@ import {
   readCoverageThresholds,
   readCrapBaselineSize,
   readLintCeiling,
+  readMutationBreak,
   type RatchetValues,
 } from '../../scripts/ratchet/ratchetCheck.ts';
 
 const repo = path.resolve(__dirname, '../..');
 const cli = path.join(repo, 'scripts/ratchet/ratchet.ts');
 
-const base: RatchetValues = { maxWarnings: 0, crapBaselineMax: 0, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
+const base: RatchetValues = { maxWarnings: 0, crapBaselineMax: 0, mutationScoreMin: 80, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
 const withThreshold = (key: keyof RatchetValues['coverageThresholds'], value: number): RatchetValues => ({
   ...base,
   coverageThresholds: { ...base.coverageThresholds, [key]: value },
@@ -65,6 +66,29 @@ describe('judgeRatchet', () => {
     expect(violations[0]).toContain(key);
   });
 
+  it('fails when the Stryker break (79) is below the recorded mutationScoreMin (80)', () => {
+    const violations = judgeRatchet(base, { ...base, mutationScoreMin: 79 });
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('thresholds.break is 79');
+  });
+
+  it('passes when the Stryker break (80) equals the recorded mutationScoreMin (80)', () => {
+    expect(judgeRatchet(base, { ...base, mutationScoreMin: 80 })).toEqual([]);
+  });
+
+  it('fails when .ratchet.json records a mutationScoreMin below 80, even if the Stryker break matches it', () => {
+    const loose = { ...base, mutationScoreMin: 79 };
+    const violations = judgeRatchet(loose, loose);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('records mutationScoreMin 79');
+  });
+
+  it('reports a stricter Stryker break for tightening', () => {
+    const improved = { ...base, mutationScoreMin: 85 };
+    expect(judgeRatchet(base, improved)).toEqual([]);
+    expect(findImprovements(base, improved)).toEqual(['mutationScoreMin 80 -> 85']);
+  });
+
   it('passes improved values and reports them for tightening', () => {
     const improved = withThreshold('lines', 85);
     expect(judgeRatchet(base, improved)).toEqual([]);
@@ -73,8 +97,13 @@ describe('judgeRatchet', () => {
   });
 
   it('reports every regression at once', () => {
-    const worse = { maxWarnings: 2, crapBaselineMax: 1, coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 } };
-    expect(judgeRatchet(base, worse)).toHaveLength(6);
+    const worse = {
+      maxWarnings: 2,
+      crapBaselineMax: 1,
+      mutationScoreMin: 1,
+      coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 },
+    };
+    expect(judgeRatchet(base, worse)).toHaveLength(7);
   });
 });
 
@@ -100,10 +129,18 @@ describe('readers', () => {
     expect(() => readCoverageThresholds('thresholds: { lines: 1 }')).toThrow(/functions/);
   });
 
+  it('reads thresholds.break from stryker.config.mjs', () => {
+    expect(readMutationBreak('export default { thresholds: { high: 90, low: 85, break: 80 } };')).toBe(80);
+    expect(readMutationBreak('// thresholds.break is 99\nexport default { thresholds:\n{ break: 72.5 } };')).toBe(72.5);
+    expect(() => readMutationBreak('export default {};')).toThrow(/thresholds/);
+    expect(() => readMutationBreak('export default { thresholds: { high: 90 } };')).toThrow(/break/);
+  });
+
   it('rejects a malformed ratchet file', () => {
     expect(() => parseRatchet('{}')).toThrow(/maxWarnings/);
     expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1 }))).toThrow(/crapBaselineMax/);
-    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0 }))).toThrow(/coverageThresholds/);
+    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0 }))).toThrow(/mutationScoreMin/);
+    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0, mutationScoreMin: 80 }))).toThrow(/coverageThresholds/);
     expect(parseRatchet(JSON.stringify(base))).toEqual(base);
   });
 });
@@ -118,6 +155,10 @@ describe('ratchet:check CLI', () => {
     writeFileSync(
       path.join(dir, 'package.json'),
       JSON.stringify({ scripts: { lint: `eslint . --max-warnings ${current.maxWarnings}` } }),
+    );
+    writeFileSync(
+      path.join(dir, 'stryker.config.mjs'),
+      `export default { thresholds: { high: 90, low: 85, break: ${current.mutationScoreMin} } };\n`,
     );
     writeFileSync(
       path.join(dir, 'vitest.config.ts'),
@@ -190,6 +231,33 @@ describe('ratchet:check CLI', () => {
     expect(out).toContain('functions 78 -> 90');
   });
 
+  it('exits 1 when the Stryker break (79) is below mutationScoreMin (80)', () => {
+    writeProject({ ...base, mutationScoreMin: 79 });
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('thresholds.break is 79');
+  });
+
+  it('exits 0 when the Stryker break (80) equals mutationScoreMin (80)', () => {
+    writeProject({ ...base, mutationScoreMin: 80 });
+    expect(run().status).toBe(0);
+  });
+
+  it('exits 2 when .ratchet.json has no mutationScoreMin', () => {
+    writeProject(base);
+    const { mutationScoreMin: _omitted, ...withoutMutation } = base;
+    writeFileSync(path.join(dir, '.ratchet.json'), JSON.stringify(withoutMutation));
+    const { status, out } = run();
+    expect(status).toBe(2);
+    expect(out).toContain('mutationScoreMin');
+  });
+
+  it('exits 2 when stryker.config.mjs is missing', () => {
+    writeProject(base);
+    rmSync(path.join(dir, 'stryker.config.mjs'));
+    expect(run().status).toBe(2);
+  });
+
   it('exits 2 when .ratchet.json is missing', () => {
     writeProject(base);
     rmSync(path.join(dir, '.ratchet.json'));
@@ -207,6 +275,7 @@ describe('ratchet:check CLI', () => {
     }
     expect(committed.maxWarnings).toBe(0);
     expect(committed.crapBaselineMax).toBe(0);
+    expect(committed.mutationScoreMin).toBeGreaterThanOrEqual(80);
     expect(readCrapBaselineSize(readFileSync(path.join(repo, 'crap-baseline.json'), 'utf8'))).toBe(0);
   });
 
