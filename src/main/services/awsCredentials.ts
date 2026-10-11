@@ -202,12 +202,73 @@ function detectProfileType(
   return 'config-only';
 }
 
+const VALID_CREDENTIAL_SOURCES = ['Environment', 'Ec2InstanceMetadata', 'EcsContainer'];
+
+/**
+ * SSO profiles are valid if they have the required SSO fields
+ * (a start URL or session, plus account id and role name).
+ * AWS SDK will handle the SSO login flow.
+ */
+export function isSsoProfileComplete(
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined
+): boolean {
+  const ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
+  const ssoSession = getFromEither(credData, configData, 'sso_session');
+  const ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
+  const ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
+  return !!(ssoStartUrl || ssoSession) && !!(ssoAccountId && ssoRoleName);
+}
+
+/**
+ * Web identity needs token file and role (check both files)
+ */
+export function isWebIdentityProfileComplete(
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined
+): boolean {
+  const tokenFile = getFromEither(credData, configData, 'web_identity_token_file');
+  const roleArnWeb = getFromEither(credData, configData, 'role_arn');
+  return !!(tokenFile && roleArnWeb);
+}
+
+/**
+ * Whether a profile's section holds a static access key pair
+ */
+export function hasStaticKeyPair(section: Map<string, string> | undefined): boolean {
+  return !!(section?.get('aws_access_key_id') && section?.get('aws_secret_access_key'));
+}
+
+/**
+ * Role assumption needs either credential_source for EC2/ECS/env, or a
+ * source_profile that has static credentials. credential_source wins when both are set.
+ * AWS CLI allows these settings in either credentials or config file
+ */
+export function canRoleProvideCredentials(
+  credData: Map<string, string> | undefined,
+  configData: Map<string, string> | undefined,
+  credentials: Map<string, Map<string, string>>
+): boolean {
+  const sourceProfile = getFromEither(credData, configData, 'source_profile');
+  const credentialSource = getFromEither(credData, configData, 'credential_source');
+
+  if (credentialSource) {
+    return VALID_CREDENTIAL_SOURCES.includes(credentialSource);
+  }
+
+  if (sourceProfile) {
+    return hasStaticKeyPair(credentials.get(sourceProfile));
+  }
+
+  return false;
+}
+
 /**
  * Determines if a profile can potentially provide credentials
  * This uses heuristics - actual validation happens when credentials are used
  * Note: AWS CLI allows many settings in either credentials or config file
  */
-function canProvideCredentials(
+export function canProvideCredentials(
   profileType: ProfileType,
   credData: Map<string, string> | undefined,
   configData: Map<string, string> | undefined,
@@ -216,48 +277,15 @@ function canProvideCredentials(
   switch (profileType) {
     case 'static':
       return true;
-
-    case 'sso': {
-      // SSO profiles are valid if they have the required SSO fields
-      // AWS SDK will handle the SSO login flow
-      const ssoStartUrl = getFromEither(credData, configData, 'sso_start_url');
-      const ssoSession = getFromEither(credData, configData, 'sso_session');
-      const ssoAccountId = getFromEither(credData, configData, 'sso_account_id');
-      const ssoRoleName = getFromEither(credData, configData, 'sso_role_name');
-      return !!(ssoStartUrl || ssoSession) && !!(ssoAccountId && ssoRoleName);
-    }
-
-    case 'web-identity': {
-      // Web identity needs token file and role (check both files)
-      const tokenFile = getFromEither(credData, configData, 'web_identity_token_file');
-      const roleArnWeb = getFromEither(credData, configData, 'role_arn');
-      return !!(tokenFile && roleArnWeb);
-    }
-
+    case 'sso':
+      return isSsoProfileComplete(credData, configData);
+    case 'web-identity':
+      return isWebIdentityProfileComplete(credData, configData);
     case 'process':
       // Process credentials just need the command (check both files)
       return !!getFromEither(credData, configData, 'credential_process');
-
-    case 'role': {
-      // Role assumption needs either source_profile with creds, or credential_source for EC2/ECS
-      // AWS CLI allows these settings in either credentials or config file
-      const sourceProfile = getFromEither(credData, configData, 'source_profile');
-      const credentialSource = getFromEither(credData, configData, 'credential_source');
-
-      if (credentialSource) {
-        // EC2InstanceMetadata, Environment, EcsContainer are valid sources
-        return ['Environment', 'Ec2InstanceMetadata', 'EcsContainer'].includes(credentialSource);
-      }
-
-      if (sourceProfile) {
-        // Check if source profile has credentials
-        const sourceCreds = credentials.get(sourceProfile);
-        return !!(sourceCreds?.get('aws_access_key_id') && sourceCreds?.get('aws_secret_access_key'));
-      }
-
-      return false;
-    }
-
+    case 'role':
+      return canRoleProvideCredentials(credData, configData, credentials);
     case 'config-only':
       return false;
   }

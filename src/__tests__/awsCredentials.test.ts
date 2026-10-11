@@ -8,6 +8,11 @@ import {
   getCredentialsPath,
   getConfigPath,
   type AwsProfile,
+  canProvideCredentials,
+  isSsoProfileComplete,
+  isWebIdentityProfileComplete,
+  hasStaticKeyPair,
+  canRoleProvideCredentials,
 } from '../main/services/awsCredentials';
 import * as os from 'os';
 
@@ -427,5 +432,86 @@ source_profile = new-source
       expect(devProfile?.roleArn).toBe('arn:aws:iam::123456789012:role/NewRole');
       expect(devProfile?.sourceProfile).toBe('new-source');
     });
+  });
+});
+
+const m = (o: Record<string, string> = {}) => new Map(Object.entries(o));
+const KEYS = { aws_access_key_id: 'AK', aws_secret_access_key: 'SK' };
+
+describe('hasStaticKeyPair', () => {
+  it.each([
+    ['undefined section', undefined, false],
+    ['empty section', m(), false],
+    ['only access key', m({ aws_access_key_id: 'AK' }), false],
+    ['only secret key', m({ aws_secret_access_key: 'SK' }), false],
+    ['both keys', m(KEYS), true],
+  ])('%s -> %s', (_n, section, expected) => {
+    expect(hasStaticKeyPair(section)).toBe(expected);
+  });
+});
+
+describe('isSsoProfileComplete', () => {
+  const full = { sso_account_id: '1', sso_role_name: 'r' };
+  it.each([
+    ['nothing', undefined, undefined, false],
+    ['start url + account + role (creds file)', m({ sso_start_url: 'u', ...full }), undefined, true],
+    ['session + account + role (config file)', undefined, m({ sso_session: 's', ...full }), true],
+    ['fields split across both files', m({ sso_account_id: '1' }), m({ sso_start_url: 'u', sso_role_name: 'r' }), true],
+    ['no url or session', undefined, m(full), false],
+    ['missing account id', undefined, m({ sso_start_url: 'u', sso_role_name: 'r' }), false],
+    ['missing role name', undefined, m({ sso_start_url: 'u', sso_account_id: '1' }), false],
+  ])('%s -> %s', (_n, cred, conf, expected) => {
+    expect(isSsoProfileComplete(cred, conf)).toBe(expected);
+  });
+});
+
+describe('isWebIdentityProfileComplete', () => {
+  it.each([
+    ['nothing', undefined, undefined, false],
+    ['token file only', undefined, m({ web_identity_token_file: '/t' }), false],
+    ['role only', undefined, m({ role_arn: 'arn' }), false],
+    ['both in config', undefined, m({ web_identity_token_file: '/t', role_arn: 'arn' }), true],
+    ['split across files', m({ role_arn: 'arn' }), m({ web_identity_token_file: '/t' }), true],
+  ])('%s -> %s', (_n, cred, conf, expected) => {
+    expect(isWebIdentityProfileComplete(cred, conf)).toBe(expected);
+  });
+});
+
+describe('canRoleProvideCredentials', () => {
+  const all = new Map([
+    ['good', m(KEYS)],
+    ['nokeys', m({ region: 'x' })],
+  ]);
+  it.each([
+    ['no source at all', undefined, m({ role_arn: 'a' }), false],
+    ['Environment source', undefined, m({ credential_source: 'Environment' }), true],
+    ['Ec2InstanceMetadata source', undefined, m({ credential_source: 'Ec2InstanceMetadata' }), true],
+    ['EcsContainer source', m({ credential_source: 'EcsContainer' }), undefined, true],
+    ['unknown credential source', undefined, m({ credential_source: 'Bogus' }), false],
+    ['source_profile with keys', undefined, m({ source_profile: 'good' }), true],
+    ['source_profile without keys', undefined, m({ source_profile: 'nokeys' }), false],
+    ['source_profile missing', undefined, m({ source_profile: 'ghost' }), false],
+    ['bad credential_source wins over good source_profile', undefined, m({ credential_source: 'Bogus', source_profile: 'good' }), false],
+    ['good credential_source wins over bad source_profile', undefined, m({ credential_source: 'Environment', source_profile: 'ghost' }), true],
+  ])('%s -> %s', (_n, cred, conf, expected) => {
+    expect(canRoleProvideCredentials(cred, conf, all)).toBe(expected);
+  });
+});
+
+describe('canProvideCredentials', () => {
+  const all = new Map([['good', m(KEYS)]]);
+  it.each([
+    ['static', 'static', undefined, undefined, true],
+    ['sso complete', 'sso', undefined, m({ sso_session: 's', sso_account_id: '1', sso_role_name: 'r' }), true],
+    ['sso incomplete', 'sso', undefined, m({ sso_session: 's' }), false],
+    ['web-identity complete', 'web-identity', undefined, m({ web_identity_token_file: '/t', role_arn: 'a' }), true],
+    ['web-identity incomplete', 'web-identity', undefined, m({ web_identity_token_file: '/t' }), false],
+    ['process with command', 'process', undefined, m({ credential_process: 'cmd' }), true],
+    ['process without command', 'process', undefined, m(), false],
+    ['role via source_profile', 'role', undefined, m({ source_profile: 'good' }), true],
+    ['role without source', 'role', undefined, m({ role_arn: 'a' }), false],
+    ['config-only', 'config-only', m({ region: 'x' }), m({ region: 'x' }), false],
+  ] as const)('%s', (_n, type, cred, conf, expected) => {
+    expect(canProvideCredentials(type, cred, conf, all)).toBe(expected);
   });
 });

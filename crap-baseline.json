@@ -1,5 +1,4 @@
 {
-  "src/main/services/awsCredentials.ts:canProvideCredentials": 58.59200000000001,
   "src/main/services/awsCredentials.ts:getProfileTypeDescription": 56,
   "src/main/services/s3Service.ts:downloadFile": 42,
   "src/renderer/App.tsx:App.handleConfirmDelete": 182,
