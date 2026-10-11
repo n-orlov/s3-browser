@@ -58,7 +58,7 @@ export function readMutationBreak(strykerConfigText: string): number {
 /** Validates the parsed content of .ratchet.json. */
 export function parseRatchet(text: string): RatchetValues {
   const raw = JSON.parse(text) as Partial<RatchetValues>;
-  const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  const isNumber = (value: unknown): value is number => Number.isFinite(value);
   if (!isNumber(raw.maxWarnings)) throw new Error('.ratchet.json needs a numeric "maxWarnings"');
   if (!isNumber(raw.crapBaselineMax)) throw new Error('.ratchet.json needs a numeric "crapBaselineMax"');
   if (!isNumber(raw.mutationScoreMin)) throw new Error('.ratchet.json needs a numeric "mutationScoreMin"');

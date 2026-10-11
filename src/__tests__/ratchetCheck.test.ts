@@ -89,6 +89,14 @@ describe('judgeRatchet', () => {
     expect(findImprovements(base, improved)).toEqual(['mutationScoreMin 80 -> 85']);
   });
 
+  it('reports a lowered warning ceiling and a smaller crap baseline for tightening, with the exact wording', () => {
+    const loose = { ...base, maxWarnings: 3, crapBaselineMax: 2 };
+    expect(findImprovements(loose, base)).toEqual(['maxWarnings 3 -> 0', 'crapBaselineMax 2 -> 0']);
+    expect(findImprovements({ ...base, maxWarnings: 3 }, base)).toEqual(['maxWarnings 3 -> 0']);
+    expect(findImprovements({ ...base, crapBaselineMax: 2 }, base)).toEqual(['crapBaselineMax 2 -> 0']);
+    expect(findImprovements(base, { ...base, maxWarnings: 1, crapBaselineMax: 1 })).toEqual([]);
+  });
+
   it('passes improved values and reports them for tightening', () => {
     const improved = withThreshold('lines', 85);
     expect(judgeRatchet(base, improved)).toEqual([]);
@@ -112,7 +120,59 @@ describe('readers', () => {
     expect(readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint . --max-warnings 7' } }))).toBe(7);
     expect(readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint . --max-warnings=3 --quiet' } }))).toBe(3);
     expect(() => readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint .' } }))).toThrow(/max-warnings/);
-    expect(() => readLintCeiling(JSON.stringify({ scripts: {} }))).toThrow(/lint/);
+    expect(() => readLintCeiling(JSON.stringify({ scripts: {} }))).toThrow('package.json has no "lint" script');
+    expect(() => readLintCeiling(JSON.stringify({}))).toThrow('package.json has no "lint" script');
+    expect(() => readLintCeiling(JSON.stringify({ scripts: { lint: 5 } }))).toThrow('package.json has no "lint" script');
+  });
+
+  it('reads a multi-digit --max-warnings value separated by several spaces', () => {
+    expect(readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint .   --max-warnings   12' } }))).toBe(12);
+    expect(readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint . --max-warnings=345' } }))).toBe(345);
+  });
+
+  it('rejects a crap-baseline.json that is not a JSON object with the object message', () => {
+    for (const text of ['null', '[]', '5', '"text"', 'true']) {
+      expect(() => readCrapBaselineSize(text)).toThrow('crap-baseline.json must be a JSON object');
+    }
+  });
+
+  it('tolerates whitespace around the colon of the thresholds block and of each key', () => {
+    const coverage = 'thresholds \t:\n  { lines  :  81 , functions\t:79, branches :\n71.5, statements  :80 }';
+    expect(readCoverageThresholds(coverage)).toEqual({ lines: 81, functions: 79, branches: 71.5, statements: 80 });
+    expect(readCoverageThresholds('thresholds:{lines:1,functions:2,branches:3,statements:4}')).toEqual({
+      lines: 1,
+      functions: 2,
+      branches: 3,
+      statements: 4,
+    });
+    expect(readMutationBreak('thresholds \t:\n  { break  :  75 }')).toBe(75);
+    expect(readMutationBreak('thresholds:{break:60.55}')).toBe(60.55);
+    expect(readMutationBreak('thresholds:{ break\t:\n72.55 }')).toBe(72.55);
+  });
+
+  it('rejects non-finite and non-numeric ratchet values with the numeric-field message', () => {
+    const text = (patch: Record<string, unknown>) => JSON.stringify({ ...base, ...patch }).replace('"__inf"', '1e999');
+    expect(() => parseRatchet(text({ maxWarnings: '__inf' }))).toThrow('.ratchet.json needs a numeric "maxWarnings"');
+    expect(() => parseRatchet(text({ crapBaselineMax: '__inf' }))).toThrow('.ratchet.json needs a numeric "crapBaselineMax"');
+    expect(() => parseRatchet(text({ mutationScoreMin: '__inf' }))).toThrow('.ratchet.json needs a numeric "mutationScoreMin"');
+    expect(() => parseRatchet(text({ maxWarnings: '0' }))).toThrow('.ratchet.json needs a numeric "maxWarnings"');
+    expect(() => parseRatchet(text({ coverageThresholds: { ...base.coverageThresholds, lines: '__inf' } }))).toThrow(
+      '.ratchet.json coverageThresholds needs a numeric "lines"',
+    );
+  });
+
+  it('names the missing coverage threshold, and rejects a null or absent coverageThresholds', () => {
+    for (const key of ['lines', 'functions', 'branches', 'statements'] as const) {
+      const { [key]: _dropped, ...rest } = base.coverageThresholds;
+      expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: rest }))).toThrow(
+        `.ratchet.json coverageThresholds needs a numeric "${key}"`,
+      );
+      expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: { ...base.coverageThresholds, [key]: 'x' } }))).toThrow(
+        `.ratchet.json coverageThresholds needs a numeric "${key}"`,
+      );
+    }
+    expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: null }))).toThrow('.ratchet.json needs "coverageThresholds"');
+    expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: 'x' }))).toThrow('.ratchet.json needs "coverageThresholds"');
   });
 
   it('counts the entries of crap-baseline.json', () => {
