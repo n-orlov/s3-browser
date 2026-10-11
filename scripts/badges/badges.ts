@@ -109,11 +109,11 @@ function mutationBadge(score: number | null, ratchet: RatchetInput | null): Badg
   return badge('mutation', `${round(score)}%`, colorForThreshold(score, ratchet.mutationScoreMin));
 }
 
+/** The gate is high+ (`audit:prod`): the count is high plus critical, green only at zero, red otherwise; low and moderate findings never show. */
 function auditBadge(audit: AuditCounts | null): Badge {
   if (!audit) return missing('audit');
-  if (audit.total === 0) return badge('audit', '0 vulnerabilities', 'brightgreen');
-  const color: BadgeColor = audit.high + audit.critical > 0 ? 'red' : 'yellow';
-  return badge('audit', `${audit.total} vulnerabilit${audit.total === 1 ? 'y' : 'ies'}`, color);
+  const serious = audit.high + audit.critical;
+  return badge('audit', `${serious} high+ vulnerabilit${serious === 1 ? 'y' : 'ies'}`, serious === 0 ? 'brightgreen' : 'red');
 }
 
 /** All ten endpoint badges, keyed by file stem. */

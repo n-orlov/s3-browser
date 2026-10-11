@@ -132,19 +132,19 @@ describe("renderBadges: colour boundaries", () => {
     }
   });
 
-  it("audit is green only at 0 vulnerabilities, red on a high or critical one", () => {
+  it("audit counts high+ findings: green at zero whatever the low and moderate count, red otherwise", () => {
     const at = (counts: Partial<typeof audit>) => {
       const merged = { ...audit, ...counts };
       return renderBadges({ ...allGreen, audit: { ...merged, total: merged.low + merged.moderate + merged.high + merged.critical } }).audit;
     };
-    expect(at({}).color).toBe("brightgreen");
-    expect(at({ low: 2 }).color).not.toBe("brightgreen");
-    expect(at({ low: 2 }).color).toBe("yellow");
-    expect(at({ moderate: 1 }).color).toBe("yellow");
-    expect(at({ high: 1 }).color).toBe("red");
-    expect(at({ critical: 1 }).color).toBe("red");
-    expect(at({ low: 1 }).message).toBe("1 vulnerability");
-    expect(at({ low: 2 }).message).toBe("2 vulnerabilities");
+    expect(at({})).toEqual({ schemaVersion: 1, label: "audit", message: "0 high+ vulnerabilities", color: "brightgreen" });
+    // the independent clone's production audit: low=2, moderate=0, high=0, critical=0
+    expect(at({ low: 2 })).toMatchObject({ message: "0 high+ vulnerabilities", color: "brightgreen" });
+    expect(at({ low: 3, moderate: 4 })).toMatchObject({ message: "0 high+ vulnerabilities", color: "brightgreen" });
+    expect(at({ moderate: 1 })).toMatchObject({ message: "0 high+ vulnerabilities", color: "brightgreen" });
+    expect(at({ high: 1 })).toMatchObject({ message: "1 high+ vulnerability", color: "red" });
+    expect(at({ critical: 1 })).toMatchObject({ message: "1 high+ vulnerability", color: "red" });
+    expect(at({ low: 5, high: 1, critical: 1 })).toMatchObject({ message: "2 high+ vulnerabilities", color: "red" });
   });
 
   it("unit-tests and e2e-tests are red on any failure and green otherwise", () => {
@@ -267,7 +267,7 @@ describe("badges CLI", () => {
     put(populated, "reports/mutation/mutation.json", JSON.stringify({ files: { "a.ts": { mutants: [{ status: "Killed" }, { status: "Survived" }] } } }));
     put(populated, "reports/eslint.json", JSON.stringify([{ errorCount: 0, warningCount: 2 }, { errorCount: 0, warningCount: 1 }]));
     put(populated, "custom/lint.json", JSON.stringify([{ errorCount: 0, warningCount: 0 }]));
-    put(populated, "reports/audit.json", JSON.stringify({ metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } } }));
+    put(populated, "reports/audit.json", JSON.stringify({ metadata: { vulnerabilities: { info: 0, low: 2, moderate: 0, high: 0, critical: 0, total: 2 } } }));
     full = run(populated, ["--out", "out", "--e2e", "test-results/shard1.json", "--e2e", "test-results/shard2.json"]);
     const blank = path.join(root, "blank");
     mkdirSync(blank);
@@ -292,7 +292,7 @@ describe("badges CLI", () => {
     expect(readOut(out, "unit-tests")).toMatchObject({ color: "red", message: "1 failed, 7 passed, 2 skipped" });
     expect(readOut(out, "e2e-tests")).toMatchObject({ color: "brightgreen", message: "10 passed, 1 skipped" });
     expect(readOut(out, "mutation")).toMatchObject({ color: "red", message: "50%" });
-    expect(readOut(out, "audit").color).toBe("brightgreen");
+    expect(readOut(out, "audit")).toEqual({ schemaVersion: 1, label: "audit", message: "0 high+ vulnerabilities", color: "brightgreen" });
   });
 
   it("writes n/a lightgrey badges, creating the directory, when no report exists", () => {
