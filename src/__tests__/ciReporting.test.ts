@@ -205,3 +205,83 @@ describe("ci.yml job summaries", () => {
     expect(summaryStepProblems(wf({ ...good, run: "node scripts/summary/summary.ts e2e 1/2" }), "quality", "quality")).toHaveLength(1);
   });
 });
+
+type ReportStep = Step & { run?: string };
+type ReportJob = { needs?: unknown; if?: string; "runs-on"?: unknown; permissions?: Record<string, string>; steps?: ReportStep[] };
+
+const REPORT_INPUTS = ["unit-allure-results", "e2e-allure-results-1", "e2e-allure-results-2"];
+
+/** True when the artifact-name glob (`*` only) matches the whole name. */
+function globMatches(glob: string, name: string): boolean {
+  return new RegExp(`^${glob.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(name);
+}
+
+/** One problem string per way the `report` job deviates from: needs quality+e2e, always(), same runner, read-only, one Allure report uploaded always(). */
+function reportJobProblems(workflow: unknown): string[] {
+  const jobs = (workflow as { jobs?: Record<string, ReportJob> })?.jobs ?? {};
+  const job = jobs.report;
+  if (!job) return ["no report job"];
+  const problems: string[] = [];
+  const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+  for (const wanted of ["quality", "e2e"]) if (!needs.includes(wanted)) problems.push(`report must need ${wanted}`);
+  if (!/(^|[^\w.])always\(\)/.test(job.if ?? "")) problems.push(`report must run with if: always(), got ${job.if}`);
+  if (JSON.stringify(job["runs-on"]) !== JSON.stringify(jobs.quality?.["runs-on"])) problems.push("report must use the same runs-on as quality");
+  if (JSON.stringify(job["runs-on"]) !== JSON.stringify(jobs.e2e?.["runs-on"])) problems.push("report must use the same runs-on as e2e");
+  const permissions = job.permissions ?? {};
+  for (const [scope, level] of Object.entries(permissions)) {
+    if (!(scope === "contents" && level === "read")) problems.push(`report permission ${scope}: ${level} is wider than contents: read`);
+  }
+  const steps = job.steps ?? [];
+  const download = steps.find((s) => s.uses?.startsWith("actions/download-artifact@"));
+  const pattern = String((download as { with?: { pattern?: string } } | undefined)?.with?.pattern ?? "");
+  if (!download) problems.push("report downloads no artifacts");
+  for (const input of REPORT_INPUTS) if (!globMatches(pattern, input)) problems.push(`report download does not select ${input}`);
+  if (!steps.some((s) => /\ballure\b[^\n]*\bgenerate\b/.test(s.run ?? ""))) problems.push("report has no allure generate step");
+  const upload = steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
+  if (!upload) problems.push("report uploads no artifact");
+  else if (upload.if?.trim() !== "always()") problems.push(`report upload must use if: always(), got ${upload.if}`);
+  return problems;
+}
+
+describe("ci.yml report job", () => {
+  it("merges the unit and e2e Allure results into one report artifact on every run", () => {
+    expect(reportJobProblems(ci)).toEqual([]);
+  });
+
+  it("flags a report job that loses needs, if: always(), the upload's if: always() or read-only permissions (negative cases)", () => {
+    const base = (): { jobs: Record<string, ReportJob> } => ({
+      jobs: {
+        quality: { "runs-on": ["a", "b"] },
+        e2e: { "runs-on": ["a", "b"] },
+        report: {
+          needs: ["quality", "e2e"],
+          if: "always() && github.event_name != 'x'",
+          "runs-on": ["a", "b"],
+          permissions: { contents: "read" },
+          steps: [
+            { uses: "actions/download-artifact@x", with: { pattern: "*allure-results*" } } as ReportStep,
+            { run: "npx allure generate allure-input/* --output allure-report" },
+            { uses: "actions/upload-artifact@x", if: "always()" },
+          ],
+        },
+      },
+    });
+    expect(reportJobProblems(base())).toEqual([]);
+    const mutate = (fn: (j: ReportJob) => void) => {
+      const wf = base();
+      fn(wf.jobs.report);
+      return reportJobProblems(wf);
+    };
+    expect(mutate((j) => delete j.needs)).toHaveLength(2);
+    expect(mutate((j) => (j.needs = ["quality"]))).toEqual(["report must need e2e"]);
+    expect(mutate((j) => delete j.if)).toHaveLength(1);
+    expect(mutate((j) => (j.if = "success()"))).toHaveLength(1);
+    expect(mutate((j) => (j["runs-on"] = ["ubuntu-latest"]))).toHaveLength(2);
+    expect(mutate((j) => (j.permissions = { contents: "write" }))).toHaveLength(1);
+    expect(mutate((j) => (j.permissions = { contents: "read", actions: "read" }))).toHaveLength(1);
+    expect(mutate((j) => delete (j.steps ?? [])[2].if)).toHaveLength(1);
+    expect(mutate((j) => ((j.steps ?? [])[2].if = "success()"))).toHaveLength(1);
+    expect(mutate((j) => j.steps?.pop())).toHaveLength(1);
+    expect(mutate((j) => ((j.steps ?? [])[0] as { with: { pattern: string } }).with.pattern = "unit-*")).toHaveLength(2);
+  });
+});
