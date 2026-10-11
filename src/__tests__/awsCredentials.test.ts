@@ -13,6 +13,9 @@ import {
   isWebIdentityProfileComplete,
   hasStaticKeyPair,
   canRoleProvideCredentials,
+  getProfileTypeDescription,
+  PROFILE_TYPE_DESCRIPTIONS,
+  type ProfileType,
 } from '../main/services/awsCredentials';
 import * as os from 'os';
 
@@ -513,5 +516,26 @@ describe('canProvideCredentials', () => {
     ['config-only', 'config-only', m({ region: 'x' }), m({ region: 'x' }), false],
   ] as const)('%s', (_n, type, cred, conf, expected) => {
     expect(canProvideCredentials(type, cred, conf, all)).toBe(expected);
+  });
+});
+
+describe('getProfileTypeDescription', () => {
+  it.each([
+    ['static', 'Access Key'],
+    ['role', 'IAM Role'],
+    ['sso', 'AWS SSO'],
+    ['process', 'External Process'],
+    ['web-identity', 'Web Identity'],
+    ['config-only', 'Config Only'],
+  ] as const)('%s -> %s', (type, expected) => {
+    expect(getProfileTypeDescription(type)).toBe(expected);
+  });
+
+  it('has a distinct non-empty description for every profile type', () => {
+    const types = Object.keys(PROFILE_TYPE_DESCRIPTIONS) as ProfileType[];
+    const descriptions = types.map((t) => getProfileTypeDescription(t));
+    expect(types).toHaveLength(6);
+    expect(descriptions.every((d) => d.length > 0)).toBe(true);
+    expect(new Set(descriptions).size).toBe(types.length);
   });
 });

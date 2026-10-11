@@ -460,22 +460,19 @@ export function validateProfile(profile: AwsProfile): { valid: boolean; reason?:
   }
 }
 
+/** Human-readable label for each profile type. */
+export const PROFILE_TYPE_DESCRIPTIONS: Readonly<Record<ProfileType, string>> = {
+  static: 'Access Key',
+  role: 'IAM Role',
+  sso: 'AWS SSO',
+  process: 'External Process',
+  'web-identity': 'Web Identity',
+  'config-only': 'Config Only',
+};
+
 /**
  * Gets a human-readable description of the profile type
  */
 export function getProfileTypeDescription(profileType: ProfileType): string {
-  switch (profileType) {
-    case 'static':
-      return 'Access Key';
-    case 'role':
-      return 'IAM Role';
-    case 'sso':
-      return 'AWS SSO';
-    case 'process':
-      return 'External Process';
-    case 'web-identity':
-      return 'Web Identity';
-    case 'config-only':
-      return 'Config Only';
-  }
+  return PROFILE_TYPE_DESCRIPTIONS[profileType];
 }
