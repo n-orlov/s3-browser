@@ -425,5 +425,38 @@ describe('NavigationBar', () => {
         expect(screen.getByRole('textbox', { name: /s3 url/i })).toHaveValue('s3://bucket-b/folder/');
       });
     });
+
+    it('keeps the text the user is typing when the location changes while editing', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <NavigationBar currentBucket="bucket-a" currentPrefix="" onNavigate={mockOnNavigate} />
+      );
+      const input = screen.getByRole('textbox', { name: /s3 url/i });
+
+      await user.click(input);
+      await user.clear(input);
+      await user.type(input, 's3://typed-bucket/partial');
+
+      rerender(<NavigationBar currentBucket="bucket-b" currentPrefix="folder/" onNavigate={mockOnNavigate} />);
+
+      expect(screen.getByRole('textbox', { name: /s3 url/i })).toHaveValue('s3://typed-bucket/partial');
+    });
+
+    it('shows the current location again once editing ends after the location changed', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <NavigationBar currentBucket="bucket-a" currentPrefix="" onNavigate={mockOnNavigate} />
+      );
+      const input = screen.getByRole('textbox', { name: /s3 url/i });
+
+      await user.click(input);
+      await user.type(input, 'xyz');
+      rerender(<NavigationBar currentBucket="bucket-b" currentPrefix="folder/" onNavigate={mockOnNavigate} />);
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      await waitFor(() => {
+        expect(screen.getByRole('textbox', { name: /s3 url/i })).toHaveValue('s3://bucket-b/folder/');
+      });
+    });
   });
 });

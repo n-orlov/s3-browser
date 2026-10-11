@@ -18,7 +18,7 @@ function NavigationBar({
   currentPrefix,
   onNavigate,
 }: NavigationBarProps): React.ReactElement {
-  const [inputValue, setInputValue] = useState('');
+  const [draft, setDraft] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,12 +30,9 @@ function NavigationBar({
     return `s3://${currentBucket}/${currentPrefix}`;
   }, [currentBucket, currentPrefix]);
 
-  // Update display when navigation changes
-  useEffect(() => {
-    if (!isEditing) {
-      setInputValue(getDisplayPath());
-    }
-  }, [currentBucket, currentPrefix, isEditing, getDisplayPath]);
+  // While not editing the input mirrors the current location (derived, so it
+  // follows navigation); while editing it shows the user's draft text.
+  const inputValue = isEditing ? draft : getDisplayPath();
 
   // Focus input when editing starts
   useEffect(() => {
@@ -46,22 +43,22 @@ function NavigationBar({
   }, [isEditing]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
+    setDraft(e.target.value);
     setError(null);
   }, []);
 
   const handleInputFocus = useCallback(() => {
+    setDraft(getDisplayPath());
     setIsEditing(true);
-  }, []);
+  }, [getDisplayPath]);
 
   const handleInputBlur = useCallback(() => {
     // Delay to allow navigation to complete before resetting
     setTimeout(() => {
       setIsEditing(false);
-      setInputValue(getDisplayPath());
       setError(null);
     }, 150);
-  }, [getDisplayPath]);
+  }, []);
 
   const handleNavigate = useCallback(async () => {
     const trimmedValue = inputValue.trim();
@@ -110,12 +107,11 @@ function NavigationBar({
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setIsEditing(false);
-        setInputValue(getDisplayPath());
         setError(null);
         inputRef.current?.blur();
       }
     },
-    [handleNavigate, getDisplayPath]
+    [handleNavigate]
   );
 
   const handleGoClick = useCallback(() => {
