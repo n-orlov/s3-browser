@@ -17,57 +17,69 @@ interface TreeNode {
   expanded: boolean;
 }
 
+interface BucketFetchOutcome {
+  buckets: S3Bucket[];
+  error: string | null;
+}
+
+interface BucketLoadResult extends BucketFetchOutcome {
+  profile: string;
+  token: number;
+}
+
+async function fetchBuckets(): Promise<BucketFetchOutcome> {
+  try {
+    const result = await window.electronAPI.s3.listBuckets();
+    if (!result.success) {
+      return { buckets: [], error: result.error ?? 'Failed to list buckets' };
+    }
+    return { buckets: result.buckets ?? [], error: null };
+  } catch (err) {
+    return {
+      buckets: [],
+      error: err instanceof Error ? err.message : 'Failed to list buckets',
+    };
+  }
+}
+
 function BucketTree({
   currentProfile,
   selectedBucket,
   onSelectBucket,
 }: BucketTreeProps): React.ReactElement {
-  const [buckets, setBuckets] = useState<S3Bucket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
+  const [result, setResult] = useState<BucketLoadResult | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [filterText, setFilterText] = useState('');
 
-  const loadBuckets = useCallback(async () => {
+  useEffect(() => {
     if (!currentProfile) {
-      setBuckets([]);
-      setTreeNodes([]);
       return;
     }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await window.electronAPI.s3.listBuckets();
-
-      if (!result.success) {
-        setError(result.error ?? 'Failed to list buckets');
-        setBuckets([]);
-        setTreeNodes([]);
-        return;
+    let cancelled = false;
+    void fetchBuckets().then((outcome) => {
+      if (!cancelled) {
+        setResult({ profile: currentProfile, token: reloadToken, ...outcome });
       }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProfile, reloadToken]);
 
-      const bucketList = result.buckets ?? [];
-      setBuckets(bucketList);
-      setTreeNodes(
-        bucketList.map((b) => ({
-          name: b.name,
-          type: 'bucket' as const,
-          expanded: false,
-        }))
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to list buckets');
-      setBuckets([]);
-      setTreeNodes([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentProfile]);
+  const handleRetry = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
 
-  useEffect(() => {
-    loadBuckets();
-  }, [loadBuckets]);
+  // Loading is derived: the stored result does not belong to the current profile/attempt yet.
+  const loading =
+    currentProfile !== null &&
+    (result === null || result.profile !== currentProfile || result.token !== reloadToken);
+  const error = !loading && result ? result.error : null;
+  const buckets = useMemo(() => (loading || !result ? [] : result.buckets), [loading, result]);
+  const treeNodes = useMemo<TreeNode[]>(
+    () => buckets.map((b) => ({ name: b.name, type: 'bucket' as const, expanded: false })),
+    [buckets]
+  );
 
   const handleBucketClick = (bucketName: string) => {
     onSelectBucket(bucketName);
@@ -115,7 +127,7 @@ function BucketTree({
         <div className="bucket-tree-error">
           <span className="error-icon">!</span>
           <span>{error}</span>
-          <button className="retry-btn" onClick={loadBuckets}>
+          <button className="retry-btn" onClick={handleRetry}>
             Retry
           </button>
         </div>

@@ -193,6 +193,54 @@ describe('BucketTree', () => {
       expect(mockElectronAPI.s3.listBuckets).toHaveBeenCalledTimes(2);
     });
 
+    it('loads buckets on mount and again only when the profile changes', async () => {
+      mockElectronAPI.s3.listBuckets.mockResolvedValue({
+        success: true,
+        buckets: [{ name: 'mounted-bucket', creationDate: new Date() }],
+      });
+      const onSelectBucket = vi.fn();
+
+      const { rerender } = render(
+        <BucketTree currentProfile={null} selectedBucket={null} onSelectBucket={onSelectBucket} />
+      );
+      expect(mockElectronAPI.s3.listBuckets).not.toHaveBeenCalled();
+
+      rerender(
+        <BucketTree
+          currentProfile="profile-1"
+          selectedBucket={null}
+          onSelectBucket={onSelectBucket}
+        />
+      );
+      expect(screen.getByText('Loading buckets...')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('mounted-bucket')).toBeInTheDocument();
+      });
+      expect(mockElectronAPI.s3.listBuckets).toHaveBeenCalledTimes(1);
+
+      // Re-rendering with the same profile does not reload.
+      rerender(
+        <BucketTree
+          currentProfile="profile-1"
+          selectedBucket="mounted-bucket"
+          onSelectBucket={onSelectBucket}
+        />
+      );
+      expect(mockElectronAPI.s3.listBuckets).toHaveBeenCalledTimes(1);
+
+      // A new profile shows the loading state again and reloads.
+      mockElectronAPI.s3.listBuckets.mockImplementation(() => new Promise(() => {}));
+      rerender(
+        <BucketTree
+          currentProfile="profile-2"
+          selectedBucket={null}
+          onSelectBucket={onSelectBucket}
+        />
+      );
+      expect(screen.getByText('Loading buckets...')).toBeInTheDocument();
+      expect(mockElectronAPI.s3.listBuckets).toHaveBeenCalledTimes(2);
+    });
+
     it('handles keyboard navigation', async () => {
       const onSelectBucket = vi.fn();
       mockElectronAPI.s3.listBuckets.mockResolvedValue({
