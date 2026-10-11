@@ -1,4 +1,5 @@
-// Pure ratchet logic: the lint warning ceiling may only go down, the coverage thresholds only up.
+// Pure ratchet logic: the lint warning ceiling is fixed at 0 (and must be recorded as 0), the coverage thresholds only go up.
+export const REQUIRED_MAX_WARNINGS = 0;
 export const THRESHOLD_KEYS = ['lines', 'functions', 'branches', 'statements'] as const;
 export type ThresholdKey = (typeof THRESHOLD_KEYS)[number];
 
@@ -49,6 +50,9 @@ export function parseRatchet(text: string): RatchetValues {
 /** Returns one message per regression; an empty list means the ratchet holds. */
 export function judgeRatchet(ratchet: RatchetValues, current: RatchetValues): string[] {
   const violations: string[] = [];
+  if (ratchet.maxWarnings !== REQUIRED_MAX_WARNINGS) {
+    violations.push(`.ratchet.json records maxWarnings ${ratchet.maxWarnings}; the lint gate requires ${REQUIRED_MAX_WARNINGS}`);
+  }
   if (current.maxWarnings > ratchet.maxWarnings) {
     violations.push(`lint --max-warnings is ${current.maxWarnings}, above the ratchet ceiling ${ratchet.maxWarnings}`);
   }

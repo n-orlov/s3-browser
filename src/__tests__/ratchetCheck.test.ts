@@ -1,4 +1,4 @@
-// The ratchet: lint --max-warnings may only fall, coverage thresholds may only rise, versus .ratchet.json.
+// The ratchet: lint --max-warnings is fixed at 0 (recorded as 0 in .ratchet.json), coverage thresholds may only rise, versus .ratchet.json.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -16,7 +16,7 @@ import {
 const repo = path.resolve(__dirname, '../..');
 const cli = path.join(repo, 'scripts/ratchet/ratchet.ts');
 
-const base: RatchetValues = { maxWarnings: 18, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
+const base: RatchetValues = { maxWarnings: 0, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
 const withThreshold = (key: keyof RatchetValues['coverageThresholds'], value: number): RatchetValues => ({
   ...base,
   coverageThresholds: { ...base.coverageThresholds, [key]: value },
@@ -28,9 +28,17 @@ describe('judgeRatchet', () => {
   });
 
   it('fails when the warning ceiling is raised', () => {
-    const violations = judgeRatchet(base, { ...base, maxWarnings: 19 });
+    const violations = judgeRatchet(base, { ...base, maxWarnings: 1 });
     expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain('19');
+    expect(violations[0]).toContain('is 1');
+  });
+
+  it('fails when .ratchet.json records a non-zero maxWarnings, even if the lint script matches it', () => {
+    const loose = { ...base, maxWarnings: 3 };
+    const violations = judgeRatchet(loose, loose);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('records maxWarnings 3');
+    expect(judgeRatchet(loose, base)).toHaveLength(1);
   });
 
   it.each(['lines', 'functions', 'branches', 'statements'] as const)('fails when the %s threshold is lowered', (key) => {
@@ -40,14 +48,14 @@ describe('judgeRatchet', () => {
   });
 
   it('passes improved values and reports them for tightening', () => {
-    const improved = { ...withThreshold('lines', 85), maxWarnings: 10 };
+    const improved = withThreshold('lines', 85);
     expect(judgeRatchet(base, improved)).toEqual([]);
-    expect(findImprovements(base, improved)).toEqual(['maxWarnings 18 -> 10', 'lines 80 -> 85']);
+    expect(findImprovements(base, improved)).toEqual(['lines 80 -> 85']);
     expect(findImprovements(base, base)).toEqual([]);
   });
 
   it('reports every regression at once', () => {
-    const worse = { maxWarnings: 20, coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 } };
+    const worse = { maxWarnings: 2, coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 } };
     expect(judgeRatchet(base, worse)).toHaveLength(5);
   });
 });
@@ -107,10 +115,17 @@ describe('ratchet:check CLI', () => {
   });
 
   it('exits non-zero when --max-warnings is raised', () => {
-    writeProject({ ...base, maxWarnings: 19 });
+    writeProject({ ...base, maxWarnings: 1 });
     const { status, out } = run();
     expect(status).toBe(1);
-    expect(out).toContain('--max-warnings is 19');
+    expect(out).toContain('--max-warnings is 1');
+  });
+
+  it('exits 1 when .ratchet.json records a non-zero maxWarnings', () => {
+    writeProject({ ...base, maxWarnings: 4 }, { ...base, maxWarnings: 4 });
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('records maxWarnings 4');
   });
 
   it('exits non-zero when a vitest threshold is lowered', () => {
@@ -121,10 +136,9 @@ describe('ratchet:check CLI', () => {
   });
 
   it('exits 0 for improved values and says what to tighten', () => {
-    writeProject({ ...withThreshold('functions', 90), maxWarnings: 5 });
+    writeProject(withThreshold('functions', 90));
     const { status, out } = run();
     expect(status).toBe(0);
-    expect(out).toContain('maxWarnings 18 -> 5');
     expect(out).toContain('functions 78 -> 90');
   });
 
@@ -137,11 +151,9 @@ describe('ratchet:check CLI', () => {
   it('passes on the committed tree', () => {
     const result = spawnSync(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', cli], { cwd: repo, encoding: 'utf8' });
     expect(result.status).toBe(0);
-    // The warning ceiling only ratchets down (each lint fix lowers it), so it may sit below `base`; the floors may not.
+    // The warning ceiling is recorded as 0; the floors may not move below `base`.
     const committed = parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'));
     expect(committed.coverageThresholds).toEqual(base.coverageThresholds);
-    expect(Number.isInteger(committed.maxWarnings)).toBe(true);
-    expect(committed.maxWarnings).toBeGreaterThanOrEqual(0);
-    expect(committed.maxWarnings).toBeLessThanOrEqual(base.maxWarnings);
+    expect(committed.maxWarnings).toBe(0);
   });
 });
