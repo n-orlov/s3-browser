@@ -26,6 +26,7 @@
     "ratchet:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ratchet/ratchet.ts",
     "mutation": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/mutation/mutation.ts",
     "badges": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/badges/render.ts",
+    "badges:readme": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/badges/readme.ts",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "sbom": "cyclonedx-npm --omit dev --output-format JSON --spec-version 1.6 --output-file sbom/sbom.cdx.json",
     "test:e2e": "npm run build && xvfb-run --auto-servernum --server-args=\"-screen 0 1280x960x24\" playwright test",
