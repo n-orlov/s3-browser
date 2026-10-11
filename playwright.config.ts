@@ -13,6 +13,7 @@ export default defineConfig({
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
+    ['allure-playwright', { resultsDir: 'allure-results' }],
   ],
 
   // Global setup/teardown for LocalStack

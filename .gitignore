@@ -31,3 +31,4 @@ coverage/
 .electron-builder-cache/
 test-results/
 playwright-report/
+allure-results/

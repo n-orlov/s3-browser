@@ -114,6 +114,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "5.0.3",
+    "allure-playwright": "^3.13.0",
     "aws-sdk-client-mock": "^4.1.0",
     "aws-sdk-client-mock-vitest": "^7.0.1",
     "concurrently": "^10.0.6",
