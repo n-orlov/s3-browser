@@ -1,8 +1,15 @@
 // Ratchet gate: `npm run ratchet:check` fails when the lint --max-warnings ceiling rose or a vitest
-// coverage threshold fell relative to .ratchet.json. Run from the repository root.
+// coverage threshold fell, or crap-baseline.json holds more entries than allowed, relative to .ratchet.json. Run from the repository root.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { findImprovements, judgeRatchet, parseRatchet, readCoverageThresholds, readLintCeiling } from './ratchetCheck.ts';
+import {
+  findImprovements,
+  judgeRatchet,
+  parseRatchet,
+  readCoverageThresholds,
+  readCrapBaselineSize,
+  readLintCeiling,
+} from './ratchetCheck.ts';
 
 const root = process.cwd();
 const read = (name: string): string => readFileSync(path.join(root, name), 'utf8');
@@ -11,6 +18,7 @@ try {
   const ratchet = parseRatchet(read('.ratchet.json'));
   const current = {
     maxWarnings: readLintCeiling(read('package.json')),
+    crapBaselineMax: readCrapBaselineSize(read('crap-baseline.json')),
     coverageThresholds: readCoverageThresholds(read('vitest.config.ts')),
   };
   const violations = judgeRatchet(ratchet, current);

@@ -1,10 +1,13 @@
-// Pure ratchet logic: the lint warning ceiling is fixed at 0 (and must be recorded as 0), the coverage thresholds only go up.
+// Pure ratchet logic: the lint warning ceiling and the CRAP baseline size are fixed at 0 (and must be recorded as 0), the coverage thresholds only go up.
 export const REQUIRED_MAX_WARNINGS = 0;
+export const REQUIRED_CRAP_BASELINE_MAX = 0;
 export const THRESHOLD_KEYS = ['lines', 'functions', 'branches', 'statements'] as const;
 export type ThresholdKey = (typeof THRESHOLD_KEYS)[number];
 
 export interface RatchetValues {
   maxWarnings: number;
+  /** In .ratchet.json: the allowed number of crap-baseline.json entries. In the current values: the actual number of entries. */
+  crapBaselineMax: number;
   coverageThresholds: Record<ThresholdKey, number>;
 }
 
@@ -16,6 +19,15 @@ export function readLintCeiling(packageJsonText: string): number {
   const found = /--max-warnings(?:=|\s+)(\d+)/.exec(lint);
   if (!found) throw new Error(`the "lint" script has no --max-warnings value: ${lint}`);
   return Number(found[1]);
+}
+
+/** Reads the number of entries in the text of crap-baseline.json. */
+export function readCrapBaselineSize(crapBaselineText: string): number {
+  const parsed: unknown = JSON.parse(crapBaselineText);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('crap-baseline.json must be a JSON object');
+  }
+  return Object.keys(parsed).length;
 }
 
 /** Reads the four coverage thresholds out of the text of vitest.config.ts. */
@@ -36,6 +48,7 @@ export function parseRatchet(text: string): RatchetValues {
   const raw = JSON.parse(text) as Partial<RatchetValues>;
   const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
   if (!isNumber(raw.maxWarnings)) throw new Error('.ratchet.json needs a numeric "maxWarnings"');
+  if (!isNumber(raw.crapBaselineMax)) throw new Error('.ratchet.json needs a numeric "crapBaselineMax"');
   const thresholds = raw.coverageThresholds;
   if (typeof thresholds !== 'object' || thresholds === null) throw new Error('.ratchet.json needs "coverageThresholds"');
   const coverageThresholds = {} as Record<ThresholdKey, number>;
@@ -44,7 +57,7 @@ export function parseRatchet(text: string): RatchetValues {
     if (!isNumber(value)) throw new Error(`.ratchet.json coverageThresholds needs a numeric "${key}"`);
     coverageThresholds[key] = value;
   }
-  return { maxWarnings: raw.maxWarnings, coverageThresholds };
+  return { maxWarnings: raw.maxWarnings, crapBaselineMax: raw.crapBaselineMax, coverageThresholds };
 }
 
 /** Returns one message per regression; an empty list means the ratchet holds. */
@@ -55,6 +68,14 @@ export function judgeRatchet(ratchet: RatchetValues, current: RatchetValues): st
   }
   if (current.maxWarnings > ratchet.maxWarnings) {
     violations.push(`lint --max-warnings is ${current.maxWarnings}, above the ratchet ceiling ${ratchet.maxWarnings}`);
+  }
+  if (ratchet.crapBaselineMax !== REQUIRED_CRAP_BASELINE_MAX) {
+    violations.push(
+      `.ratchet.json records crapBaselineMax ${ratchet.crapBaselineMax}; the CRAP gate requires ${REQUIRED_CRAP_BASELINE_MAX}`,
+    );
+  }
+  if (current.crapBaselineMax > ratchet.crapBaselineMax) {
+    violations.push(`crap-baseline.json has ${current.crapBaselineMax} entries, above the ratchet ceiling ${ratchet.crapBaselineMax}`);
   }
   for (const key of THRESHOLD_KEYS) {
     if (current.coverageThresholds[key] < ratchet.coverageThresholds[key]) {
@@ -70,6 +91,9 @@ export function judgeRatchet(ratchet: RatchetValues, current: RatchetValues): st
 export function findImprovements(ratchet: RatchetValues, current: RatchetValues): string[] {
   const notes: string[] = [];
   if (current.maxWarnings < ratchet.maxWarnings) notes.push(`maxWarnings ${ratchet.maxWarnings} -> ${current.maxWarnings}`);
+  if (current.crapBaselineMax < ratchet.crapBaselineMax) {
+    notes.push(`crapBaselineMax ${ratchet.crapBaselineMax} -> ${current.crapBaselineMax}`);
+  }
   for (const key of THRESHOLD_KEYS) {
     if (current.coverageThresholds[key] > ratchet.coverageThresholds[key]) {
       notes.push(`${key} ${ratchet.coverageThresholds[key]} -> ${current.coverageThresholds[key]}`);
