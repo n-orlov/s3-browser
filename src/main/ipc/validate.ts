@@ -24,7 +24,7 @@ export interface ArgSpec {
 }
 
 const hasNul = (s: string): boolean => s.includes('\0');
-const byteLength = (s: string): number => Buffer.byteLength(s, 'utf8');
+const byteLength = (s: string): number => new TextEncoder().encode(s).length;
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
