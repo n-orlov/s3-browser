@@ -1,4 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import {
+  buildFolderMetadata,
+  formatSize,
+  getDetailRows,
+  getErrorMessage,
+  getName,
+  getTypeLabel,
+} from '../utils/propertiesFormat';
 
 export interface ObjectMetadata {
   key: string;
@@ -27,42 +35,160 @@ export interface PropertiesDialogProps {
   onClose: () => void;
 }
 
-/**
- * Format bytes into human readable size
- */
-function formatSize(bytes: number | undefined): string {
-  if (bytes === undefined || bytes === null) return '-';
-  if (bytes === 0) return '0 bytes';
-
-  const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
-  const base = 1024;
-  const exponent = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(base)),
-    units.length - 1
+function PropertyRow({
+  label,
+  children,
+  valueClass = 'property-value',
+}: {
+  label: string;
+  children: React.ReactNode;
+  valueClass?: string;
+}): React.ReactElement {
+  return (
+    <div className="property-row">
+      <span className="property-label">{label}:</span>
+      <span className={valueClass}>{children}</span>
+    </div>
   );
-
-  const value = bytes / Math.pow(base, exponent);
-  const formatted = exponent === 0 ? value.toString() : value.toFixed(2);
-
-  return `${formatted} ${units[exponent]}`;
 }
 
-/**
- * Format date to locale string
- */
-function formatDate(date: Date | string | undefined): string {
-  if (!date) return '-';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleString();
+function GeneralSection({
+  metadata,
+  bucket,
+  fileKey,
+  isFolder,
+}: {
+  metadata: ObjectMetadata;
+  bucket: string;
+  fileKey: string;
+  isFolder: boolean;
+}): React.ReactElement {
+  return (
+    <div className="properties-section">
+      <h4>General</h4>
+      <PropertyRow label="Name">{getName(fileKey)}</PropertyRow>
+      <PropertyRow label="Type">{getTypeLabel(isFolder, metadata.contentType)}</PropertyRow>
+      {!isFolder && <PropertyRow label="Size">{formatSize(metadata.contentLength)}</PropertyRow>}
+      <PropertyRow label="Bucket">{bucket}</PropertyRow>
+      <PropertyRow label="Key" valueClass="property-value property-value-wrap">
+        {fileKey}
+      </PropertyRow>
+    </div>
+  );
 }
 
-/**
- * Get the file/folder name from a key
- */
-function getName(key: string): string {
-  const normalized = key.endsWith('/') ? key.slice(0, -1) : key;
-  const lastSlash = normalized.lastIndexOf('/');
-  return lastSlash === -1 ? normalized : normalized.substring(lastSlash + 1);
+function UrlRow({
+  label,
+  url,
+  title,
+  valueClass,
+  onCopy,
+}: {
+  label: string;
+  url: string;
+  title: string;
+  valueClass: string;
+  onCopy: (url: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="property-row property-row-url">
+      <span className="property-label">{label}:</span>
+      <span className={valueClass}>{url}</span>
+      <button className="property-copy-btn" onClick={() => onCopy(url)} title={title}>
+        Copy
+      </button>
+    </div>
+  );
+}
+
+function UrlsSection({
+  metadata,
+  onCopy,
+}: {
+  metadata: ObjectMetadata;
+  onCopy: (url: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="properties-section">
+      <h4>URLs</h4>
+      <UrlRow
+        label="S3 URI"
+        url={metadata.s3Url}
+        title="Copy S3 URI"
+        valueClass="property-value property-value-mono"
+        onCopy={onCopy}
+      />
+      <UrlRow
+        label="HTTP URL"
+        url={metadata.httpUrl}
+        title="Copy HTTP URL"
+        valueClass="property-value property-value-mono property-value-wrap"
+        onCopy={onCopy}
+      />
+    </div>
+  );
+}
+
+function DetailsSection({ metadata }: { metadata: ObjectMetadata }): React.ReactElement {
+  return (
+    <div className="properties-section">
+      <h4>Details</h4>
+      {getDetailRows(metadata).map(({ label, value, mono }) => (
+        <PropertyRow
+          key={label}
+          label={label}
+          valueClass={mono ? 'property-value property-value-mono' : 'property-value'}
+        >
+          {value}
+        </PropertyRow>
+      ))}
+    </div>
+  );
+}
+
+function KeyValueSection({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: Record<string, string>;
+}): React.ReactElement | null {
+  const pairs = Object.entries(entries);
+  if (pairs.length === 0) return null;
+  return (
+    <div className="properties-section">
+      <h4>{title}</h4>
+      {pairs.map(([key, value]) => (
+        <PropertyRow key={key} label={key}>
+          {value}
+        </PropertyRow>
+      ))}
+    </div>
+  );
+}
+
+function PropertiesBody({
+  metadata,
+  bucket,
+  fileKey,
+  isFolder,
+  onCopy,
+}: {
+  metadata: ObjectMetadata;
+  bucket: string;
+  fileKey: string;
+  isFolder: boolean;
+  onCopy: (url: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="properties-grid">
+      <GeneralSection metadata={metadata} bucket={bucket} fileKey={fileKey} isFolder={isFolder} />
+      <UrlsSection metadata={metadata} onCopy={onCopy} />
+      {!isFolder && <DetailsSection metadata={metadata} />}
+      <KeyValueSection title="Tags" entries={metadata.tags} />
+      <KeyValueSection title="Custom Metadata" entries={metadata.customMetadata} />
+    </div>
+  );
 }
 
 function PropertiesDialog({
@@ -89,25 +215,18 @@ function PropertiesDialog({
           if (result.success && result.metadata) {
             setMetadata(result.metadata);
           } else {
-            setError(result.error || 'Failed to load metadata');
+            setError(getErrorMessage(result.error));
           }
         })
         .catch((err: Error) => {
-          setError(err.message || 'Failed to load metadata');
+          setError(getErrorMessage(err.message));
         })
         .finally(() => {
           setLoading(false);
         });
     } else if (isOpen && isFolder) {
       // For folders, we don't fetch metadata, just show basic info
-      setMetadata({
-        key: fileKey,
-        bucket,
-        s3Url: `s3://${bucket}/${fileKey}`,
-        httpUrl: `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(fileKey)}`,
-        tags: {},
-        customMetadata: {},
-      });
+      setMetadata(buildFolderMetadata(bucket, fileKey));
     }
   }, [isOpen, bucket, fileKey, isFolder]);
 
@@ -129,8 +248,6 @@ function PropertiesDialog({
     return null;
   }
 
-  const name = getName(fileKey);
-
   return (
     <div className="dialog-overlay" onClick={onClose} onKeyDown={handleKeyDown}>
       <div className="dialog dialog-properties" onClick={(e) => e.stopPropagation()}>
@@ -149,137 +266,13 @@ function PropertiesDialog({
             </div>
           )}
           {!loading && !error && metadata && (
-            <div className="properties-grid">
-              <div className="properties-section">
-                <h4>General</h4>
-                <div className="property-row">
-                  <span className="property-label">Name:</span>
-                  <span className="property-value">{name}</span>
-                </div>
-                <div className="property-row">
-                  <span className="property-label">Type:</span>
-                  <span className="property-value">{isFolder ? 'Folder' : (metadata.contentType || 'Unknown')}</span>
-                </div>
-                {!isFolder && (
-                  <div className="property-row">
-                    <span className="property-label">Size:</span>
-                    <span className="property-value">{formatSize(metadata.contentLength)}</span>
-                  </div>
-                )}
-                <div className="property-row">
-                  <span className="property-label">Bucket:</span>
-                  <span className="property-value">{bucket}</span>
-                </div>
-                <div className="property-row">
-                  <span className="property-label">Key:</span>
-                  <span className="property-value property-value-wrap">{fileKey}</span>
-                </div>
-              </div>
-
-              <div className="properties-section">
-                <h4>URLs</h4>
-                <div className="property-row property-row-url">
-                  <span className="property-label">S3 URI:</span>
-                  <span className="property-value property-value-mono">{metadata.s3Url}</span>
-                  <button
-                    className="property-copy-btn"
-                    onClick={() => handleCopyUrl(metadata.s3Url)}
-                    title="Copy S3 URI"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <div className="property-row property-row-url">
-                  <span className="property-label">HTTP URL:</span>
-                  <span className="property-value property-value-mono property-value-wrap">{metadata.httpUrl}</span>
-                  <button
-                    className="property-copy-btn"
-                    onClick={() => handleCopyUrl(metadata.httpUrl)}
-                    title="Copy HTTP URL"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              {!isFolder && (
-                <div className="properties-section">
-                  <h4>Details</h4>
-                  {metadata.lastModified && (
-                    <div className="property-row">
-                      <span className="property-label">Last Modified:</span>
-                      <span className="property-value">{formatDate(metadata.lastModified)}</span>
-                    </div>
-                  )}
-                  {metadata.etag && (
-                    <div className="property-row">
-                      <span className="property-label">ETag:</span>
-                      <span className="property-value property-value-mono">{metadata.etag}</span>
-                    </div>
-                  )}
-                  {metadata.storageClass && (
-                    <div className="property-row">
-                      <span className="property-label">Storage Class:</span>
-                      <span className="property-value">{metadata.storageClass}</span>
-                    </div>
-                  )}
-                  {metadata.versionId && (
-                    <div className="property-row">
-                      <span className="property-label">Version ID:</span>
-                      <span className="property-value property-value-mono">{metadata.versionId}</span>
-                    </div>
-                  )}
-                  {metadata.serverSideEncryption && (
-                    <div className="property-row">
-                      <span className="property-label">Encryption:</span>
-                      <span className="property-value">{metadata.serverSideEncryption}</span>
-                    </div>
-                  )}
-                  {metadata.contentEncoding && (
-                    <div className="property-row">
-                      <span className="property-label">Content Encoding:</span>
-                      <span className="property-value">{metadata.contentEncoding}</span>
-                    </div>
-                  )}
-                  {metadata.cacheControl && (
-                    <div className="property-row">
-                      <span className="property-label">Cache Control:</span>
-                      <span className="property-value">{metadata.cacheControl}</span>
-                    </div>
-                  )}
-                  {metadata.expires && (
-                    <div className="property-row">
-                      <span className="property-label">Expires:</span>
-                      <span className="property-value">{formatDate(metadata.expires)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {Object.keys(metadata.tags).length > 0 && (
-                <div className="properties-section">
-                  <h4>Tags</h4>
-                  {Object.entries(metadata.tags).map(([key, value]) => (
-                    <div key={key} className="property-row">
-                      <span className="property-label">{key}:</span>
-                      <span className="property-value">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {Object.keys(metadata.customMetadata).length > 0 && (
-                <div className="properties-section">
-                  <h4>Custom Metadata</h4>
-                  {Object.entries(metadata.customMetadata).map(([key, value]) => (
-                    <div key={key} className="property-row">
-                      <span className="property-label">{key}:</span>
-                      <span className="property-value">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <PropertiesBody
+              metadata={metadata}
+              bucket={bucket}
+              fileKey={fileKey}
+              isFolder={isFolder}
+              onCopy={handleCopyUrl}
+            />
           )}
         </div>
         <div className="dialog-actions">
