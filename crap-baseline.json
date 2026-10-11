@@ -1,4 +1,1 @@
-{
-  "src/renderer/hooks/useS3.ts:useS3.loadBuckets": 56,
-  "src/renderer/hooks/useS3.ts:useS3.loadObjects": 110
-}
+{}

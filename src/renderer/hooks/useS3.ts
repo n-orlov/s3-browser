@@ -1,4 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
+import {
+  LIST_BUCKETS_FALLBACK,
+  LIST_OBJECTS_FALLBACK,
+  buildObjectsRequest,
+  errorMessageOf,
+  resolveBucketsOutcome,
+} from '../utils/s3Listing';
 
 export interface S3Bucket {
   name: string;
@@ -62,17 +69,11 @@ export function useS3(currentProfile: string | null): UseS3Result {
     try {
       setBucketsLoading(true);
       setBucketsError(null);
-      const result = await window.electronAPI.s3.listBuckets();
-
-      if (!result.success) {
-        setBucketsError(result.error ?? 'Failed to list buckets');
-        setBuckets([]);
-        return;
-      }
-
-      setBuckets(result.buckets ?? []);
+      const outcome = resolveBucketsOutcome(await window.electronAPI.s3.listBuckets());
+      setBuckets(outcome.buckets);
+      setBucketsError(outcome.error);
     } catch (err) {
-      setBucketsError(err instanceof Error ? err.message : 'Failed to list buckets');
+      setBucketsError(errorMessageOf(err, LIST_BUCKETS_FALLBACK));
       setBuckets([]);
     } finally {
       setBucketsLoading(false);
@@ -99,16 +100,12 @@ export function useS3(currentProfile: string | null): UseS3Result {
         currentBucketRef.current = bucket;
         currentPrefixRef.current = prefix;
 
-        const result = await window.electronAPI.s3.listObjects({
-          bucket,
-          prefix,
-          delimiter: '/',
-          maxKeys: 100,
-          continuationToken: reset ? undefined : continuationTokenRef.current,
-        });
+        const result = await window.electronAPI.s3.listObjects(
+          buildObjectsRequest(bucket, prefix, reset, continuationTokenRef.current)
+        );
 
         if (!result.success) {
-          setObjectsError(result.error ?? 'Failed to list objects');
+          setObjectsError(result.error ?? LIST_OBJECTS_FALLBACK);
           return;
         }
 
@@ -124,7 +121,7 @@ export function useS3(currentProfile: string | null): UseS3Result {
           setObjects((prev) => [...prev, ...data.objects]);
         }
       } catch (err) {
-        setObjectsError(err instanceof Error ? err.message : 'Failed to list objects');
+        setObjectsError(errorMessageOf(err, LIST_OBJECTS_FALLBACK));
       } finally {
         setObjectsLoading(false);
       }
