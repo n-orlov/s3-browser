@@ -29,6 +29,41 @@ export interface AwsProfileContextValue {
   refreshProfiles: () => Promise<void>;
 }
 
+type InitialLoad =
+  | { ok: true; state: ProfileState; restoredProfile: string | null; restoreAttempted: boolean }
+  | { ok: false; message: string };
+
+type ProfileState = Awaited<ReturnType<typeof window.electronAPI.aws.getProfiles>>;
+
+async function restoreLastProfile(state: ProfileState): Promise<string | null> {
+  try {
+    const savedState = await window.electronAPI.appState.load();
+    const lastProfile = savedState.lastProfile;
+    if (!lastProfile) return null;
+    // Check if the saved profile exists and is valid
+    if (!state.profiles.find(p => p.name === lastProfile && p.isValid)) return null;
+    // Clear S3 client and select the saved profile
+    await window.electronAPI.s3.clearClient();
+    const result = await window.electronAPI.aws.setProfile(lastProfile);
+    return result.success ? lastProfile : null;
+  } catch (restoreErr) {
+    console.warn('Failed to restore saved profile:', restoreErr);
+    return null;
+  }
+}
+
+// Initial load run from the mount effect. It sets no React state itself: the
+// provider applies the result once it resolves.
+async function loadInitialProfiles(shouldRestore: boolean): Promise<InitialLoad> {
+  try {
+    const state = await window.electronAPI.aws.getProfiles();
+    const restoredProfile = shouldRestore ? await restoreLastProfile(state) : null;
+    return { ok: true, state, restoredProfile, restoreAttempted: shouldRestore };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Failed to load profiles' };
+  }
+}
+
 const AwsProfileContext = createContext<AwsProfileContextValue | null>(null);
 
 export function AwsProfileProvider({ children }: { children: ReactNode }): React.ReactElement {
@@ -39,47 +74,6 @@ export function AwsProfileProvider({ children }: { children: ReactNode }): React
   const [error, setError] = useState<string | null>(null);
   const [profileRestored, setProfileRestored] = useState(false);
   const restorationAttempted = useRef(false);
-
-  const loadProfiles = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const state = await window.electronAPI.aws.getProfiles();
-      setProfiles(state.profiles);
-      setCurrentProfile(state.currentProfile);
-      setDefaultRegion(state.defaultRegion);
-
-      // On first load, try to restore last used profile
-      if (!restorationAttempted.current) {
-        restorationAttempted.current = true;
-        try {
-          const savedState = await window.electronAPI.appState.load();
-          if (savedState.lastProfile) {
-            // Check if the saved profile exists and is valid
-            const savedProfileExists = state.profiles.find(
-              p => p.name === savedState.lastProfile && p.isValid
-            );
-            if (savedProfileExists) {
-              // Clear S3 client and select the saved profile
-              await window.electronAPI.s3.clearClient();
-              const result = await window.electronAPI.aws.setProfile(savedState.lastProfile);
-              if (result.success) {
-                setCurrentProfile(savedState.lastProfile);
-              }
-            }
-          }
-        } catch (restoreErr) {
-          console.warn('Failed to restore saved profile:', restoreErr);
-        }
-        setProfileRestored(true);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profiles');
-      setProfileRestored(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const selectProfile = useCallback(async (profileName: string) => {
     try {
@@ -114,8 +108,20 @@ export function AwsProfileProvider({ children }: { children: ReactNode }): React
   }, []);
 
   useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
+    const shouldRestore = !restorationAttempted.current;
+    restorationAttempted.current = true;
+    void loadInitialProfiles(shouldRestore).then((result) => {
+      if (result.ok) {
+        setProfiles(result.state.profiles);
+        setCurrentProfile(result.restoredProfile ?? result.state.currentProfile);
+        setDefaultRegion(result.state.defaultRegion);
+      } else {
+        setError(result.message);
+      }
+      if (!result.ok || result.restoreAttempted) setProfileRestored(true);
+      setLoading(false);
+    });
+  }, []);
 
   const value: AwsProfileContextValue = {
     profiles,

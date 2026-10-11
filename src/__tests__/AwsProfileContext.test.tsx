@@ -167,6 +167,58 @@ describe('AwsProfileContext', () => {
     });
   });
 
+  it('fetches profiles once when the provider mounts and exposes them', async () => {
+    function Probe() {
+      const { profiles, defaultRegion, profileRestored, loading } = useAwsProfiles();
+      return (
+        <div data-testid="probe">
+          {loading ? 'loading' : `${profiles.length}:${defaultRegion}:${profileRestored}`}
+        </div>
+      );
+    }
+
+    render(
+      <AwsProfileProvider>
+        <Probe />
+      </AwsProfileProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('probe')).toHaveTextContent('3:eu-west-1:true');
+    });
+    expect(mockElectronAPI.aws.getProfiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the last used profile after the initial load', async () => {
+    mockElectronAPI.appState.load.mockResolvedValueOnce({ lastProfile: 'prod', lastBucket: null, lastPrefix: '' });
+
+    render(
+      <AwsProfileProvider>
+        <TestProfileConsumer />
+      </AwsProfileProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-profile')).toHaveTextContent('prod');
+    });
+    expect(mockElectronAPI.s3.clearClient).toHaveBeenCalledTimes(1);
+    expect(mockElectronAPI.aws.setProfile).toHaveBeenCalledWith('prod');
+  });
+
+  it('reports an error when the initial profile load fails', async () => {
+    mockElectronAPI.aws.getProfiles.mockRejectedValue(new Error('config unreadable'));
+
+    render(
+      <AwsProfileProvider>
+        <TestProfileConsumer />
+      </AwsProfileProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error')).toHaveTextContent('config unreadable');
+    });
+  });
+
   it('throws error when used outside provider', () => {
     // Suppress console.error for this test
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
