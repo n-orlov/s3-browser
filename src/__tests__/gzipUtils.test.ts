@@ -47,6 +47,10 @@ describe('gzipUtils', () => {
       expect(getBaseExtension('.gz')).toBe('');
       expect(getBaseExtension('file.gz')).toBe('file');
       expect(getBaseExtension('')).toBe('');
+      expect(getBaseExtension('a.b.c.gz')).toBe('c');
+      expect(getBaseExtension('dir.v1/file.TXT')).toBe('txt');
+      expect(getBaseExtension('trailing.')).toBe('');
+      expect(getBaseExtension('x..gz')).toBe('');
     });
   });
 
@@ -171,6 +175,8 @@ describe('gzipUtils', () => {
       const err = await decompressGzip(bomb, 1_000).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(GzipOutputTooLargeError);
       expect((err as Error).message).toContain('1000 bytes');
+      expect((err as Error).name).toBe('GzipOutputTooLargeError');
+      expect((err as GzipOutputTooLargeError).limit).toBe(1_000);
     });
 
     it('rejects a real default-cap bomb (50 MB + 1 of zeros, ~50 KB compressed)', async () => {

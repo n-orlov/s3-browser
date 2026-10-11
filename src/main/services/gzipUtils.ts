@@ -25,13 +25,16 @@ export function getBaseExtension(key: string): string {
 
   // If it ends with .gz, get the extension before .gz
   if (lowerKey.endsWith('.gz')) {
-    const withoutGz = key.slice(0, -3);
-    const ext = withoutGz.split('.').pop()?.toLowerCase() ?? '';
-    return ext;
+    return lastDotSegment(key.slice(0, -3)).toLowerCase();
   }
 
   // Otherwise just get the last extension
-  return key.split('.').pop()?.toLowerCase() ?? '';
+  return lastDotSegment(key).toLowerCase();
+}
+
+/** The text after the last '.', or the whole string when it has no '.'. */
+function lastDotSegment(text: string): string {
+  return text.slice(text.lastIndexOf('.') + 1);
 }
 
 /** Raised when gunzip output would exceed the configured cap (gzip bomb guard). */
@@ -70,7 +73,7 @@ export async function decompressGzip(
  * @returns The gzip compressed buffer
  */
 export async function compressGzip(content: string): Promise<Buffer> {
-  const buffer = Buffer.from(content, 'utf-8');
+  const buffer = Buffer.from(content);
   const compressed = await gzipAsync(buffer);
   return compressed;
 }
