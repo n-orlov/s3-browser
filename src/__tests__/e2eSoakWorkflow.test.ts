@@ -17,6 +17,7 @@ type Job = {
   "runs-on"?: unknown;
   steps?: Step[];
   strategy?: { matrix?: { shard?: number[] } };
+  "timeout-minutes"?: number;
 };
 type Workflow = {
   on?: {
@@ -203,5 +204,81 @@ describe("playwright.config.ts under the soak", () => {
     expect(
       checkConfig(configText.replace(/timeout:\s*10000/, "timeout: 20000")),
     ).toEqual(["expect.timeout is 20000, expected 10000"]);
+  });
+});
+
+/** The `timeout-minutes` every ci.yml job that predates the soak carried; a larger value is a raised bound. */
+const CI_TIMEOUT_CEILINGS: Record<string, number> = {
+  quality: 20,
+  e2e: 40,
+  report: 15,
+  gate: 5,
+  publish: 10,
+};
+/** The soak job's own bound: sized for repeat x suite time, and the ceiling it may not exceed. */
+const SOAK_TIMEOUT_MINUTES = 180;
+
+/** One message per job whose timeout is missing or above its ceiling (ci.yml jobs and the soak job). */
+function timeoutProblems(ci: Workflow, soak: Workflow): string[] {
+  const problems: string[] = [];
+  for (const [name, ceiling] of Object.entries(CI_TIMEOUT_CEILINGS)) {
+    const value = ci.jobs?.[name]?.["timeout-minutes"];
+    if (typeof value !== "number" || value > ceiling)
+      problems.push(
+        `ci.yml job ${name} timeout-minutes is ${String(value)}, expected at most ${ceiling}`,
+      );
+  }
+  const soakValue = soakJob(soak)["timeout-minutes"];
+  if (typeof soakValue !== "number" || soakValue > SOAK_TIMEOUT_MINUTES)
+    problems.push(
+      `soak timeout-minutes is ${String(soakValue)}, expected at most ${SOAK_TIMEOUT_MINUTES}`,
+    );
+  return problems;
+}
+
+describe("workflow timeouts are not raised", () => {
+  const ci = parse(ciText) as Workflow;
+  const soak = parse(soakText) as Workflow;
+
+  it("keeps ci.yml's e2e job at 40 minutes and the soak job at 180", () => {
+    expect(ci.jobs?.e2e?.["timeout-minutes"]).toBe(40);
+    expect(soakJob(soak)["timeout-minutes"]).toBe(180);
+    expect(timeoutProblems(ci, soak)).toEqual([]);
+  });
+
+  it("fails for a copy with the e2e timeout raised to 41", () => {
+    const copy = parse(
+      ciText.replace(/timeout-minutes: 40\b/, "timeout-minutes: 41"),
+    ) as Workflow;
+    expect(timeoutProblems(copy, soak)).toEqual([
+      "ci.yml job e2e timeout-minutes is 41, expected at most 40",
+    ]);
+  });
+
+  it("fails for a soak timeout raised to 181 or removed", () => {
+    const raised = parse(
+      soakText.replace(/timeout-minutes: 180\b/, "timeout-minutes: 181"),
+    ) as Workflow;
+    expect(timeoutProblems(ci, raised)).toEqual([
+      "soak timeout-minutes is 181, expected at most 180",
+    ]);
+    const removed = parse(
+      soakText.replace(/^\s*timeout-minutes: 180\n/m, ""),
+    ) as Workflow;
+    expect(timeoutProblems(ci, removed)).toEqual([
+      "soak timeout-minutes is undefined, expected at most 180",
+    ]);
+  });
+
+  it("fails for a raised quality or report job (other jobs of the same rule)", () => {
+    const copy = parse(
+      ciText
+        .replace(/timeout-minutes: 20\b/, "timeout-minutes: 30")
+        .replace(/timeout-minutes: 15\b/, "timeout-minutes: 16"),
+    ) as Workflow;
+    expect(timeoutProblems(copy, soak)).toEqual([
+      "ci.yml job quality timeout-minutes is 30, expected at most 20",
+      "ci.yml job report timeout-minutes is 16, expected at most 15",
+    ]);
   });
 });
