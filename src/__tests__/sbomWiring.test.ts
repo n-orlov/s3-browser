@@ -7,7 +7,7 @@ const SBOM_PATH = "sbom/sbom.cdx.json";
 
 type Step = { name?: string; uses?: string; run?: string; if?: string; with?: Record<string, unknown> };
 type Workflow = { jobs?: Record<string, { steps?: Step[] }> };
-type Pkg = { scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+type Pkg = { engines?: { node?: string }; scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
 
 const root = path.resolve(__dirname, "../..");
 const readText = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -51,6 +51,32 @@ function releaseProblems(wf: Workflow): string[] {
   return problems;
 }
 
+/** Major of the lowest Node a `>=N` / `N.x` / `N` spec admits. */
+const nodeMajor = (spec: string | undefined): number => Number(/(\d+)/.exec(spec ?? "")?.[1] ?? Number.NaN);
+
+/** One problem per setup-node step (in the given jobs) that selects a Node older than package.json's `engines.node`, and per release job that runs `npm test` after the SBOM. */
+function nodeProblems(wf: Workflow, p: Pkg, jobs: string[], checkOrder: boolean): string[] {
+  const required = nodeMajor(p.engines?.node);
+  const problems: string[] = [];
+  if (Number.isNaN(required)) return ["package.json has no engines.node"];
+  for (const job of jobs) {
+    const steps = stepsOf(wf, job);
+    const setups = steps.filter((s) => s.uses?.startsWith("actions/setup-node@"));
+    if (setups.length === 0) problems.push(`${job} has no setup-node step`);
+    for (const s of setups) {
+      if (!(nodeMajor(withText(s, "node-version")) >= required)) {
+        problems.push(`${job} selects Node ${withText(s, "node-version")}, below engines.node ${p.engines?.node}`);
+      }
+    }
+    if (checkOrder) {
+      const test = steps.findIndex((s) => s.run?.trim() === "npm test");
+      const sbom = steps.findIndex((s) => s.run?.trim() === "npm run sbom");
+      if (test < 0 || sbom < 0 || test > sbom) problems.push(`${job} does not run npm test before npm run sbom`);
+    }
+  }
+  return problems;
+}
+
 const ci = parse(readText(".github/workflows/ci.yml")) as Workflow;
 const release = parse(readText(".github/workflows/release.yml")) as Workflow;
 
@@ -90,5 +116,24 @@ describe("SBOM wiring", () => {
     expect(scriptProblems(moved)).toContain("cyclonedx-npm is listed under dependencies");
     const noOmit: Pkg = { ...pkg, scripts: { sbom: `cyclonedx-npm --output-file ${SBOM_PATH}` } };
     expect(scriptProblems(noOmit)).toContain("sbom script does not omit dev dependencies");
+  });
+
+  it("release.yml runs its tests and builds on a Node at least engines.node, in every job that sets Node up", () => {
+    expect(nodeProblems(release, pkg, ["build-linux", "build-macos"], false)).toEqual([]);
+    expect(nodeProblems(release, pkg, ["build-linux"], true)).toEqual([]);
+    expect(nodeProblems(ci, pkg, ["release-dryrun"], false)).toEqual([]);
+  });
+
+  it("fails when a release job selects a Node below engines.node or tests after the SBOM", () => {
+    const old = structuredClone(release);
+    for (const s of stepsOf(old, "build-macos")) if (s.with?.["node-version"]) s.with["node-version"] = "20.x";
+    expect(nodeProblems(old, pkg, ["build-macos"], false)).toEqual(["build-macos selects Node 20.x, below engines.node >=22"]);
+    const reordered = structuredClone(release);
+    const steps = reordered.jobs!["build-linux"].steps!;
+    steps.push(...steps.splice(steps.findIndex((s) => s.run?.trim() === "npm test"), 1));
+    expect(nodeProblems(reordered, pkg, ["build-linux"], true)).toEqual(["build-linux does not run npm test before npm run sbom"]);
+    const noSetup = structuredClone(release);
+    noSetup.jobs!["build-windows"].steps = [];
+    expect(nodeProblems(noSetup, pkg, ["build-windows"], false)).toEqual(["build-windows has no setup-node step"]);
   });
 });

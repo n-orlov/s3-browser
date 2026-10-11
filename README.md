@@ -72,7 +72,7 @@ Download the latest release for your platform from the [Releases page](https://g
 
 #### Prerequisites
 
-- Node.js 20.x or later
+- Node.js 22.x or later
 - npm 10.x or later
 - Git
 
