@@ -20,6 +20,11 @@ describe('crapScore', () => {
     expect(() => crapScore(3, NaN)).toThrow(RangeError);
   });
 
+  it('names the offending value in the RangeError message', () => {
+    expect(() => crapScore(-1, 0.5)).toThrow('complexity must be a non-negative number, got -1');
+    expect(() => crapScore(3, 1.5)).toThrow('coverage must be a fraction between 0 and 1, got 1.5');
+  });
+
   it('scores each function and keeps its metrics', () => {
     expect(scoreFunctions([{ id: 'a', complexity: 5, coverage: 0.5 }])).toEqual([
       { id: 'a', complexity: 5, coverage: 0.5, crap: 8.125 },
@@ -52,6 +57,19 @@ describe('judgeCrap', () => {
 
   it('passes a baselined function at its baseline', () => {
     expect(judgeCrap([over], { max: 30, baseline: { [over.id]: 110 } }).ok).toBe(true);
+  });
+
+  it('passes a baselined function that exceeds its entry by exactly the rounding slack', () => {
+    // 110 === 109.999999 + 1e-6 in floating point, so the score sits exactly on the tolerance edge.
+    expect(judgeCrap([over], { baseline: { [over.id]: 110 - 1e-6 } }).ok).toBe(true);
+    expect(judgeCrap([over], { baseline: { [over.id]: 110 - 2e-6 } }).ok).toBe(false);
+  });
+
+  it('passes a non-baselined function that exceeds the limit by exactly the rounding slack', () => {
+    const atLimit = { id: 'src/main/a.ts:atLimit', complexity: 5, coverage: 0 }; // crap 30
+    expect(judgeCrap([atLimit]).ok).toBe(true);
+    expect(judgeCrap([atLimit], { max: 30 - 1e-6 }).ok).toBe(true);
+    expect(judgeCrap([atLimit], { max: 30 - 2e-6 }).ok).toBe(false);
   });
 
   it('passes a baselined function below its baseline', () => {
