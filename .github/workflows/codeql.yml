@@ -1,0 +1,72 @@
+name: CodeQL
+
+# Static analysis (CodeQL, `security-extended` suite) on GitHub-hosted runners only; no self-hosted runner is used.
+#   * `push` to master and a weekly `schedule` analyse and upload to code scanning (job `analyze`).
+#   * `pull_request` analyses the PR head (job `analyze-pr`) but never uploads (`upload: never`) and holds no write
+#     permission, so code reachable from a pull request never runs next to `security-events: write`.
+#     Like ci.yml it runs only for same-repo PRs opened by the owner.
+# Needs the repository's CodeQL "default setup" to stay not-configured; an advanced workflow conflicts with it.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: CodeQL analyze and upload (javascript-typescript)
+    # Job permissions cannot be conditional, so the one write permission lives in the one job a pull request
+    # cannot reach.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:javascript-typescript
+
+  analyze-pr:
+    name: CodeQL analyze, no upload (javascript-typescript)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'n-orlov' &&
+      github.actor == 'n-orlov'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:javascript-typescript
+          upload: never

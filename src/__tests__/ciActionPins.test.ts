@@ -24,7 +24,7 @@ function unpinnedActions(workflow: unknown): string[] {
   return problems;
 }
 
-const WORKFLOWS = ["ci.yml", "release.yml"];
+const WORKFLOWS = ["ci.yml", "release.yml", "codeql.yml"];
 
 describe.each(WORKFLOWS)("%s action pinning", (file) => {
   const text = readFileSync(
