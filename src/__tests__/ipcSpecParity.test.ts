@@ -49,6 +49,25 @@ function diff(a: string[], b: string[]): string[] {
   return a.filter(x => !set.has(x)).sort();
 }
 
+/** The "IPC input" bullet of SPEC.md section 3, or null. */
+export function specIpcInputBullet(spec: string): string | null {
+  const line = spec.split('\n').find(l => l.startsWith('- **IPC input.**'));
+  return line ?? null;
+}
+
+/** Lines of SPEC.md that state or imply that handlers do not validate arguments at runtime. */
+export function negatedValidationClaims(spec: string): string[] {
+  const patterns = [
+    /\b(?:do|does|did)\s+not\s+validate\b/i,
+    /\b(?:not|never)\s+(?:checked|validated|verified)\b[^.]*\bat runtime\b/i,
+    /\bunvalidated\b/i,
+    /\bwithout\s+(?:runtime\s+)?validation\b/i,
+    /\bwith TypeScript only\b/i,
+    /\bTypeScript\s+(?:types\s+)?only\b/i,
+  ];
+  return spec.split('\n').filter(l => patterns.some(p => p.test(l)));
+}
+
 describe('IPC channel parity', () => {
   let registered: string[];
 
@@ -85,6 +104,32 @@ describe('IPC channel parity', () => {
       fs.readFileSync(path.join(root, 'src/preload/index.ts'), 'utf-8')
     );
     expect(diff(registered, invoked), 'registered but never invoked by preload').toEqual([]);
+  });
+
+  describe('SPEC.md on runtime argument validation', () => {
+    const spec = fs.readFileSync(path.join(root, 'SPEC.md'), 'utf-8');
+
+    it('section 3 "IPC input" states that handlers validate through validate.ts', () => {
+      const bullet = specIpcInputBullet(spec);
+      expect(bullet, 'section 3 has no "IPC input" bullet').not.toBeNull();
+      expect(bullet).toContain('src/main/ipc/validate.ts');
+      expect(bullet).toMatch(/validates/);
+      expect(bullet).toMatch(/at runtime/);
+      expect(bullet).toMatch(/before doing any work/);
+    });
+
+    it('no passage says or implies that handlers skip runtime validation', () => {
+      expect(negatedValidationClaims(spec)).toEqual([]);
+    });
+
+    it('the detector flags contradicting wordings and accepts the real ones', () => {
+      expect(negatedValidationClaims('Handlers do not validate the shape of arguments.')).toHaveLength(1);
+      expect(negatedValidationClaims('Arguments are not checked at runtime.')).toHaveLength(1);
+      expect(negatedValidationClaims('Handlers type parameters with TypeScript only.')).toHaveLength(1);
+      expect(negatedValidationClaims('Inputs are unvalidated.')).toHaveLength(1);
+      expect(negatedValidationClaims('Every handler validates its arguments at runtime.')).toEqual([]);
+      expect(negatedValidationClaims('Invalid arguments never reach these paths.')).toEqual([]);
+    });
   });
 
   describe('channel extraction helpers', () => {
