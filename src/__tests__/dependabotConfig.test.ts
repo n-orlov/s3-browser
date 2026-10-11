@@ -52,7 +52,28 @@ const config = parse(readFileSync(file, "utf-8")) as {
   updates: Record<string, unknown>[];
 };
 
+/** True when the npm entry ignores typescript major 7 (typescript-eslint peers typescript <6.1.0). */
+function ignoresTypescript7(cfg: { updates: Record<string, unknown>[] }): boolean {
+  const npm = cfg.updates.find((u) => u["package-ecosystem"] === "npm") as
+    | { ignore?: { "dependency-name"?: string; versions?: string[] }[] }
+    | undefined;
+  return (npm?.ignore ?? []).some(
+    (i) => i["dependency-name"] === "typescript" && (i.versions ?? []).includes("7.x"),
+  );
+}
+
 describe(".github/dependabot.yml", () => {
+  it("ignores typescript major 7 on the npm entry", () => {
+    expect(ignoresTypescript7(config)).toBe(true);
+  });
+
+  it("detects a removed typescript 7 ignore", () => {
+    const broken = structuredClone(config);
+    delete broken.updates[0].ignore;
+    expect(ignoresTypescript7(broken)).toBe(false);
+  });
+
+
   it("covers npm and github-actions weekly with grouped minor/patch updates", () => {
     expect(dependabotProblems(config)).toEqual([]);
   });

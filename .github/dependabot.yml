@@ -9,6 +9,11 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # typescript-eslint peers typescript <6.1.0 and TypeScript 7 ships no classic compiler API it can load.
+      - dependency-name: typescript
+        versions:
+          - 7.x
   - package-ecosystem: github-actions
     directory: /
     schedule:
