@@ -14,6 +14,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { Readable } from 'stream';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import {
   S3Client,
   ListBucketsCommand,
@@ -67,6 +70,9 @@ import {
   listAllObjects,
   downloadContent,
   downloadBinaryContent,
+  downloadFile,
+  buildDownloadProgress,
+  toErrorMessage,
   uploadContent,
   deleteFile,
   deleteFiles,
@@ -427,6 +433,129 @@ describe('S3 Service Mock Integration Tests', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('downloadFile', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 's3b-download-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('writes the object to disk, creating missing directories, and reports progress', async () => {
+      const content = 'file body to download';
+      s3Mock.on(HeadObjectCommand).resolves({ ContentLength: content.length });
+      s3Mock.on(GetObjectCommand).resolves({ Body: createMockStream(content) });
+      const onProgress = vi.fn();
+      const dest = path.join(tmpDir, 'nested', 'deeper', 'out.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'a/out.txt', dest, onProgress);
+
+      expect(result).toEqual({ success: true });
+      expect(fs.readFileSync(dest, 'utf-8')).toBe(content);
+      expect(onProgress).toHaveBeenCalled();
+      expect(onProgress).toHaveBeenLastCalledWith({
+        loaded: content.length,
+        total: content.length,
+        percentage: 100,
+      });
+      expect(s3Mock.commandCalls(GetObjectCommand)[0].args[0].input).toEqual({
+        Bucket: 'test-bucket',
+        Key: 'a/out.txt',
+      });
+    });
+
+    it('succeeds without a progress callback', async () => {
+      s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 3 });
+      s3Mock.on(GetObjectCommand).resolves({ Body: createMockStream('abc') });
+      const dest = path.join(tmpDir, 'plain.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'plain.txt', dest);
+
+      expect(result.success).toBe(true);
+      expect(fs.readFileSync(dest, 'utf-8')).toBe('abc');
+    });
+
+    it('does not report progress when the content length is unknown', async () => {
+      s3Mock.on(HeadObjectCommand).resolves({});
+      s3Mock.on(GetObjectCommand).resolves({ Body: createMockStream('abc') });
+      const onProgress = vi.fn();
+      const dest = path.join(tmpDir, 'unknown.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'k', dest, onProgress);
+
+      expect(result.success).toBe(true);
+      expect(onProgress).not.toHaveBeenCalled();
+      expect(fs.readFileSync(dest, 'utf-8')).toBe('abc');
+    });
+
+    it('fails with "Empty response body" and leaves no file when the body is missing', async () => {
+      s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 5 });
+      s3Mock.on(GetObjectCommand).resolves({ Body: undefined });
+      const dest = path.join(tmpDir, 'empty.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'k', dest);
+
+      expect(result).toEqual({ success: false, error: 'Empty response body' });
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+
+    it('returns the SDK error message when the object is missing', async () => {
+      s3Mock
+        .on(HeadObjectCommand)
+        .rejects(new NoSuchKey({ message: 'The specified key does not exist.', $metadata: {} }));
+      const dest = path.join(tmpDir, 'missing.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'missing', dest);
+
+      expect(result).toEqual({ success: false, error: 'The specified key does not exist.' });
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+
+    it('removes a partially written file when the stream fails midway', async () => {
+      s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 10 });
+      const failing = new Readable({
+        read() {
+          this.push('partial');
+          this.destroy(new Error('connection reset'));
+        },
+      });
+      s3Mock.on(GetObjectCommand).resolves({ Body: failing as never });
+      const dest = path.join(tmpDir, 'partial.txt');
+
+      const result = await downloadFile('test-profile', 'test-bucket', 'k', dest);
+
+      expect(result).toEqual({ success: false, error: 'connection reset' });
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+  });
+
+  describe('buildDownloadProgress', () => {
+    it.each([
+      { loaded: 0, total: 100, expected: { loaded: 0, total: 100, percentage: 0 } },
+      { loaded: 1, total: 3, expected: { loaded: 1, total: 3, percentage: 33 } },
+      { loaded: 2, total: 3, expected: { loaded: 2, total: 3, percentage: 67 } },
+      { loaded: 50, total: 50, expected: { loaded: 50, total: 50, percentage: 100 } },
+      { loaded: 5, total: 0, expected: null },
+      { loaded: 5, total: -1, expected: null },
+    ])('loaded $loaded of $total -> $expected', ({ loaded, total, expected }) => {
+      expect(buildDownloadProgress(loaded, total)).toEqual(expected);
+    });
+  });
+
+  describe('toErrorMessage', () => {
+    it.each([
+      { name: 'Error instance', input: new Error('boom'), expected: 'boom' },
+      { name: 'string', input: 'boom', expected: 'Unknown error occurred' },
+      { name: 'null', input: null, expected: 'Unknown error occurred' },
+      { name: 'plain object', input: { message: 'x' }, expected: 'Unknown error occurred' },
+    ])('$name -> $expected', ({ input, expected }) => {
+      expect(toErrorMessage(input)).toBe(expected);
     });
   });
 

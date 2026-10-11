@@ -390,6 +390,23 @@ export interface FileOperationResult {
 }
 
 /**
+ * Builds a progress report, or null when the total size is unknown (not positive).
+ */
+export function buildDownloadProgress(loaded: number, total: number): DownloadProgress | null {
+  if (total <= 0) {
+    return null;
+  }
+  return { loaded, total, percentage: Math.round((loaded / total) * 100) };
+}
+
+/**
+ * Converts an unknown thrown value into a user-facing message.
+ */
+export function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error occurred';
+}
+
+/**
  * Downloads a file from S3 to local filesystem
  * @param profileName - The AWS profile name to use
  * @param bucket - The S3 bucket name
@@ -444,12 +461,9 @@ export async function downloadFile(
 
     bodyStream.on('data', (chunk: Buffer) => {
       loaded += chunk.length;
-      if (onProgress && totalSize > 0) {
-        onProgress({
-          loaded,
-          total: totalSize,
-          percentage: Math.round((loaded / totalSize) * 100),
-        });
+      const progress = buildDownloadProgress(loaded, totalSize);
+      if (progress) {
+        onProgress?.(progress);
       }
     });
 
@@ -465,7 +479,7 @@ export async function downloadFile(
       // Ignore cleanup errors
     }
 
-    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const message = toErrorMessage(error);
     return { success: false, error: message };
   }
 }

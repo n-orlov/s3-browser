@@ -1,5 +1,4 @@
 {
-  "src/main/services/s3Service.ts:downloadFile": 42,
   "src/renderer/App.tsx:App.handleConfirmDelete": 182,
   "src/renderer/App.tsx:App.handleConfirmNewItem": 42,
   "src/renderer/components/CsvViewer.tsx:CsvViewer.handleScroll": 42,
