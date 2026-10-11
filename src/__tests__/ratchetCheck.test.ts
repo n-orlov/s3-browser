@@ -201,12 +201,26 @@ describe('ratchet:check CLI', () => {
     expect(result.status).toBe(0);
     // The warning ceiling is recorded as 0; the floors may not move below the locked values.
     const committed = parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'));
-    const locked = { lines: 84, functions: 83, branches: 72, statements: 83 };
+    const locked = { lines: 84, functions: 83, branches: 74, statements: 83 };
     for (const key of Object.keys(locked) as (keyof typeof locked)[]) {
       expect(committed.coverageThresholds[key]).toBeGreaterThanOrEqual(locked[key]);
     }
     expect(committed.maxWarnings).toBe(0);
     expect(committed.crapBaselineMax).toBe(0);
     expect(readCrapBaselineSize(readFileSync(path.join(repo, 'crap-baseline.json'), 'utf8'))).toBe(0);
+  });
+
+  it('keeps the vitest thresholds and the recorded floors equal, never below the prescribed branch level of 73', () => {
+    const committed = parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'));
+    const enforced = readCoverageThresholds(readFileSync(path.join(repo, 'vitest.config.ts'), 'utf8'));
+    expect(enforced).toEqual(committed.coverageThresholds);
+    expect(enforced.branches).toBeGreaterThanOrEqual(73);
+  });
+
+  it('documents the enforced thresholds in SPEC.md', () => {
+    const enforced = readCoverageThresholds(readFileSync(path.join(repo, 'vitest.config.ts'), 'utf8'));
+    const spec = readFileSync(path.join(repo, 'SPEC.md'), 'utf8');
+    const text = `lines ${enforced.lines}, functions ${enforced.functions}, branches ${enforced.branches}, statements ${enforced.statements}`;
+    expect(spec).toContain(text);
   });
 });
