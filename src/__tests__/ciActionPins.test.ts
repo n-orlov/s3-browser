@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import path from "path";
 import { parse } from "yaml";
 
@@ -24,13 +24,21 @@ function unpinnedActions(workflow: unknown): string[] {
   return problems;
 }
 
-const WORKFLOWS = ["ci.yml", "release.yml", "codeql.yml"];
+const WORKFLOWS_DIR = path.resolve(__dirname, "../../.github/workflows");
+const WORKFLOWS = readdirSync(WORKFLOWS_DIR)
+  .filter((f) => /\.ya?ml$/.test(f))
+  .sort();
+
+describe("workflow listing", () => {
+  it("covers every workflow file in .github/workflows, including ci, release and codeql", () => {
+    expect(WORKFLOWS).toEqual(
+      expect.arrayContaining(["ci.yml", "release.yml", "codeql.yml"]),
+    );
+  });
+});
 
 describe.each(WORKFLOWS)("%s action pinning", (file) => {
-  const text = readFileSync(
-    path.resolve(__dirname, "../../.github/workflows", file),
-    "utf8",
-  );
+  const text = readFileSync(path.join(WORKFLOWS_DIR, file), "utf8");
 
   it("pins every uses: ref to a full commit SHA", () => {
     expect(unpinnedActions(parse(text))).toEqual([]);
