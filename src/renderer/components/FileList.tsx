@@ -6,6 +6,9 @@ import FileListControls, {
   filterByType,
   filterBySearch,
 } from './FileListControls';
+import { usePendingFileSelection, type PendingFileSelection } from './usePendingFileSelection';
+import { useResettingState } from './useResettingState';
+import { useObjectListing } from './useObjectListing';
 import { FOLDER_ICON, getIconForExtension, getKeyExtension } from '../utils/fileIcons';
 
 export interface S3Object {
@@ -15,14 +18,6 @@ export interface S3Object {
   etag?: string;
   storageClass?: string;
   isPrefix: boolean;
-}
-
-/** State for tracking file search progress during URL navigation */
-interface FileSearchState {
-  isSearching: boolean;
-  targetKey: string;
-  loadedCount: number;
-  cancelled: boolean;
 }
 
 export interface FileListProps {
@@ -78,6 +73,34 @@ function getFileIcon(key: string, isPrefix: boolean): string {
   return getIconForExtension(getKeyExtension(key));
 }
 
+/** Progress overlay shown while further pages are loaded to find the pending file. */
+function FileSearchOverlay({
+  search,
+  loadedCount,
+}: {
+  search: PendingFileSelection;
+  loadedCount: number;
+}): React.ReactElement | null {
+  if (!search.isSearching) return null;
+  return (
+    <div className="file-search-overlay">
+      <div className="file-search-progress">
+        <span className="loading-spinner"></span>
+        <div className="file-search-info">
+          <span className="file-search-title">Searching for file...</span>
+          <span className="file-search-detail">Loaded {loadedCount} items</span>
+          <span className="file-search-target" title={search.targetKey}>
+            {search.targetKey.split('/').pop()}
+          </span>
+        </div>
+        <button className="file-search-cancel" onClick={search.cancel} title="Cancel search">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FileList({
   currentProfile,
   selectedBucket,
@@ -94,14 +117,8 @@ function FileList({
   onItemCountChange,
   onDownloadFile,
 }: FileListProps): React.ReactElement {
-  const [items, setItems] = useState<S3Object[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Location ("bucket|prefix") whose first page has finished loading. The pending-selection
-  // effect must not run against the previous location's (empty) items before this catches up.
-  const [loadedLocation, setLoadedLocation] = useState<string | null>(null);
+  const listing = useObjectListing(currentProfile, selectedBucket, currentPrefix);
+  const { items, loading, error, hasMore, loadMore, reload } = listing;
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Sorting and filtering state
@@ -110,99 +127,24 @@ function FileList({
     direction: 'asc',
   });
   const [filterType, setFilterType] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  // The search box is cleared when navigating to a new location
+  const [searchQuery, setSearchQuery] = useResettingState(
+    '',
+    `${selectedBucket}|${currentPrefix}`
+  );
 
-  // State for file search during URL navigation
-  const [fileSearchState, setFileSearchState] = useState<FileSearchState>({
-    isSearching: false,
-    targetKey: '',
-    loadedCount: 0,
-    cancelled: false,
-  });
-
-  const continuationTokenRef = useRef<string | undefined>(undefined);
   const listContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   // Track last clicked index for shift+click range selection
   const lastClickedIndexRef = useRef<number>(-1);
 
-  const loadObjects = useCallback(
-    async (reset = true) => {
-      if (!currentProfile || !selectedBucket) {
-        setItems([]);
-        return;
-      }
-
-      try {
-        if (reset) {
-          setLoading(true);
-          setItems([]);
-          continuationTokenRef.current = undefined;
-        } else {
-          setLoadingMore(true);
-        }
-        setError(null);
-
-        const result = await window.electronAPI.s3.listObjects({
-          bucket: selectedBucket,
-          prefix: currentPrefix,
-          delimiter: '/',
-          maxKeys: 100,
-          continuationToken: reset ? undefined : continuationTokenRef.current,
-        });
-
-        if (!result.success) {
-          setError(result.error ?? 'Failed to list objects');
-          return;
-        }
-
-        const data = result.result!;
-        continuationTokenRef.current = data.continuationToken;
-        setHasMore(data.isTruncated);
-
-        // Combine prefixes and objects - prefixes first
-        const combined = [...data.prefixes, ...data.objects];
-
-        if (reset) {
-          setItems(combined);
-        } else {
-          // For pagination, append both new prefixes and objects.
-          // S3 paginates over the underlying key space, so CommonPrefixes (folders)
-          // can appear on any page. Deduplicate since a prefix group can span pages.
-          setItems((prev) => {
-            const existingKeys = new Set(prev.map((item) => item.key));
-            const newItems = [...data.prefixes, ...data.objects].filter(
-              (item) => !existingKeys.has(item.key)
-            );
-            return [...prev, ...newItems];
-          });
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to list objects');
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-        if (reset) {
-          setLoadedLocation(`${selectedBucket}|${currentPrefix}`);
-        }
-      }
-    },
-    [currentProfile, selectedBucket, currentPrefix]
-  );
-
+  // Clear selection on navigation
   useEffect(() => {
-    loadObjects(true);
-    onSelectFile(null); // Clear selection on navigation
-    onSelectFiles([]); // Clear multiselect on navigation
+    onSelectFile(null);
+    onSelectFiles([]);
     lastClickedIndexRef.current = -1;
-  }, [selectedBucket, currentPrefix, loadObjects, onSelectFile, onSelectFiles]);
-
-  // Cancel file search
-  const cancelFileSearch = useCallback(() => {
-    setFileSearchState((prev) => ({ ...prev, cancelled: true, isSearching: false }));
-    onPendingFileSelectionHandled?.();
-  }, [onPendingFileSelectionHandled]);
+  }, [currentProfile, selectedBucket, currentPrefix, onSelectFile, onSelectFiles]);
 
   // Scroll to a specific file row
   const scrollToFile = useCallback((key: string) => {
@@ -215,65 +157,15 @@ function FileList({
     }
   }, []);
 
-  // Handle pending file selection - search through all pages if needed
-  useEffect(() => {
-    // Skip if no pending selection, still loading (or the new location's first page has not
-    // been requested/finished yet), or search was cancelled
-    if (
-      !pendingFileSelection ||
-      loading ||
-      loadedLocation !== `${selectedBucket}|${currentPrefix}` ||
-      fileSearchState.cancelled
-    ) {
-      return;
-    }
-
-    // Check if file is in currently loaded items
-    const fileToSelect = items.find((item) => item.key === pendingFileSelection);
-
-    if (fileToSelect) {
-      // File found! Select it and scroll to it
-      onSelectFile(fileToSelect);
-      setFileSearchState({ isSearching: false, targetKey: '', loadedCount: 0, cancelled: false });
-      onPendingFileSelectionHandled?.();
-
-      // Scroll to the file after a brief delay to let the DOM update
-      setTimeout(() => scrollToFile(fileToSelect.key), 100);
-      return;
-    }
-
-    // File not found yet - check if we need to load more
-    if (hasMore && !loadingMore) {
-      // Start or continue searching
-      setFileSearchState({
-        isSearching: true,
-        targetKey: pendingFileSelection,
-        loadedCount: items.length,
-        cancelled: false,
-      });
-
-      // Load more items to continue searching
-      loadObjects(false);
-    } else if (!hasMore) {
-      // No more items to load, file not found
-      setFileSearchState({ isSearching: false, targetKey: '', loadedCount: 0, cancelled: false });
-      onPendingFileSelectionHandled?.();
-    }
-  }, [
+  // Select the pending file once loaded, loading further pages while it is missing
+  const fileSearch = usePendingFileSelection({
+    listing,
     pendingFileSelection,
-    items,
-    loading,
-    loadedLocation,
-    selectedBucket,
-    currentPrefix,
-    loadingMore,
-    hasMore,
-    fileSearchState.cancelled,
     onSelectFile,
     onPendingFileSelectionHandled,
-    loadObjects,
     scrollToFile,
-  ]);
+  });
+  const loadingMore = listing.loadingMore || fileSearch.isSearching;
 
   // Compute filtered and sorted items
   const displayedItems = useMemo(() => {
@@ -284,20 +176,15 @@ function FileList({
     return result;
   }, [items, filterType, searchQuery, currentPrefix, sortConfig]);
 
-  // Reset filters when navigating to new location
-  useEffect(() => {
-    setSearchQuery('');
-  }, [selectedBucket, currentPrefix]);
-
   const handleScroll = useCallback(() => {
     if (!listContainerRef.current || loadingMore || !hasMore) return;
 
     const { scrollTop, scrollHeight, clientHeight } = listContainerRef.current;
     // Load more when within 100px of bottom
     if (scrollHeight - scrollTop - clientHeight < 100) {
-      loadObjects(false);
+      loadMore();
     }
-  }, [loadingMore, hasMore, loadObjects]);
+  }, [loadingMore, hasMore, loadMore]);
 
   // Column header sorting handler
   const handleSort = useCallback((field: SortField) => {
@@ -436,10 +323,10 @@ function FileList({
 
   // Expose refresh function through a custom event listener approach
   useEffect(() => {
-    const handleRefresh = () => loadObjects(true);
+    const handleRefresh = reload;
     window.addEventListener('s3-refresh-files', handleRefresh);
     return () => window.removeEventListener('s3-refresh-files', handleRefresh);
-  }, [loadObjects]);
+  }, [reload]);
 
   // Notify parent of item count changes for status bar
   useEffect(() => {
@@ -483,7 +370,7 @@ function FileList({
         <div className="file-list-error">
           <span className="error-icon">!</span>
           <span>{error}</span>
-          <button className="retry-btn" onClick={() => loadObjects(true)}>
+          <button className="retry-btn" onClick={reload}>
             Retry
           </button>
         </div>
@@ -504,30 +391,7 @@ function FileList({
           <div className="drop-message">Drop files here to upload</div>
         </div>
       )}
-      {/* File search progress overlay */}
-      {fileSearchState.isSearching && (
-        <div className="file-search-overlay">
-          <div className="file-search-progress">
-            <span className="loading-spinner"></span>
-            <div className="file-search-info">
-              <span className="file-search-title">Searching for file...</span>
-              <span className="file-search-detail">
-                Loaded {fileSearchState.loadedCount} items
-              </span>
-              <span className="file-search-target" title={fileSearchState.targetKey}>
-                {fileSearchState.targetKey.split('/').pop()}
-              </span>
-            </div>
-            <button
-              className="file-search-cancel"
-              onClick={cancelFileSearch}
-              title="Cancel search"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <FileSearchOverlay search={fileSearch} loadedCount={items.length} />
       {/* Breadcrumb / current path */}
       <div className="file-list-toolbar">
         <div className="breadcrumb">

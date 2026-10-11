@@ -711,6 +711,106 @@ describe('FileList', () => {
     });
   });
 
+  describe('navigating to another location', () => {
+    const page = (keys: string[], prefix: string) => ({
+      success: true,
+      result: {
+        objects: keys.map((key) => ({ key, size: 10, isPrefix: false })),
+        prefixes: [],
+        continuationToken: undefined,
+        isTruncated: false,
+        prefix,
+        keyCount: keys.length,
+      },
+    });
+    const at = (currentPrefix: string, extra: Partial<FileListProps> = {}) =>
+      createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket', currentPrefix, ...extra });
+
+    beforeEach(() => {
+      mockElectronAPI.s3.listObjects.mockImplementation(async ({ prefix = '' }: { prefix?: string }) =>
+        prefix === 'other/' ? page(['other/b.txt'], prefix) : page(['a.txt'], prefix)
+      );
+    });
+
+    it('reloads the objects of the new prefix', async () => {
+      const { rerender } = render(<FileList {...at('')} />);
+      await screen.findByText('a.txt');
+
+      rerender(<FileList {...at('other/')} />);
+
+      await screen.findByText('b.txt');
+      expect(screen.queryByText('a.txt')).not.toBeInTheDocument();
+      expect(mockElectronAPI.s3.listObjects).toHaveBeenLastCalledWith(
+        expect.objectContaining({ bucket: 'my-bucket', prefix: 'other/' })
+      );
+    });
+
+    it('reloads the objects of another bucket', async () => {
+      const { rerender } = render(<FileList {...at('')} />);
+      await screen.findByText('a.txt');
+      mockElectronAPI.s3.listObjects.mockClear();
+
+      rerender(<FileList {...at('', { selectedBucket: 'second-bucket' })} />);
+
+      await waitFor(() => {
+        expect(mockElectronAPI.s3.listObjects).toHaveBeenCalledWith(
+          expect.objectContaining({ bucket: 'second-bucket', prefix: '' })
+        );
+      });
+    });
+
+    it('clears the single and multi selection', async () => {
+      const onSelectFile = vi.fn();
+      const onSelectFiles = vi.fn();
+      const { rerender } = render(<FileList {...at('', { onSelectFile, onSelectFiles })} />);
+      fireEvent.click(await screen.findByText('a.txt'));
+      expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'a.txt' }));
+      expect(onSelectFiles).toHaveBeenLastCalledWith([expect.objectContaining({ key: 'a.txt' })]);
+
+      rerender(<FileList {...at('other/', { onSelectFile, onSelectFiles })} />);
+
+      await waitFor(() => {
+        expect(onSelectFile).toHaveBeenLastCalledWith(null);
+        expect(onSelectFiles).toHaveBeenLastCalledWith([]);
+      });
+    });
+
+    it('clears the search box on every navigation, including back to the first location', async () => {
+      const { rerender } = render(<FileList {...at('')} />);
+      await screen.findByText('a.txt');
+      fireEvent.change(screen.getByPlaceholderText('Quick filter...'), { target: { value: 'zzz' } });
+
+      rerender(<FileList {...at('other/')} />);
+      await screen.findByText('b.txt');
+      expect(screen.getByPlaceholderText('Quick filter...')).toHaveValue('');
+
+      rerender(<FileList {...at('')} />);
+      await screen.findByText('a.txt');
+      expect(screen.getByPlaceholderText('Quick filter...')).toHaveValue('');
+      expect(screen.getByText('a.txt')).toBeInTheDocument();
+    });
+
+    it('selects a pending file only once its location has loaded', async () => {
+      const onSelectFile = vi.fn();
+      const onPendingFileSelectionHandled = vi.fn();
+      const { rerender } = render(<FileList {...at('', { onSelectFile, onPendingFileSelectionHandled })} />);
+      await screen.findByText('a.txt');
+      onSelectFile.mockClear();
+      onPendingFileSelectionHandled.mockClear();
+
+      rerender(
+        <FileList {...at('other/', { onSelectFile, onPendingFileSelectionHandled, pendingFileSelection: 'other/b.txt' })} />
+      );
+
+      await waitFor(() => {
+        expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ key: 'other/b.txt' }));
+      });
+      // Never resolved against the previous location's items
+      expect(onPendingFileSelectionHandled).toHaveBeenCalledTimes(1);
+      expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'other/b.txt' }));
+    });
+  });
+
   describe('pending file selection (URL navigation)', () => {
     it('selects file when found in initial load', async () => {
       const onSelectFile = vi.fn();
