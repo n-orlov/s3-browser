@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useResettingState } from './useResettingState';
 
 export interface RenameDialogProps {
   isOpen: boolean;
@@ -13,12 +14,16 @@ function RenameDialog({
   onConfirm,
   onCancel,
 }: RenameDialogProps): React.ReactElement | null {
-  const [newName, setNewName] = useState(currentName);
+  // Every open (and every new current name while open) starts from the current name; text typed
+  // before the dialog was closed is discarded.
+  const [newName, setNewName] = useResettingState(
+    currentName,
+    isOpen ? `open:${currentName}` : 'closed'
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setNewName(currentName);
       // Focus and select the name (without extension)
       setTimeout(() => {
         if (inputRef.current) {
