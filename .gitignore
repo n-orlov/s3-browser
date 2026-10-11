@@ -35,3 +35,4 @@ allure-results/
 allure-results-unit/
 junit/
 .coverage-probe-*/
+sbom/

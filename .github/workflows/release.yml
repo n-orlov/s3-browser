@@ -26,6 +26,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Generate SBOM (CycloneDX, production dependencies)
+        run: npm run sbom
+
       - name: Build and package Linux AppImage
         run: |
           npm run build
@@ -36,6 +39,7 @@ jobs:
         with:
           files: |
             release/*.AppImage
+            sbom/sbom.cdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -22,6 +22,7 @@
     "crap": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/crap/crap.ts",
     "ratchet:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ratchet/ratchet.ts",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "sbom": "cyclonedx-npm --omit dev --output-format JSON --spec-version 1.6 --output-file sbom/sbom.cdx.json",
     "test:e2e": "npm run build && xvfb-run --auto-servernum --server-args=\"-screen 0 1280x960x24\" playwright test",
     "test:e2e:headed": "npm run build && playwright test --headed",
     "test:e2e:report": "playwright show-report playwright-report",
@@ -102,6 +103,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "@smithy/util-stream": "^4.8.2",
