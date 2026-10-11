@@ -6,6 +6,7 @@ import FileListControls, {
   filterByType,
   filterBySearch,
 } from './FileListControls';
+import { FOLDER_ICON, getIconForExtension, getKeyExtension } from '../utils/fileIcons';
 
 export interface S3Object {
   key: string;
@@ -73,36 +74,8 @@ function getFileName(key: string, prefix: string): string {
 }
 
 function getFileIcon(key: string, isPrefix: boolean): string {
-  if (isPrefix) return '📁';
-
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
-  switch (ext) {
-    case 'json':
-      return '📋';
-    case 'yaml':
-    case 'yml':
-      return '📋';
-    case 'txt':
-      return '📄';
-    case 'csv':
-      return '📊';
-    case 'parquet':
-      return '📊';
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'gif':
-    case 'webp':
-      return '🖼️';
-    case 'pdf':
-      return '📕';
-    case 'zip':
-    case 'tar':
-    case 'gz':
-      return '📦';
-    default:
-      return '📄';
-  }
+  if (isPrefix) return FOLDER_ICON;
+  return getIconForExtension(getKeyExtension(key));
 }
 
 function FileList({
