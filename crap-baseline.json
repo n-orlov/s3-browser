@@ -1,5 +1,4 @@
 {
-  "src/renderer/App.tsx:App.handleConfirmDelete": 182,
   "src/renderer/App.tsx:App.handleConfirmNewItem": 42,
   "src/renderer/components/CsvViewer.tsx:CsvViewer.handleScroll": 42,
   "src/renderer/components/FileList.tsx:FileList.handleItemClick": 50.64421074023268,

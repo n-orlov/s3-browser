@@ -20,6 +20,7 @@ import {
   getNewItemSelectionKey,
   getRenameName,
 } from './utils/appView';
+import { deleteSelection, getDeleteToast } from './utils/deleteSelection';
 import { ToastContainer, useToasts } from './components/Toast';
 import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
@@ -205,71 +206,17 @@ function App(): React.ReactElement {
     if (!selectedBucket || selectedFiles.length === 0) return;
     setIsDeleteOpen(false);
 
-    // Separate folders and files
-    const folders = selectedFiles.filter(f => f.isPrefix);
-    const files = selectedFiles.filter(f => !f.isPrefix);
-
-    let totalDeleted = 0;
-    let totalFailed = 0;
-    const errors: string[] = [];
-
-    // Delete folders first (they contain nested objects)
-    for (const folder of folders) {
-      const result = await deletePrefix(selectedBucket, folder.key);
-      totalDeleted += result.deletedCount;
-      totalFailed += result.failedCount;
-      if (result.error) {
-        errors.push(result.error);
-      }
-    }
-
-    // Delete files
-    if (files.length === 1) {
-      const success = await deleteFile(selectedBucket, files[0].key);
-      if (success) {
-        totalDeleted++;
-      } else {
-        totalFailed++;
-      }
-    } else if (files.length > 1) {
-      const keys = files.map(f => f.key);
-      const result = await deleteFiles(selectedBucket, keys);
-      totalDeleted += result.deletedCount;
-      totalFailed += result.failedCount;
-    }
+    const totals = await deleteSelection(selectedBucket, selectedFiles, { deleteFile, deleteFiles, deletePrefix });
 
     // Clear selection and refresh
-    if (totalDeleted > 0) {
+    if (totals.deleted > 0) {
       setSelectedFile(null);
       setSelectedFiles([]);
       window.dispatchEvent(new Event('s3-refresh-files'));
     }
 
-    // Show toast with results
-    if (totalFailed > 0) {
-      const errorDetail = errors.length > 0 ? `: ${errors[0]}` : '';
-      addToast({
-        type: 'warning',
-        title: 'Delete Failed',
-        message: `Deleted ${totalDeleted} item(s), ${totalFailed} failed${errorDetail}`,
-        duration: 5000,
-      });
-    } else if (totalDeleted > 0) {
-      addToast({
-        type: 'success',
-        title: 'Delete Complete',
-        message: `Deleted ${totalDeleted} item(s)`,
-        duration: 3000,
-      });
-    } else if (errors.length > 0) {
-      // Both counters zero but error occurred (e.g., exception during operation)
-      addToast({
-        type: 'error',
-        title: 'Delete Error',
-        message: errors[0],
-        duration: 5000,
-      });
-    }
+    const toast = getDeleteToast(totals);
+    if (toast) addToast(toast);
   }, [selectedBucket, selectedFiles, deleteFile, deleteFiles, deletePrefix, addToast]);
 
   const handleRename = useCallback(() => {

@@ -265,5 +265,51 @@ describe('App', () => {
       // Cleanup
       window.removeEventListener('s3-refresh-files', refreshHandler);
     });
+
+    describe('deleting the selection', () => {
+      async function selectFileAndOpenDelete() {
+        renderApp();
+        await waitFor(() => expect(screen.getByText('test-bucket')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('test-bucket'));
+        await waitFor(() => expect(screen.getByText('file.txt')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('file.txt'));
+        fireEvent.click(await screen.findByTitle('Delete selected file'));
+        return screen.findByRole('button', { name: 'Delete' });
+      }
+
+      it('deletes the file, refreshes the list and toasts success', async () => {
+        const refreshHandler = vi.fn();
+        window.addEventListener('s3-refresh-files', refreshHandler);
+        mockElectronAPI.s3.deleteFile.mockResolvedValue({ success: true });
+        const confirm = await selectFileAndOpenDelete();
+        refreshHandler.mockClear();
+        await act(async () => {
+          fireEvent.click(confirm);
+        });
+        expect(mockElectronAPI.s3.deleteFile).toHaveBeenCalledWith('test-bucket', 'file.txt');
+        expect(await screen.findByText('Delete Complete')).toBeInTheDocument();
+        expect(screen.getByText('Deleted 1 item(s)')).toBeInTheDocument();
+        expect(refreshHandler).toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+        expect(screen.queryByText('Selected:')).not.toBeInTheDocument();
+        window.removeEventListener('s3-refresh-files', refreshHandler);
+      });
+
+      it('warns and keeps the selection and list when the delete fails', async () => {
+        const refreshHandler = vi.fn();
+        window.addEventListener('s3-refresh-files', refreshHandler);
+        mockElectronAPI.s3.deleteFile.mockResolvedValue({ success: false });
+        const confirm = await selectFileAndOpenDelete();
+        refreshHandler.mockClear();
+        await act(async () => {
+          fireEvent.click(confirm);
+        });
+        expect(await screen.findByText('Delete Failed')).toBeInTheDocument();
+        expect(screen.getByText('Deleted 0 item(s), 1 failed')).toBeInTheDocument();
+        expect(refreshHandler).not.toHaveBeenCalled();
+        expect(screen.getByText('Selected:')).toBeInTheDocument();
+        window.removeEventListener('s3-refresh-files', refreshHandler);
+      });
+    });
   });
 });
