@@ -327,6 +327,26 @@ describe("badges CLI", () => {
     expect(readOut(path.join(garbled, "out"), "lint")).toMatchObject({ message: "n/a", color: "lightgrey" });
   });
 
+  it("renders e2e-tests n/a, never a green partial sum, when any named shard file is absent or unreadable", () => {
+    const dir = path.join(root, "populated");
+    const e2e = (name: string, args: string[]) => {
+      expect(run(dir, ["--out", name, ...args]).status).toBe(0);
+      return readOut(path.join(dir, name), "e2e-tests");
+    };
+    const na = { schemaVersion: 1, label: "e2e tests", message: "n/a", color: "lightgrey" };
+    // shard 2 never arrived
+    expect(e2e("out-no2", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/absent.json"])).toEqual(na);
+    // shard 1 never arrived
+    expect(e2e("out-no1", ["--e2e", "test-results/absent.json", "--e2e", "test-results/shard2.json"])).toEqual(na);
+    // both missing
+    expect(e2e("out-none", ["--e2e", "test-results/absent1.json", "--e2e", "test-results/absent2.json"])).toEqual(na);
+    // a shard file that is not Playwright JSON
+    put(dir, "test-results/garbled.json", "{not json");
+    expect(e2e("out-garbled", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/garbled.json"])).toEqual(na);
+    // both present still sum
+    expect(e2e("out-both", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/shard2.json"])).toMatchObject({ color: "brightgreen" });
+  });
+
   it("exits 2 with usage when --out is missing", () => {
     expect(usage.status).toBe(2);
     expect(usage.stderr).toContain("usage: badges.ts --out <dir>");

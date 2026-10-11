@@ -403,11 +403,12 @@ jobs:
         run: |
           mkdir -p reports
           npm audit --omit=dev --json > reports/audit.json || true
-          e2e_args=()
-          for results in e2e-results/*/results.json; do
-            if [ -f "$results" ]; then e2e_args+=(--e2e "$results"); fi
-          done
-          npm run --silent badges -- --out published-badges "${e2e_args[@]}"
+          # Both shards are named explicitly, whether or not their artifact arrived: the renderer turns a named file
+          # that is absent into `n/a`, whereas a loop over the files that exist would silently drop a missing shard
+          # and publish the other shard's counts as the whole suite.
+          npm run --silent badges -- --out published-badges \
+            --e2e e2e-results/e2e-test-results-1/results.json \
+            --e2e e2e-results/e2e-test-results-2/results.json
 
       # The mutation badge is written by the separate mutation workflow, not by this one, and the branch is rebuilt from scratch
       # below, so the previous badge is read back from the last gh-pages commit; before the first mutation run

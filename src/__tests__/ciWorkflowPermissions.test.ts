@@ -154,6 +154,19 @@ function publishBadgeProblems(workflow: Workflow): string[] {
   if (!steps.some((s) => /\bnpm run\b[^\n]*\bbadges\b(?!:)/.test(s.run ?? ""))) {
     problems.push("publish has no step whose run invokes npm run badges");
   }
+  const shards = (workflow.jobs?.e2e as { strategy?: { matrix?: { shard?: unknown[] } } } | undefined)?.strategy?.matrix?.shard ?? [];
+  const render = steps.find((s) => /\bnpm run\b[^\n]*\bbadges\b(?!:)/.test(s.run ?? ""));
+  if (render && shards.length > 0) {
+    const run = render.run ?? "";
+    for (const shard of shards) {
+      if (!run.includes(`--e2e e2e-results/e2e-test-results-${String(shard)}/results.json`)) {
+        problems.push(`publish's badge step does not name the e2e shard ${String(shard)} results file explicitly`);
+      }
+    }
+    if (/\bfor\b[^\n]*\bin\b[^\n]*results\.json|\[\s+-[fe]\s/.test(run)) {
+      problems.push("publish's badge step selects e2e results by existence, so a missing shard is silently dropped");
+    }
+  }
   if (
     !steps.some((s) =>
       /\bgit (?:show|checkout)\b[^\n]*:badges\/mutation\.json/.test(s.run ?? "") ||
@@ -230,6 +243,29 @@ describe("ci.yml publish job badges", () => {
     expect(publishBadgeProblems(ci())).toEqual([]);
     expect(badgeReachabilityProblems(ci())).toEqual([]);
     expect(Object.keys(ci().jobs ?? {})).toContain("publish");
+  });
+
+  it("names every e2e shard's results file explicitly, so a missing shard makes the e2e badge n/a", () => {
+    expect(publishBadgeProblems(ci())).toEqual([]);
+    const shardsOf = (shards: unknown[], run: string): Workflow => {
+      const wf = ci();
+      wf.jobs!.e2e = { ...(wf.jobs!.e2e as object), strategy: { matrix: { shard: shards } } } as never;
+      wf.jobs!.publish.steps = [{ run }, { run: "git show FETCH_HEAD:badges/mutation.json" }];
+      return wf;
+    };
+    const both = "npm run --silent badges -- --out b --e2e e2e-results/e2e-test-results-1/results.json --e2e e2e-results/e2e-test-results-2/results.json";
+    expect(publishBadgeProblems(shardsOf([1, 2], both))).toEqual([]);
+    // shard 2 omitted from the command
+    expect(publishBadgeProblems(shardsOf([1, 2], both.replace(" --e2e e2e-results/e2e-test-results-2/results.json", "")))).toEqual([
+      "publish's badge step does not name the e2e shard 2 results file explicitly",
+    ]);
+    // a third shard added to the matrix must be named too
+    expect(publishBadgeProblems(shardsOf([1, 2, 3], both))).toEqual([
+      "publish's badge step does not name the e2e shard 3 results file explicitly",
+    ]);
+    // the old existence-filtering loop
+    const loop = 'for results in e2e-results/*/results.json; do if [ -f "$results" ]; then a+=(--e2e "$results"); fi; done; npm run badges -- --out b "${a[@]}"';
+    expect(publishBadgeProblems(shardsOf([1, 2], loop)).length).toBeGreaterThan(0);
   });
 
   it("feeds the lint badge from an ESLint JSON result: quality writes and uploads it, publish downloads it", () => {
