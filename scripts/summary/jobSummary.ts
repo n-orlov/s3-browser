@@ -42,7 +42,7 @@ export interface E2eInput {
   counts: E2eCounts | null;
 }
 
-const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+const num = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0);
 const MISSING = '_no data: the report file was not produced_';
 
 /** Reads the root `<testsuites tests=".." failures=".." errors=".." skipped="..">` element of a JUnit file. */

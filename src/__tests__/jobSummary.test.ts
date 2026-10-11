@@ -74,24 +74,100 @@ describe("job summary renderer", () => {
   });
 });
 
+describe("job summary renderer, exact markdown", () => {
+  it("renders the whole quality summary with its headings, blank lines and table header", () => {
+    expect(renderQualitySummary(green)).toBe(
+      [
+        "## Quality",
+        "",
+        "### Unit tests",
+        "",
+        "✅ 1789 tests: 1762 passed, 0 failed, 27 skipped",
+        "",
+        "### Coverage",
+        "",
+        "| Metric | Coverage | Threshold | |",
+        "| --- | ---: | ---: | --- |",
+        "| statements | 90.37% | 83% | ✅ met |",
+        "| branches | 81.66% | 72% | ✅ met |",
+        "| functions | 89.7% | 83% | ✅ met |",
+        "| lines | 91.72% | 84% | ✅ met |",
+        "",
+        "### CRAP",
+        "",
+        "✅ 0 functions over CRAP_MAX (30) of 640 scored",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("renders the missing-data placeholder under every heading when no report was produced", () => {
+    const missing = "_no data: the report file was not produced_";
+    expect(renderQualitySummary({ unit: null, coverage: null, thresholds, crap: null })).toBe(
+      ["## Quality", "", "### Unit tests", "", missing, "", "### Coverage", "", missing, "", "### CRAP", "", missing, ""].join("\n"),
+    );
+    expect(renderE2eSummary({ shard: "1/2", counts: null })).toBe(["## e2e shard 1/2", "", missing, ""].join("\n"));
+  });
+
+  it("renders the whole e2e summary with the blank line after its heading", () => {
+    expect(renderE2eSummary({ shard: "2/2", counts: { passed: 95, failed: 3, skipped: 1 } })).toBe(
+      "## e2e shard 2/2\n\n❌ 95 passed, 3 failed, 1 skipped\n",
+    );
+  });
+
+  it("marks failed unit tests and subtracts failed and skipped tests from the passed count", () => {
+    const markdown = renderQualitySummary({ ...green, unit: { total: 100, failed: 4, skipped: 6 } });
+    expect(markdown.split("\n")).toContain("❌ 100 tests: 90 passed, 4 failed, 6 skipped");
+  });
+
+  it("counts a coverage value equal to its threshold as met", () => {
+    const input: QualityInput = { ...green, coverage: { pct: { ...green.coverage!.pct, lines: 84 } } };
+    expect(renderQualitySummary(input).split("\n")).toContain("| lines | 84% | 84% | ✅ met |");
+  });
+
+  it("uses the singular 'function' for exactly one offender and the plural otherwise", () => {
+    const lines = (over: number) => renderQualitySummary({ ...green, crap: { max: 30, functions: 640, over } }).split("\n");
+    expect(lines(1)).toContain("❌ 1 function over CRAP_MAX (30) of 640 scored");
+    expect(lines(2)).toContain("❌ 2 functions over CRAP_MAX (30) of 640 scored");
+    expect(lines(0)).toContain("✅ 0 functions over CRAP_MAX (30) of 640 scored");
+  });
+});
+
 describe("job summary report parsers", () => {
   it("reads the totals of a JUnit file, counting failures and errors as failed", () => {
     const xml = '<?xml version="1.0"?>\n<testsuites name="vitest tests" tests="10" failures="1" errors="2" time="3">\n<testsuite tests="10"><testcase name="a"><skipped/></testcase></testsuite></testsuites>';
     expect(parseJunitTotals(xml)).toEqual({ total: 10, failed: 3, skipped: 1 });
     expect(parseJunitTotals('<testsuites tests="3" failures="0" errors="0" skipped="2">')).toEqual({ total: 3, failed: 0, skipped: 2 });
-    expect(() => parseJunitTotals("<nope/>")).toThrow();
+    expect(() => parseJunitTotals("<nope/>")).toThrow("junit.xml has no <testsuites> element");
+  });
+
+  it("reads each JUnit attribute by its own name and counts <skipped> elements when the attribute is absent", () => {
+    expect(parseJunitTotals('<testsuites name="x" failures="1" errors="2" tests="10">')).toEqual({ total: 10, failed: 3, skipped: 0 });
+    expect(parseJunitTotals('<testsuites tests="4" failures="0"><testcase><skipped/></testcase><testcase><skipped message="m"/></testcase>')).toEqual({ total: 4, failed: 0, skipped: 2 });
+    expect(parseJunitTotals("<testsuites>")).toEqual({ total: 0, failed: 0, skipped: 0 });
   });
 
   it("reads the four totals of coverage-summary.json", () => {
     const text = JSON.stringify({ total: { lines: { pct: 1 }, statements: { pct: 2 }, functions: { pct: 3 }, branches: { pct: 4 } } });
     expect(parseCoverageSummary(text).pct).toEqual({ lines: 1, statements: 2, functions: 3, branches: 4 });
-    expect(() => parseCoverageSummary("{}")).toThrow();
+    expect(() => parseCoverageSummary("{}")).toThrow('coverage-summary.json has no "total"');
+  });
+
+  it("reads a missing, non-numeric or non-finite coverage percentage as 0", () => {
+    const text = '{"total":{"lines":{"pct":"87"},"statements":{"pct":null},"functions":{"pct":1e999},"branches":{}}}';
+    expect(parseCoverageSummary(text).pct).toEqual({ lines: 0, statements: 0, functions: 0, branches: 0 });
+    expect(parseCoverageSummary('{"total":{"lines":{"pct":88.5}}}').pct).toEqual({ lines: 88.5, statements: 0, functions: 0, branches: 0 });
   });
 
   it("reads the CRAP totals and Playwright stats (flaky counts as passed)", () => {
     expect(parseCrapSummary('{"max":30,"functions":5,"over":1}')).toEqual({ max: 30, functions: 5, over: 1 });
     expect(parsePlaywrightCounts('{"stats":{"expected":7,"flaky":1,"unexpected":2,"skipped":3}}')).toEqual({ passed: 8, failed: 2, skipped: 3 });
-    expect(() => parsePlaywrightCounts("{}")).toThrow();
+    expect(() => parsePlaywrightCounts("{}")).toThrow('Playwright JSON report has no "stats"');
+  });
+
+  it("reads non-numeric report fields as 0", () => {
+    expect(parseCrapSummary('{"max":"30","functions":null,"over":1e999}')).toEqual({ max: 0, functions: 0, over: 0 });
+    expect(parsePlaywrightCounts('{"stats":{"expected":"7","flaky":null,"unexpected":1e999}}')).toEqual({ passed: 0, failed: 0, skipped: 0 });
   });
 });
 
