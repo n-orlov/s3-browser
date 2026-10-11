@@ -137,6 +137,11 @@ describe('ratchet:check CLI', () => {
   it('passes on the committed tree', () => {
     const result = spawnSync(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', cli], { cwd: repo, encoding: 'utf8' });
     expect(result.status).toBe(0);
-    expect(parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'))).toEqual(base);
+    // The warning ceiling only ratchets down (each lint fix lowers it), so it may sit below `base`; the floors may not.
+    const committed = parseRatchet(readFileSync(path.join(repo, '.ratchet.json'), 'utf8'));
+    expect(committed.coverageThresholds).toEqual(base.coverageThresholds);
+    expect(Number.isInteger(committed.maxWarnings)).toBe(true);
+    expect(committed.maxWarnings).toBeGreaterThanOrEqual(0);
+    expect(committed.maxWarnings).toBeLessThanOrEqual(base.maxWarnings);
   });
 });

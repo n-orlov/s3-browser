@@ -11,13 +11,15 @@ import DeleteConfirmDialog from './components/DeleteConfirmDialog';
 import PropertiesDialog from './components/PropertiesDialog';
 import NewItemDialog, { type NewItemType } from './components/NewItemDialog';
 import OperationStatus from './components/OperationStatus';
-import TextEditor from './components/TextEditor';
-import ParquetViewer from './components/ParquetViewer';
-import CsvViewer from './components/CsvViewer';
-import JsonViewer from './components/JsonViewer';
-import YamlViewer from './components/YamlViewer';
-import ImagePreview from './components/ImagePreview';
 import StatusBar from './components/StatusBar';
+import { FileViewers, SelectedFileInfo } from './components/AppParts';
+import {
+  buildNewItemKey,
+  getDeleteDisplayName,
+  getDisplayPath,
+  getNewItemSelectionKey,
+  getRenameName,
+} from './utils/appView';
 import { ToastContainer, useToasts } from './components/Toast';
 import { useAwsProfiles } from './context/AwsProfileContext';
 import { useFileOperations } from './hooks/useFileOperations';
@@ -400,7 +402,7 @@ function App(): React.ReactElement {
       if (!selectedBucket) return;
       setIsNewItemOpen(false);
 
-      const key = currentPrefix ? `${currentPrefix}${name}` : name;
+      const key = buildNewItemKey(currentPrefix, name);
 
       let result;
       if (newItemType === 'file') {
@@ -419,8 +421,7 @@ function App(): React.ReactElement {
         // Refresh the file list
         window.dispatchEvent(new Event('s3-refresh-files'));
         // Set pending selection to auto-select the new item
-        const newKey = newItemType === 'folder' ? (key.endsWith('/') ? key : `${key}/`) : key;
-        setPendingFileSelection(newKey);
+        setPendingFileSelection(getNewItemSelectionKey(key, newItemType));
       } else {
         addToast({
           type: 'error',
@@ -457,12 +458,7 @@ function App(): React.ReactElement {
     [selectedBucket, currentPrefix, uploadFiles]
   );
 
-  // Build display path for header
-  const getDisplayPath = (): string => {
-    if (!selectedBucket) return 'Files';
-    if (!currentPrefix) return selectedBucket;
-    return `${selectedBucket}/${currentPrefix}`;
-  };
+  const displayPath = getDisplayPath(selectedBucket, currentPrefix);
 
   return (
     <ErrorBoundary>
@@ -489,22 +485,8 @@ function App(): React.ReactElement {
         </aside>
         <section className="content">
           <div className="content-header">
-            <h2 title={getDisplayPath()}>{getDisplayPath()}</h2>
-            {selectedFiles.length > 1 ? (
-              <div className="selected-file-info">
-                <span className="selected-label">Selected:</span>
-                <span className="selected-name selected-count">
-                  {selectedFiles.length} files
-                </span>
-              </div>
-            ) : selectedFile && (
-              <div className="selected-file-info">
-                <span className="selected-label">Selected:</span>
-                <span className="selected-name" title={selectedFile.key}>
-                  {selectedFile.key.split('/').pop()}
-                </span>
-              </div>
-            )}
+            <h2 title={displayPath}>{displayPath}</h2>
+            <SelectedFileInfo selectedFile={selectedFile} selectedCount={selectedFiles.length} />
           </div>
           <NavigationBar
             currentBucket={selectedBucket}
@@ -565,16 +547,13 @@ function App(): React.ReactElement {
       {/* Dialogs */}
       <RenameDialog
         isOpen={isRenameOpen}
-        currentName={selectedFile?.key.split('/').pop() || ''}
+        currentName={getRenameName(selectedFile)}
         onConfirm={handleConfirmRename}
         onCancel={() => setIsRenameOpen(false)}
       />
       <DeleteConfirmDialog
         isOpen={isDeleteOpen}
-        fileNames={selectedFiles.map(f => {
-          const name = f.key.split('/').filter(Boolean).pop() || '';
-          return f.isPrefix ? `${name}/` : name;
-        })}
+        fileNames={selectedFiles.map(getDeleteDisplayName)}
         hasFolders={selectedFiles.some(f => f.isPrefix)}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteOpen(false)}
@@ -596,71 +575,25 @@ function App(): React.ReactElement {
         />
       )}
 
-      {/* Text Editor */}
-      {isEditorOpen && selectedBucket && selectedFile && (
-        <TextEditor
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          onClose={handleEditorClose}
-          onSaved={handleEditorSaved}
-        />
-      )}
-
-      {/* Parquet Viewer */}
-      {isParquetViewerOpen && selectedBucket && selectedFile && (
-        <ParquetViewer
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          fileSize={selectedFile.size}
-          onClose={handleParquetViewerClose}
-        />
-      )}
-
-      {/* CSV Viewer */}
-      {isCsvViewerOpen && selectedBucket && selectedFile && (
-        <CsvViewer
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          fileSize={selectedFile.size}
-          onClose={handleCsvViewerClose}
-        />
-      )}
-
-      {/* JSON Viewer */}
-      {isJsonViewerOpen && selectedBucket && selectedFile && (
-        <JsonViewer
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          fileSize={selectedFile.size}
-          onClose={handleJsonViewerClose}
-        />
-      )}
-
-      {/* YAML Viewer */}
-      {isYamlViewerOpen && selectedBucket && selectedFile && (
-        <YamlViewer
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          fileSize={selectedFile.size}
-          onClose={handleYamlViewerClose}
-        />
-      )}
-
-      {/* Image Preview */}
-      {isImagePreviewOpen && selectedBucket && selectedFile && (
-        <ImagePreview
-          bucket={selectedBucket}
-          fileKey={selectedFile.key}
-          fileName={selectedFile.key.split('/').pop() || selectedFile.key}
-          fileSize={selectedFile.size}
-          onClose={handleImagePreviewClose}
-        />
-      )}
+      <FileViewers
+        bucket={selectedBucket}
+        file={selectedFile}
+        open={{
+          editor: isEditorOpen,
+          parquet: isParquetViewerOpen,
+          csv: isCsvViewerOpen,
+          json: isJsonViewerOpen,
+          yaml: isYamlViewerOpen,
+          image: isImagePreviewOpen,
+        }}
+        onCloseEditor={handleEditorClose}
+        onEditorSaved={handleEditorSaved}
+        onCloseParquet={handleParquetViewerClose}
+        onCloseCsv={handleCsvViewerClose}
+        onCloseJson={handleJsonViewerClose}
+        onCloseYaml={handleYamlViewerClose}
+        onCloseImage={handleImagePreviewClose}
+      />
 
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
