@@ -8,7 +8,14 @@ import { pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
 type Step = { name?: string; uses?: string; run?: string; if?: string; with?: Record<string, unknown> };
-type Job = { 'runs-on'?: unknown; if?: string; needs?: string | string[]; steps?: Step[] };
+type Job = {
+  'runs-on'?: unknown;
+  if?: string;
+  needs?: string | string[];
+  permissions?: Record<string, string>;
+  concurrency?: { group?: string; 'cancel-in-progress'?: boolean };
+  steps?: Step[];
+};
 type Workflow = { on?: Record<string, unknown>; jobs?: Record<string, Job> };
 
 const root = path.resolve(__dirname, '../..');
@@ -96,8 +103,10 @@ describe('mutation.yml', () => {
   });
 
   it('pins every action to a 40-hex SHA', () => {
-    for (const step of stepsOf(workflow)) {
-      if (step.uses) expect(step.uses).toMatch(/@[0-9a-f]{40}$/);
+    for (const job of Object.values(workflow.jobs ?? {})) {
+      for (const step of job.steps ?? []) {
+        if (step.uses) expect(step.uses).toMatch(/@[0-9a-f]{40}$/);
+      }
     }
   });
 
@@ -111,5 +120,72 @@ describe('mutation.yml', () => {
     }
     expect(ciText).not.toContain('mutation.yml');
     expect(ciText).not.toMatch(/npm run mutation/);
+  });
+});
+
+describe('mutation.yml publish job (badges/mutation.json on gh-pages)', () => {
+  const workflow = parse(mutationText) as Workflow;
+  const publish = (wf: Workflow): Job => wf.jobs?.publish ?? {};
+  const events = ['pull_request', 'schedule', 'workflow_dispatch'];
+
+  /** Whether the job's event terms admit one event: `==` terms list the admitted events, `!=` terms exclude. */
+  const runsFor = (job: Job, event: string): boolean => {
+    const condition = job.if ?? '';
+    const listed = [...condition.matchAll(/github\.event_name == '([^']+)'/g)].map((m) => m[1]);
+    const excluded = [...condition.matchAll(/github\.event_name != '([^']+)'/g)].map((m) => m[1]);
+    if (listed.length > 0) return listed.includes(event);
+    return !excluded.includes(event);
+  };
+
+  it('runs only on schedule or workflow_dispatch: its if excludes pull_request', () => {
+    const job = publish(workflow);
+    expect(job.if).toBeDefined();
+    expect(runsFor(job, 'schedule')).toBe(true);
+    expect(runsFor(job, 'workflow_dispatch')).toBe(true);
+    expect(runsFor(job, 'pull_request')).toBe(false);
+    expect(job.if).not.toMatch(/pull_request/);
+  });
+
+  it('is limited to the master ref', () => {
+    expect(publish(workflow).if).toContain("github.ref == 'refs/heads/master'");
+  });
+
+  it('holds contents: write at job level only; the workflow and the mutation job stay read-only', () => {
+    expect(publish(workflow).permissions).toEqual({ contents: 'write' });
+    expect((workflow as { permissions?: unknown }).permissions).toEqual({ contents: 'read' });
+    expect(workflow.jobs?.mutation?.permissions).toBeUndefined();
+    const writers = Object.entries(workflow.jobs ?? {}).filter(([, j]) =>
+      Object.values(j.permissions ?? {}).includes('write'),
+    );
+    expect(writers.map(([name]) => name)).toEqual(['publish']);
+  });
+
+  it("needs the mutation job and shares ci.yml publish's concurrency group without cancelling", () => {
+    const ci = parse(ciText) as Workflow;
+    const job = publish(workflow);
+    expect(job.needs).toBe('mutation');
+    expect(job.concurrency?.group).toBe('publish-allure-report');
+    expect(job.concurrency?.group).toBe(ci.jobs?.publish?.concurrency?.group);
+    expect(job.concurrency?.['cancel-in-progress']).toBe(false);
+  });
+
+  it('downloads mutation-report, renders the badge and commits only badges/mutation.json onto the existing gh-pages', () => {
+    const steps = publish(workflow).steps ?? [];
+    const download = steps.find((s) => s.uses?.startsWith('actions/download-artifact@'));
+    expect(download?.with?.name).toBe('mutation-report');
+    expect(steps.some((s) => /npm run [^\n]*badges/.test(s.run ?? ''))).toBe(true);
+    const push = steps.find((s) => /git push/.test(s.run ?? ''));
+    expect(push?.run).toContain('git fetch');
+    expect(push?.run).toContain('origin gh-pages');
+    expect(push?.run).not.toMatch(/--orphan|--force|push -f|git rm/);
+    expect(push?.run).toContain('git add badges/mutation.json');
+    expect(push?.run).not.toMatch(/git add (--all|-A|\.)/);
+  });
+
+  it('sees an if that a pull_request could reach as reachable (negative fixture)', () => {
+    const broken: Job = { if: "github.event_name != 'push'" };
+    expect(runsFor(broken, 'pull_request')).toBe(true);
+    const events2 = events.filter((e) => runsFor(broken, e));
+    expect(events2).toContain('pull_request');
   });
 });
