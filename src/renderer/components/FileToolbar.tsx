@@ -1,4 +1,5 @@
 import React from 'react';
+import { getToolbarState } from '../utils/fileToolbarState';
 
 export interface FileToolbarProps {
   selectedBucket: string | null;
@@ -25,65 +26,6 @@ export interface FileToolbarProps {
   onNewFile: () => void;
   onNewFolder: () => void;
   disabled?: boolean;
-}
-
-/**
- * Get the base extension of a file, looking past .gz if present
- * e.g., 'data.json.gz' -> 'json', 'data.csv' -> 'csv'
- */
-function getBaseExtension(key: string): string {
-  const lowerKey = key.toLowerCase();
-
-  // If it ends with .gz, get the extension before .gz
-  if (lowerKey.endsWith('.gz')) {
-    const withoutGz = key.slice(0, -3);
-    return withoutGz.split('.').pop()?.toLowerCase() ?? '';
-  }
-
-  // Otherwise just get the last extension
-  return key.split('.').pop()?.toLowerCase() ?? '';
-}
-
-/**
- * Determine if a file is a parquet file
- */
-function isParquetFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
-  // Parquet files are not supported with .gz compression
-  return ext === 'parquet';
-}
-
-/**
- * Determine if a file is a CSV file (including .csv.gz)
- */
-function isCsvFile(key: string): boolean {
-  const ext = getBaseExtension(key);
-  return ext === 'csv' || ext === 'tsv';
-}
-
-/**
- * Determine if a file is a JSON file (including .json.gz)
- */
-function isJsonFile(key: string): boolean {
-  const ext = getBaseExtension(key);
-  return ext === 'json';
-}
-
-/**
- * Determine if a file is a YAML file (including .yaml.gz, .yml.gz)
- */
-function isYamlFile(key: string): boolean {
-  const ext = getBaseExtension(key);
-  return ext === 'yaml' || ext === 'yml';
-}
-
-/**
- * Determine if a file is an image that can be previewed
- */
-function isImageFile(key: string): boolean {
-  const ext = key.split('.').pop()?.toLowerCase() ?? '';
-  const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
-  return imageExtensions.includes(ext);
 }
 
 // SVG Icons as components for better readability
@@ -245,117 +187,26 @@ function FileToolbar({
   onNewFolder,
   disabled = false,
 }: FileToolbarProps): React.ReactElement {
-  const hasSelection = selectedFile !== null && !selectedFile.isPrefix;
-  const hasFolderSelection = selectedFile !== null && selectedFile.isPrefix;
-  const hasAnySelection = selectedFile !== null;
-  const hasMultipleSelection = selectedCount > 1;
-  const canEdit = hasSelection && !hasMultipleSelection;
-  const canViewParquet = hasSelection && !hasMultipleSelection && isParquetFile(selectedFile!.key);
-  const canViewCsv = hasSelection && !hasMultipleSelection && isCsvFile(selectedFile!.key);
-  const canViewJson = hasSelection && !hasMultipleSelection && isJsonFile(selectedFile!.key);
-  const canViewYaml = hasSelection && !hasMultipleSelection && isYamlFile(selectedFile!.key);
-  const canViewImage = hasSelection && !hasMultipleSelection && isImageFile(selectedFile!.key);
-  // Delete is allowed for any selected items (files or folders)
-  const canDelete = selectedCount > 0;
-  // Properties can be shown for any single selected item (file or folder)
-  const canShowProperties = hasAnySelection && !hasMultipleSelection;
+  const state = getToolbarState(selectedBucket, selectedFile, selectedCount, disabled);
 
   return (
     <div className="file-toolbar">
-      <ToolbarButton
-        icon={Icons.newFile}
-        title="Create new empty file"
-        onClick={onNewFile}
-        disabled={disabled || !selectedBucket}
-      />
-      <ToolbarButton
-        icon={Icons.newFolder}
-        title="Create new folder"
-        onClick={onNewFolder}
-        disabled={disabled || !selectedBucket}
-      />
-      <ToolbarButton
-        icon={Icons.upload}
-        title="Upload files"
-        onClick={onUpload}
-        disabled={disabled || !selectedBucket}
-      />
-      <ToolbarButton
-        icon={Icons.download}
-        title={hasMultipleSelection ? 'Download not available for multiple files' : 'Download selected file'}
-        onClick={onDownload}
-        disabled={disabled || !hasSelection || hasMultipleSelection}
-      />
-      <ToolbarButton
-        icon={Icons.edit}
-        title={canEdit ? 'Edit file as text' : 'Select a file to edit'}
-        onClick={onEdit}
-        disabled={disabled || !canEdit}
-      />
-      <ToolbarButton
-        icon={Icons.parquet}
-        title={canViewParquet ? 'View parquet file' : 'Select a parquet file to view'}
-        onClick={onViewParquet}
-        disabled={disabled || !canViewParquet}
-      />
-      <ToolbarButton
-        icon={Icons.csv}
-        title={canViewCsv ? 'View CSV file' : 'Select a CSV file to view'}
-        onClick={onViewCsv}
-        disabled={disabled || !canViewCsv}
-      />
-      <ToolbarButton
-        icon={Icons.json}
-        title={canViewJson ? 'View JSON file' : 'Select a JSON file to view'}
-        onClick={onViewJson}
-        disabled={disabled || !canViewJson}
-      />
-      <ToolbarButton
-        icon={Icons.yaml}
-        title={canViewYaml ? 'View YAML file' : 'Select a YAML file to view'}
-        onClick={onViewYaml}
-        disabled={disabled || !canViewYaml}
-      />
-      <ToolbarButton
-        icon={Icons.image}
-        title={canViewImage ? 'Preview image' : 'Select an image file to preview'}
-        onClick={onViewImage}
-        disabled={disabled || !canViewImage}
-      />
-      <ToolbarButton
-        icon={Icons.copy}
-        title={hasMultipleSelection ? 'Copy URL not available for multiple files' : (hasSelection ? 'Copy S3 URL to clipboard' : 'Select a file to copy URL')}
-        onClick={onCopyUrl}
-        disabled={disabled || !hasSelection || hasMultipleSelection}
-        className="toolbar-btn-copy"
-      />
-      <ToolbarButton
-        icon={Icons.rename}
-        title={hasMultipleSelection ? 'Rename not available for multiple files' : 'Rename selected file'}
-        onClick={onRename}
-        disabled={disabled || !hasSelection || hasMultipleSelection}
-      />
-      <ToolbarButton
-        icon={Icons.delete}
-        title={selectedCount > 1 ? `Delete ${selectedCount} items` : (hasFolderSelection ? 'Delete selected folder' : 'Delete selected file')}
-        onClick={onDelete}
-        disabled={disabled || !canDelete}
-        className="toolbar-btn-danger"
-        badge={selectedCount > 1 ? String(selectedCount) : undefined}
-      />
-      <ToolbarButton
-        icon={Icons.properties}
-        title={canShowProperties ? 'View properties' : 'Select a file or folder to view properties'}
-        onClick={onProperties}
-        disabled={disabled || !canShowProperties}
-      />
+      <ToolbarButton icon={Icons.newFile} onClick={onNewFile} {...state.newFile} />
+      <ToolbarButton icon={Icons.newFolder} onClick={onNewFolder} {...state.newFolder} />
+      <ToolbarButton icon={Icons.upload} onClick={onUpload} {...state.upload} />
+      <ToolbarButton icon={Icons.download} onClick={onDownload} {...state.download} />
+      <ToolbarButton icon={Icons.edit} onClick={onEdit} {...state.edit} />
+      <ToolbarButton icon={Icons.parquet} onClick={onViewParquet} {...state.parquet} />
+      <ToolbarButton icon={Icons.csv} onClick={onViewCsv} {...state.csv} />
+      <ToolbarButton icon={Icons.json} onClick={onViewJson} {...state.json} />
+      <ToolbarButton icon={Icons.yaml} onClick={onViewYaml} {...state.yaml} />
+      <ToolbarButton icon={Icons.image} onClick={onViewImage} {...state.image} />
+      <ToolbarButton icon={Icons.copy} onClick={onCopyUrl} className="toolbar-btn-copy" {...state.copy} />
+      <ToolbarButton icon={Icons.rename} onClick={onRename} {...state.rename} />
+      <ToolbarButton icon={Icons.delete} onClick={onDelete} className="toolbar-btn-danger" {...state.delete} />
+      <ToolbarButton icon={Icons.properties} onClick={onProperties} {...state.properties} />
       <div className="toolbar-spacer" />
-      <ToolbarButton
-        icon={Icons.refresh}
-        title="Refresh file list"
-        onClick={onRefresh}
-        disabled={disabled || !selectedBucket}
-      />
+      <ToolbarButton icon={Icons.refresh} onClick={onRefresh} {...state.refresh} />
     </div>
   );
 }
