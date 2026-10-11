@@ -15,6 +15,9 @@ on:
   pull_request:
     branches: [master, main]
   workflow_dispatch:
+  # Weekly full run on master (Mondays 05:23 UTC), so a packaging break that no push touched still surfaces.
+  schedule:
+    - cron: '23 5 * * 1'
 
 permissions:
   contents: read
@@ -106,15 +109,68 @@ jobs:
           path: sbom/sbom.cdx.json
           retention-days: 7
 
-  # Builds the Linux AppImage with the same commands and Node major as release.yml's build-linux job, but never
-  # publishes: read-only token, no release step. A packaging break shows up here, not when a release is cut.
-  release-dryrun:
-    name: release dry run (Linux AppImage, not published)
+  # Decides whether release-dryrun runs. Push, schedule and manual runs always build it; an owner pull request
+  # builds it only when it changes a file that can affect packaging (RELEASE_PATHS, bash globs where `*` also
+  # matches `/`). It only diffs two commits with git and runs no repository code, so it uses a GitHub-hosted runner.
+  changes:
+    name: changes (does this run need the release dry run?)
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
        github.event.pull_request.user.login == 'n-orlov' &&
        github.actor == 'n-orlov')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.filter.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: filter
+        name: Does the pull request touch a packaging path?
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_PATHS: |
+            package.json
+            build/**
+            electron-builder*
+            .github/workflows/release.yml
+            vite.config.*
+            tsconfig*.json
+        run: |
+          release=false
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            release=true
+          else
+            while IFS= read -r file; do
+              while IFS= read -r pattern; do
+                # shellcheck disable=SC2053
+                if [ -n "$pattern" ] && [[ $file == $pattern ]]; then release=true; fi
+              done <<< "$RELEASE_PATHS"
+            done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          fi
+          echo "release=$release"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  # Builds the Linux AppImage with the same commands and Node major as release.yml's build-linux job, but never
+  # publishes: read-only token, no release step. A packaging break shows up here, not when a release is cut.
+  release-dryrun:
+    name: release dry run (Linux AppImage, not published)
+    needs: changes
+    if: >-
+      needs.changes.outputs.release == 'true' &&
+      (github.event_name != 'pull_request' ||
+       (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.login == 'n-orlov' &&
+        github.actor == 'n-orlov'))
     runs-on: [self-hosted, linux, x64, s3-browser]
     timeout-minutes: 20
     permissions:
@@ -250,27 +306,33 @@ jobs:
           retention-days: 14
 
   gate:
-    name: gate (quality and both e2e shards succeeded)
+    name: gate (quality, both e2e shards and, when it runs, release-dryrun succeeded)
     # The single status to protect in branch protection. `if: always()` so it still runs (and fails) when a need
     # failed, was cancelled or was skipped; a skipped need would otherwise skip this job, which reads as passing.
     # It checks out and runs nothing from the repository, so it uses a GitHub-hosted runner and no fork can reach
     # the self-hosted ones through it. The e2e matrix is one need: its result is success only if both shards are.
-    needs: [quality, e2e]
+    # release-dryrun is skipped on a pull request that touches no packaging path, so `skipped` is acceptable for it
+    # alone; `changes` (which decides that) must itself succeed, or a broken filter would read as "nothing to build".
+    needs: [quality, e2e, changes, release-dryrun]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Fail unless quality and every e2e shard succeeded
+      - name: Fail unless quality, every e2e shard and changes succeeded, and release-dryrun succeeded or was skipped
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RELEASE_DRYRUN_RESULT: ${{ needs.release-dryrun.result }}
         run: |
           status=0
-          for pair in "quality=$QUALITY_RESULT" "e2e=$E2E_RESULT"; do
+          for pair in "quality=$QUALITY_RESULT" "e2e=$E2E_RESULT" "changes=$CHANGES_RESULT"; do
             echo "${pair%%=*}: ${pair#*=}"
             if [ "${pair#*=}" != "success" ]; then status=1; fi
           done
+          echo "release-dryrun: $RELEASE_DRYRUN_RESULT"
+          if [ "$RELEASE_DRYRUN_RESULT" != "success" ] && [ "$RELEASE_DRYRUN_RESULT" != "skipped" ]; then status=1; fi
           exit "$status"
 
   publish:

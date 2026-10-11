@@ -438,21 +438,25 @@ function gateProblems(workflow: unknown): string[] {
   if (!job) return ["no gate job"];
   const problems: string[] = [];
   const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
-  for (const wanted of ["quality", "e2e"]) if (!needs.includes(wanted)) problems.push(`gate must need ${wanted}`);
+  for (const wanted of GATE_NEEDS) if (!needs.includes(wanted)) problems.push(`gate must need ${wanted}`);
   if (job.if?.trim() !== "always()") problems.push(`gate must use if: always(), got ${job.if}`);
   const text = JSON.stringify(job.steps ?? []);
-  for (const wanted of ["quality", "e2e"]) {
+  for (const wanted of GATE_NEEDS) {
     if (!new RegExp(`needs\\.${wanted}\\.result`).test(text)) problems.push(`gate must check needs.${wanted}.result`);
   }
   return problems;
 }
 
-/** Runs the gate step's script the way Actions would, with the two results in its environment; returns the exit code. */
-function runGate(workflow: unknown, quality: string, e2e: string): number {
+const GATE_NEEDS = ["quality", "e2e", "changes", "release-dryrun"];
+type GateResults = Record<string, string>;
+const PASSING: GateResults = { quality: "success", e2e: "success", changes: "success", "release-dryrun": "success" };
+
+/** Runs the gate step's script the way Actions would, with the needs' results in its environment; returns the exit code. */
+function runGate(workflow: unknown, results: GateResults): number {
   const step = (workflow as { jobs: { gate: GateJob } }).jobs.gate.steps?.find((s) => s.run);
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(step?.env ?? {})) {
-    env[name] = value.replace(/\$\{\{\s*needs\.(\w+)\.result\s*\}\}/, (_, need: string) => (need === "quality" ? quality : e2e));
+    env[name] = value.replace(/\$\{\{\s*needs\.([\w-]+)\.result\s*\}\}/, (_, need: string) => results[need] ?? "");
   }
   return spawnSync("bash", ["-e", "-c", step?.run ?? "exit 99"], { env: { PATH: process.env.PATH ?? "", ...env } }).status ?? -1;
 }
@@ -468,25 +472,27 @@ describe("ci.yml gate job", () => {
       fn(wf.jobs.gate);
       return gateProblems(wf);
     };
-    expect(mutate((j) => (j.needs = ["quality"]))).toEqual(["gate must need e2e"]);
-    expect(mutate((j) => (j.needs = ["e2e"]))).toEqual(["gate must need quality"]);
-    expect(mutate((j) => delete j.needs)).toHaveLength(2);
+    expect(mutate((j) => (j.needs = ["quality", "changes", "release-dryrun"]))).toEqual(["gate must need e2e"]);
+    expect(mutate((j) => (j.needs = ["e2e", "changes", "release-dryrun"]))).toEqual(["gate must need quality"]);
+    expect(mutate((j) => (j.needs = ["quality", "e2e", "release-dryrun"]))).toEqual(["gate must need changes"]);
+    expect(mutate((j) => delete j.needs)).toHaveLength(GATE_NEEDS.length);
     expect(mutate((j) => delete j.if)).toHaveLength(1);
     expect(mutate((j) => (j.if = "success()"))).toHaveLength(1);
     expect(mutate((j) => (j.if = "always() && github.event_name == 'push'"))).toHaveLength(1);
     expect(mutate((j) => delete j.steps![0].env!.E2E_RESULT)).toEqual(["gate must check needs.e2e.result"]);
     expect(mutate((j) => delete j.steps![0].env!.QUALITY_RESULT)).toEqual(["gate must check needs.quality.result"]);
-    expect(mutate((j) => delete j.steps)).toHaveLength(2);
+    expect(mutate((j) => delete j.steps![0].env!.CHANGES_RESULT)).toEqual(["gate must check needs.changes.result"]);
+    expect(mutate((j) => delete j.steps)).toHaveLength(GATE_NEEDS.length);
     expect(gateProblems({ jobs: {} })).toEqual(["no gate job"]);
   });
 
-  it("passes only for success/success and fails for failure, cancelled or skipped in either position", () => {
-    expect(runGate(ci, "success", "success")).toBe(0);
-    for (const bad of ["failure", "cancelled", "skipped"]) {
-      expect(runGate(ci, bad, "success"), `quality ${bad}`).not.toBe(0);
-      expect(runGate(ci, "success", bad), `e2e ${bad}`).not.toBe(0);
-      expect(runGate(ci, bad, bad), `both ${bad}`).not.toBe(0);
+  it("passes only when quality, e2e and changes must each be success (release-dryrun's own cases are in ciReleaseDryrun.test.ts)", () => {
+    expect(runGate(ci, PASSING)).toBe(0);
+    for (const need of ["quality", "e2e", "changes"]) {
+      for (const bad of ["failure", "cancelled", "skipped"]) {
+        expect(runGate(ci, { ...PASSING, [need]: bad }), `${need} ${bad}`).not.toBe(0);
+      }
     }
-    expect(runGate(ci, "failure", "cancelled")).not.toBe(0);
+    expect(runGate(ci, { ...PASSING, quality: "failure", e2e: "cancelled" })).not.toBe(0);
   });
 });
