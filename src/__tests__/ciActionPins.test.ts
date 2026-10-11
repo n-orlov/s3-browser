@@ -24,24 +24,37 @@ function unpinnedActions(workflow: unknown): string[] {
   return problems;
 }
 
-describe("ci.yml action pinning", () => {
-  const ciText = readFileSync(
-    path.resolve(__dirname, "../../.github/workflows/ci.yml"),
+const WORKFLOWS = ["ci.yml", "release.yml"];
+
+describe.each(WORKFLOWS)("%s action pinning", (file) => {
+  const text = readFileSync(
+    path.resolve(__dirname, "../../.github/workflows", file),
     "utf8",
   );
 
   it("pins every uses: ref to a full commit SHA", () => {
-    expect(unpinnedActions(parse(ciText))).toEqual([]);
+    expect(unpinnedActions(parse(text))).toEqual([]);
   });
 
   it("records the release tag in a trailing comment on every uses: line", () => {
-    const lines = ciText.split("\n").filter((l) => /\buses:/.test(l));
+    const lines = text.split("\n").filter((l) => /\buses:/.test(l));
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
       expect(line).toMatch(/@[0-9a-f]{40} # v\d+(\.\d+)*\s*$/);
     }
   });
 
+  it("fails when one uses: line is changed back to a tag", () => {
+    const reverted = text.replace(
+      /(uses: [^@\s]+)@[0-9a-f]{40} # v[\d.]+/,
+      "$1@v4",
+    );
+    expect(reverted).not.toBe(text);
+    expect(unpinnedActions(parse(reverted))).toHaveLength(1);
+  });
+});
+
+describe("action pin validator", () => {
   it("flags tag and branch refs (validator negative cases)", () => {
     const wf = (uses: string) => ({ jobs: { j: { steps: [{ uses }] } } });
     expect(unpinnedActions(wf("actions/checkout@v4"))).toHaveLength(1);
