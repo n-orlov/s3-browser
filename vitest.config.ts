@@ -6,8 +6,6 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    // Several suites spawn real child processes (badges CLI, Playwright, bash gate); the 5 s default flakes on a loaded shared runner.
-    testTimeout: 30000,
     environment: 'jsdom',
     setupFiles: ['allure-vitest/setup', './src/__tests__/setup.ts'],
     reporters: [

@@ -308,12 +308,19 @@ describe("badges CLI", () => {
     for (const name of BADGE_NAMES) expect(readOut(out, name)).toMatchObject({ schemaVersion: 1, message: "n/a", color: "lightgrey" });
   });
 
-  it("reads the ESLint result from --eslint, and never the .ratchet.json ceiling", () => {
+  it("reads the ESLint result from the file --eslint names", () => {
     const dir = path.join(root, "populated");
     expect(run(dir, ["--out", "out-custom", "--eslint", "custom/lint.json"]).status).toBe(0);
     expect(readOut(path.join(dir, "out-custom"), "lint")).toMatchObject({ message: "0 warnings", color: "brightgreen" });
+  });
+
+  it("renders lint n/a when the file --eslint names is absent", () => {
+    const dir = path.join(root, "populated");
     expect(run(dir, ["--out", "out-missing", "--eslint", "custom/absent.json"]).status).toBe(0);
     expect(readOut(path.join(dir, "out-missing"), "lint")).toEqual({ schemaVersion: 1, label: "lint", message: "n/a", color: "lightgrey" });
+  });
+
+  it("never reads the lint or crap figure from the .ratchet.json ceiling", () => {
     const ratchetOnly = path.join(root, "ratchet-only");
     put(ratchetOnly, ".ratchet.json", JSON.stringify(ratchet));
     expect(run(ratchetOnly, ["--out", "out"]).status).toBe(0);
@@ -321,21 +328,19 @@ describe("badges CLI", () => {
     expect(readOut(path.join(ratchetOnly, "out"), "crap").message).toBe("n/a");
   });
 
-  it("publishes the mutation badge n/a lightgrey, never a green, when its report is absent, unreadable or has no scoreable mutant", () => {
-    const cases: Record<string, string | null> = {
-      absent: null,
-      truncated: '{"files": {"a.ts": {"mutan',
-      "no files key": "{}",
-      "empty files": JSON.stringify({ files: {} }),
-      "only ignored mutants": JSON.stringify({ files: { "a.ts": { mutants: [{ status: "Ignored" }, { status: "CompileError" }] } } }),
-    };
-    for (const [name, report] of Object.entries(cases)) {
-      const dir = path.join(root, `mutation-${name.replace(/ /g, "-")}`);
-      put(dir, ".ratchet.json", JSON.stringify(ratchet));
-      if (report !== null) put(dir, "reports/mutation/mutation.json", report);
-      expect(run(dir, ["--out", "out", "--mutation", "reports/mutation/mutation.json"]).status, name).toBe(0);
-      expect(readOut(path.join(dir, "out"), "mutation"), name).toEqual({ schemaVersion: 1, label: "mutation", message: "n/a", color: "lightgrey" });
-    }
+  const unscoreableMutationReports: Array<[string, string | null]> = [
+    ["absent", null],
+    ["truncated", '{"files": {"a.ts": {"mutan'],
+    ["no files key", "{}"],
+    ["empty files", JSON.stringify({ files: {} })],
+    ["only ignored mutants", JSON.stringify({ files: { "a.ts": { mutants: [{ status: "Ignored" }, { status: "CompileError" }] } } })],
+  ];
+  it.each(unscoreableMutationReports)("publishes the mutation badge n/a lightgrey, never a green, when its report is %s", (name, report) => {
+    const dir = path.join(root, `mutation-${name.replace(/ /g, "-")}`);
+    put(dir, ".ratchet.json", JSON.stringify(ratchet));
+    if (report !== null) put(dir, "reports/mutation/mutation.json", report);
+    expect(run(dir, ["--out", "out", "--mutation", "reports/mutation/mutation.json"]).status, name).toBe(0);
+    expect(readOut(path.join(dir, "out"), "mutation"), name).toEqual({ schemaVersion: 1, label: "mutation", message: "n/a", color: "lightgrey" });
   });
 
   it("keeps the real mutation score when only another input is missing", () => {
@@ -357,24 +362,26 @@ describe("badges CLI", () => {
     expect(readOut(path.join(garbled, "out"), "lint")).toMatchObject({ message: "n/a", color: "lightgrey" });
   });
 
-  it("renders e2e-tests n/a, never a green partial sum, when any named shard file is absent or unreadable", () => {
+  const shard1 = "test-results/shard1.json";
+  const shard2 = "test-results/shard2.json";
+  const missingShardCases: Array<[string, string[]]> = [
+    ["shard 2 never arrived", [shard1, "test-results/absent.json"]],
+    ["shard 1 never arrived", ["test-results/absent.json", shard2]],
+    ["both are missing", ["test-results/absent1.json", "test-results/absent2.json"]],
+    ["a shard file is not Playwright JSON", [shard1, "test-results/garbled.json"]],
+  ];
+  it.each(missingShardCases)("renders e2e-tests n/a, never a green partial sum, when %s", (name, files) => {
     const dir = path.join(root, "populated");
-    const e2e = (name: string, args: string[]) => {
-      expect(run(dir, ["--out", name, ...args]).status).toBe(0);
-      return readOut(path.join(dir, name), "e2e-tests");
-    };
-    const na = { schemaVersion: 1, label: "e2e tests", message: "n/a", color: "lightgrey" };
-    // shard 2 never arrived
-    expect(e2e("out-no2", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/absent.json"])).toEqual(na);
-    // shard 1 never arrived
-    expect(e2e("out-no1", ["--e2e", "test-results/absent.json", "--e2e", "test-results/shard2.json"])).toEqual(na);
-    // both missing
-    expect(e2e("out-none", ["--e2e", "test-results/absent1.json", "--e2e", "test-results/absent2.json"])).toEqual(na);
-    // a shard file that is not Playwright JSON
     put(dir, "test-results/garbled.json", "{not json");
-    expect(e2e("out-garbled", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/garbled.json"])).toEqual(na);
-    // both present still sum
-    expect(e2e("out-both", ["--e2e", "test-results/shard1.json", "--e2e", "test-results/shard2.json"])).toMatchObject({ color: "brightgreen" });
+    const out = `out-${name.replace(/ /g, "-")}`;
+    expect(run(dir, ["--out", out, ...files.flatMap((f) => ["--e2e", f])]).status).toBe(0);
+    expect(readOut(path.join(dir, out), "e2e-tests")).toEqual({ schemaVersion: 1, label: "e2e tests", message: "n/a", color: "lightgrey" });
+  });
+
+  it("still sums the e2e-tests badge when both shard files are present", () => {
+    const dir = path.join(root, "populated");
+    expect(run(dir, ["--out", "out-both", "--e2e", shard1, "--e2e", shard2]).status).toBe(0);
+    expect(readOut(path.join(dir, "out-both"), "e2e-tests")).toMatchObject({ color: "brightgreen" });
   });
 
   describe("a Playwright report with a report-level error", () => {
@@ -400,30 +407,46 @@ describe("badges CLI", () => {
       });
     });
 
-    it("keeps the sum red when it sits beside a passing shard, in either order", () => {
-      const expected = { schemaVersion: 1, label: "e2e tests", message: "1 report error, 295 passed, 1 skipped", color: "red" };
-      expect(e2eBadge("mixed-a", { "a.json": errorReport, "b.json": passing })).toEqual(expected);
-      expect(e2eBadge("mixed-b", { "a.json": passing, "b.json": errorReport })).toEqual(expected);
+    const mixedExpected = { schemaVersion: 1, label: "e2e tests", message: "1 report error, 295 passed, 1 skipped", color: "red" };
+    it("keeps the sum red when it sits beside a passing shard", () => {
+      expect(e2eBadge("mixed-a", { "a.json": errorReport, "b.json": passing })).toEqual(mixedExpected);
     });
 
-    it("is red for a teardown error after passing tests, and sums errors over shards", () => {
-      const teardown = { stats: { expected: 12, unexpected: 0, flaky: 0, skipped: 0 }, errors: [{ message: "teardown failed" }] };
+    it("keeps the sum red when the passing shard comes first", () => {
+      expect(e2eBadge("mixed-b", { "a.json": passing, "b.json": errorReport })).toEqual(mixedExpected);
+    });
+
+    const teardown = { stats: { expected: 12, unexpected: 0, flaky: 0, skipped: 0 }, errors: [{ message: "teardown failed" }] };
+    it("is red for a teardown error after passing tests", () => {
       expect(e2eBadge("teardown", { "r.json": teardown })).toMatchObject({ color: "red", message: "1 report error, 12 passed" });
+    });
+
+    it("sums report errors over shards", () => {
       expect(e2eBadge("two-errors", { "a.json": teardown, "b.json": teardown })).toMatchObject({ color: "red", message: "2 report errors, 24 passed" });
     });
 
-    it("is red for the genuine report Playwright writes when globalSetup throws", () => {
-      const dir = path.join(root, "real-playwright");
-      put(dir, "setup.ts", "export default async function () { throw new Error('Independent gate: global setup failed before any test ran'); }\n");
-      put(dir, "pw.config.ts", "export default { testDir: '.', globalSetup: './setup.ts', reporter: [['json', { outputFile: 'results.json' }]] };\n");
-      const playwright = path.resolve(__dirname, "../../node_modules/playwright/cli.js");
-      const ran = spawnSync(process.execPath, [playwright, "test", "--config", path.join(dir, "pw.config.ts")], { cwd: dir, encoding: "utf8" });
-      expect(ran.status).toBe(1);
-      const report = JSON.parse(readFileSync(path.join(dir, "results.json"), "utf8")) as { stats: Record<string, number>; errors: unknown[] };
-      expect(report.errors).toHaveLength(1);
-      expect([report.stats.expected, report.stats.unexpected, report.stats.skipped, report.stats.flaky]).toEqual([0, 0, 0, 0]);
-      expect(run(dir, ["--out", "out", "--e2e", "results.json"]).status).toBe(0);
-      expect(readOut(path.join(dir, "out"), "e2e-tests")).toMatchObject({ color: "red", message: "1 report error, 0 passed" });
+    describe("the genuine report Playwright writes when globalSetup throws", () => {
+      let dir: string;
+      let ran: ReturnType<typeof spawnSync>;
+      beforeAll(() => {
+        dir = path.join(root, "real-playwright");
+        put(dir, "setup.ts", "export default async function () { throw new Error('Independent gate: global setup failed before any test ran'); }\n");
+        put(dir, "pw.config.ts", "export default { testDir: '.', globalSetup: './setup.ts', reporter: [['json', { outputFile: 'results.json' }]] };\n");
+        const playwright = path.resolve(__dirname, "../../node_modules/playwright/cli.js");
+        ran = spawnSync(process.execPath, [playwright, "test", "--config", path.join(dir, "pw.config.ts")], { cwd: dir, encoding: "utf8" });
+      });
+
+      it("records one report error and no test outcomes", () => {
+        expect(ran.status).toBe(1);
+        const report = JSON.parse(readFileSync(path.join(dir, "results.json"), "utf8")) as { stats: Record<string, number>; errors: unknown[] };
+        expect(report.errors).toHaveLength(1);
+        expect([report.stats.expected, report.stats.unexpected, report.stats.skipped, report.stats.flaky]).toEqual([0, 0, 0, 0]);
+      });
+
+      it("is rendered red, not '0 passed' green", () => {
+        expect(run(dir, ["--out", "out", "--e2e", "results.json"]).status).toBe(0);
+        expect(readOut(path.join(dir, "out"), "e2e-tests")).toMatchObject({ color: "red", message: "1 report error, 0 passed" });
+      });
     });
 
     it("stays green for an empty errors array", () => {
