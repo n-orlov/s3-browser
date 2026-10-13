@@ -1,6 +1,6 @@
 // Proves the repository's ESLint config forbids `waitForTimeout` in e2e/ (R4.8) by linting fixture
 // sources through the ESLint Node API with the real eslint.config.mjs.
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { ESLint } from 'eslint';
 import path from 'node:path';
 
@@ -16,6 +16,12 @@ const withSleep = "export async function f(page: any) {\n  await page.waitForTim
 const withoutSleep = "export async function f(page: any) {\n  await page.locator('h2').click();\n}\n";
 
 describe('e2e fixed-sleep ban', () => {
+  // Loading eslint.config.mjs imports every plugin, and that is nearly all of the first lint's cost.
+  // Load it once here so that each test times only its own lint, not that one-off setup.
+  beforeAll(async () => {
+    await eslint.calculateConfigForFile(path.join(repo, 'e2e/fixture.e2e.ts'));
+  });
+
   it('reports waitForTimeout under e2e/ as an error', async () => {
     const messages = await restrictedSyntaxMessages(withSleep, 'e2e/fixture.e2e.ts');
     expect(messages).toHaveLength(1);
