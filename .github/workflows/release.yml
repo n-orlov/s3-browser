@@ -5,7 +5,34 @@ on:
     types: [created]
 
 jobs:
+  verify-on-master:
+    name: Verify release commit is on master
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the release commit to be an ancestor of origin/master
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          echo "Release ${RELEASE_TAG} targets ${SHA}"
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$SHA" origin/master; then
+            echo "::error::Release commit ${SHA} is not an ancestor of origin/master; refusing to build or publish."
+            exit 1
+          fi
+
   build-linux:
+    needs: verify-on-master
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -44,6 +71,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
+    needs: verify-on-master
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -74,6 +102,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
+    needs: verify-on-master
     permissions:
       contents: write
     runs-on: macos-latest
