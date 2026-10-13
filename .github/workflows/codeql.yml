@@ -4,13 +4,14 @@ name: CodeQL
 #   * `push` to master and a weekly `schedule` analyse and upload to code scanning (job `analyze`).
 #   * `pull_request` analyses the PR head (job `analyze-pr`) but never uploads (`upload: never`) and holds no write
 #     permission, so code reachable from a pull request never runs next to `security-events: write`.
-#     Like ci.yml it runs only for same-repo PRs opened by the owner.
+#     Like ci.yml it runs only for same-repo PRs opened by the owner, and not for a draft (`ready_for_review` starts it).
 # Needs the repository's CodeQL "default setup" to stay not-configured; an advanced workflow conflicts with it.
 
 on:
   push:
     branches: [master]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [master]
   schedule:
     - cron: '17 4 * * 1'
@@ -50,7 +51,8 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login == 'n-orlov' &&
-      github.actor == 'n-orlov'
+      github.actor == 'n-orlov' &&
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

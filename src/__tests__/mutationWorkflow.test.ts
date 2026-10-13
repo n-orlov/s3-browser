@@ -39,6 +39,30 @@ function comparePaths(workflow: Workflow, mutate: string[]): string[] {
   return problems;
 }
 
+const PR_TYPES = ['opened', 'synchronize', 'reopened', 'ready_for_review'];
+const PR_ARM =
+  "github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && " +
+  "github.event.pull_request.user.login == 'n-orlov' && github.actor == 'n-orlov' && github.event.pull_request.draft == false)";
+
+/** The condition with the folded YAML whitespace collapsed, so it can be compared as one line. */
+const flat = (condition: string | undefined): string => (condition ?? '').replace(/\s+/g, ' ').trim();
+
+/** One problem per way the pull_request trigger deviates from: the four types, branches [master] and nothing else on those keys. */
+function triggerProblems(workflow: Workflow): string[] {
+  const pr = workflow.on?.pull_request as { types?: string[]; branches?: string[] } | undefined;
+  const problems: string[] = [];
+  if (JSON.stringify(pr?.types) !== JSON.stringify(PR_TYPES)) problems.push(`pull_request types must be ${PR_TYPES.join(', ')}, got ${JSON.stringify(pr?.types)}`);
+  if (JSON.stringify(pr?.branches) !== JSON.stringify(['master'])) problems.push(`pull_request branches must be [master], got ${JSON.stringify(pr?.branches)}`);
+  return problems;
+}
+
+/** One problem when the mutation job's `if:` lacks the owner gate with the draft guard inside the pull_request arm. */
+function draftGuardProblems(workflow: Workflow): string[] {
+  const condition = flat(workflow.jobs?.mutation?.if);
+  if (!condition) return ['mutation has no if:'];
+  return condition.includes(PR_ARM) ? [] : [`mutation must carry the owner gate and the draft guard in the pull_request arm, got ${condition}`];
+}
+
 const mutationJob = (workflow: Workflow): Job => Object.values(workflow.jobs ?? {})[0] ?? {};
 const stepsOf = (workflow: Workflow): Step[] => mutationJob(workflow).steps ?? [];
 
@@ -65,6 +89,35 @@ describe('mutation.yml', () => {
     expect(condition).toContain("github.event.pull_request.user.login == 'n-orlov'");
     expect(condition).toContain("github.actor == 'n-orlov'");
     expect(Object.keys(workflow.on ?? {})).not.toContain('pull_request_target');
+  });
+
+  it('runs on pull_request types opened, synchronize, reopened and ready_for_review into master, never main', () => {
+    expect(triggerProblems(workflow)).toEqual([]);
+    expect((workflow.on?.pull_request as { types?: string[] }).types).toEqual(PR_TYPES);
+    expect((workflow.on?.pull_request as { branches?: string[] }).branches).toEqual(['master']);
+  });
+
+  it('flags a dropped ready_for_review, a missing types list or a main branch (negative cases)', () => {
+    const pr = workflow.on?.pull_request as Record<string, unknown>;
+    const withPr = (change: Record<string, unknown>): Workflow => ({ ...workflow, on: { ...workflow.on, pull_request: { ...pr, ...change } } });
+    expect(triggerProblems(withPr({ types: ['opened', 'synchronize', 'reopened'] }))).toHaveLength(1);
+    expect(triggerProblems(withPr({ types: undefined }))).toHaveLength(1);
+    expect(triggerProblems(withPr({ branches: ['master', 'main'] }))).toHaveLength(1);
+  });
+
+  it('skips draft pull requests: the draft guard sits beside the owner gate inside the pull_request arm', () => {
+    expect(draftGuardProblems(workflow)).toEqual([]);
+    expect(flat(mutationJob(workflow).if)).toContain('github.event.pull_request.draft == false');
+  });
+
+  it('flags a job that loses the draft guard or an owner clause, or takes the guard out of the pull_request arm (negative cases)', () => {
+    const condition = flat(mutationJob(workflow).if);
+    const withIf = (value?: string): Workflow => ({ ...workflow, jobs: { ...workflow.jobs, mutation: { ...mutationJob(workflow), if: value } } });
+    const guard = ' && github.event.pull_request.draft == false';
+    expect(draftGuardProblems(withIf(condition.replace(guard, '')))).toHaveLength(1);
+    expect(draftGuardProblems(withIf(condition.replace(" && github.actor == 'n-orlov'", '')))).toHaveLength(1);
+    expect(draftGuardProblems(withIf(`github.event.pull_request.draft == false && (${condition.replace(guard, '')})`))).toHaveLength(1);
+    expect(draftGuardProblems(withIf(undefined))).toHaveLength(1);
   });
 
   it("has pull_request paths equal to the Stryker config's mutate list", async () => {

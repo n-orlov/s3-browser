@@ -13,7 +13,7 @@ type Job = {
 type Workflow = {
   on?: {
     push?: { branches?: string[] };
-    pull_request?: unknown;
+    pull_request?: { types?: string[]; branches?: string[] };
     schedule?: { cron?: string }[];
   };
   permissions?: Record<string, string>;
@@ -74,6 +74,29 @@ function jobProblems(wf: Workflow): string[] {
   return problems;
 }
 
+const PR_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
+const PR_GATE =
+  "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && " +
+  "github.event.pull_request.user.login == 'n-orlov' && github.actor == 'n-orlov' && github.event.pull_request.draft == false";
+
+/** The condition with the folded YAML whitespace collapsed, so it can be compared as one line. */
+const flat = (condition: string | undefined): string => (condition ?? "").replace(/\s+/g, " ").trim();
+
+/** One problem per way the pull_request trigger deviates from the four types into master. */
+function prTypesProblems(wf: Workflow): string[] {
+  const problems: string[] = [];
+  const pr = wf.on?.pull_request;
+  if (JSON.stringify(pr?.types) !== JSON.stringify(PR_TYPES)) problems.push(`pull_request types must be ${PR_TYPES.join(", ")}, got ${JSON.stringify(pr?.types)}`);
+  if (JSON.stringify(pr?.branches) !== JSON.stringify(["master"])) problems.push(`pull_request branches must be [master], got ${JSON.stringify(pr?.branches)}`);
+  return problems;
+}
+
+/** One problem when analyze-pr's `if:` is not the pull_request owner gate with the draft guard. */
+function draftGuardProblems(wf: Workflow): string[] {
+  const condition = flat(wf.jobs?.["analyze-pr"]?.if);
+  return condition === PR_GATE ? [] : [`analyze-pr must carry the owner gate and the draft guard, got ${condition}`];
+}
+
 const file = path.resolve(__dirname, "../../.github/workflows/codeql.yml");
 const text = readFileSync(file, "utf8");
 const workflow = parse(text) as Workflow;
@@ -97,6 +120,34 @@ describe("codeql.yml", () => {
     void _pr;
     expect(triggerProblems({ ...workflow, on: noPush })).toContain("no push trigger on master");
     expect(triggerProblems({ ...workflow, on: noPr })).toContain("no pull_request trigger");
+  });
+
+  it("runs the pull_request trigger on opened, synchronize, reopened and ready_for_review into master", () => {
+    expect(prTypesProblems(workflow)).toEqual([]);
+    expect(workflow.on?.pull_request?.types).toEqual(PR_TYPES);
+  });
+
+  it("flags a dropped ready_for_review, a missing types list or a main branch (negative cases)", () => {
+    const pr = workflow.on?.pull_request;
+    const withPr = (change: Record<string, unknown>): Workflow => ({ ...workflow, on: { ...workflow.on, pull_request: { ...pr, ...change } } });
+    expect(prTypesProblems(withPr({ types: ["opened", "synchronize", "reopened"] }))).toHaveLength(1);
+    expect(prTypesProblems(withPr({ types: undefined }))).toHaveLength(1);
+    expect(prTypesProblems(withPr({ branches: ["master", "main"] }))).toHaveLength(1);
+  });
+
+  it("skips draft pull requests in analyze-pr and leaves analyze unchanged", () => {
+    expect(draftGuardProblems(workflow)).toEqual([]);
+    expect(flat(workflow.jobs?.["analyze-pr"]?.if)).toContain("github.event.pull_request.draft == false");
+    expect(flat(workflow.jobs?.analyze?.if)).toBe("github.event_name != 'pull_request'");
+  });
+
+  it("flags analyze-pr losing the draft guard or an owner clause (negative cases)", () => {
+    const jobs = workflow.jobs ?? {};
+    const condition = flat(jobs["analyze-pr"].if);
+    const withIf = (value?: string): Workflow => ({ ...workflow, jobs: { ...jobs, "analyze-pr": { ...jobs["analyze-pr"], if: value } } });
+    expect(draftGuardProblems(withIf(condition.replace(" && github.event.pull_request.draft == false", "")))).toHaveLength(1);
+    expect(draftGuardProblems(withIf(condition.replace(" && github.actor == 'n-orlov'", "")))).toHaveLength(1);
+    expect(draftGuardProblems(withIf(undefined))).toHaveLength(1);
   });
 
   it("analyses javascript-typescript with the security-extended suite on ubuntu-latest, with write only on the uploading job", () => {
