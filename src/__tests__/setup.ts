@@ -109,6 +109,15 @@ Object.defineProperty(window, 'electronAPI', {
   writable: true,
 });
 
+// jsdom does not implement Element.scrollIntoView. FileList scrolls a found pending-selection
+// row into view 100 ms after selecting it; without this stub that timer throws an uncaught
+// TypeError whenever it fires while a test is still running (timing-dependent on a loaded runner).
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  value: vi.fn(),
+  writable: true,
+  configurable: true,
+});
+
 // Export for test access
 export { mockElectronAPI };
 
