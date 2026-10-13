@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
-import { spawnSync } from "child_process";
+import { spawn } from "child_process";
 import path from "path";
 import { parse } from "yaml";
 import playwrightConfig from "../../playwright.config";
@@ -452,13 +452,17 @@ type GateResults = Record<string, string>;
 const PASSING: GateResults = { quality: "success", e2e: "success", changes: "success", "release-dryrun": "success" };
 
 /** Runs the gate step's script the way Actions would, with the needs' results in its environment; returns the exit code. */
-function runGate(workflow: unknown, results: GateResults): number {
+function runGate(workflow: unknown, results: GateResults): Promise<number> {
   const step = (workflow as { jobs: { gate: GateJob } }).jobs.gate.steps?.find((s) => s.run);
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(step?.env ?? {})) {
     env[name] = value.replace(/\$\{\{\s*needs\.([\w-]+)\.result\s*\}\}/, (_, need: string) => results[need] ?? "");
   }
-  return spawnSync("bash", ["-e", "-c", step?.run ?? "exit 99"], { env: { PATH: process.env.PATH ?? "", ...env } }).status ?? -1;
+  return new Promise((resolve, reject) => {
+    const child = spawn("bash", ["-e", "-c", step?.run ?? "exit 99"], { env: { PATH: process.env.PATH ?? "", ...env }, stdio: "ignore" });
+    child.on("error", reject);
+    child.on("close", (code) => resolve(code ?? -1));
+  });
 }
 
 describe("ci.yml gate job", () => {
@@ -486,14 +490,18 @@ describe("ci.yml gate job", () => {
     expect(gateProblems({ jobs: {} })).toEqual(["no gate job"]);
   });
 
-  it("passes only when quality, e2e and changes must each be success (release-dryrun's own cases are in ciReleaseDryrun.test.ts)", () => {
-    expect(runGate(ci, PASSING)).toBe(0);
+  it("passes only when quality, e2e and changes must each be success (release-dryrun's own cases are in ciReleaseDryrun.test.ts)", async () => {
+    // The cases run concurrently: each is one bash process, and run one after another they exceed the test timeout on a loaded runner.
+    const cases: Array<{ label: string; results: GateResults; code: Promise<number> }> = [];
+    const add = (label: string, results: GateResults) => cases.push({ label, results, code: runGate(ci, results) });
+    add("all success", PASSING);
     for (const need of ["quality", "e2e", "changes"]) {
-      for (const bad of ["failure", "cancelled", "skipped"]) {
-        expect(runGate(ci, { ...PASSING, [need]: bad }), `${need} ${bad}`).not.toBe(0);
-      }
+      for (const bad of ["failure", "cancelled", "skipped"]) add(`${need} ${bad}`, { ...PASSING, [need]: bad });
     }
-    expect(runGate(ci, { ...PASSING, quality: "failure", e2e: "cancelled" })).not.toBe(0);
+    add("quality failure and e2e cancelled", { ...PASSING, quality: "failure", e2e: "cancelled" });
+    const codes = await Promise.all(cases.map((c) => c.code));
+    expect(codes[0]).toBe(0);
+    cases.slice(1).forEach((c, i) => expect(codes[i + 1], c.label).not.toBe(0));
   });
 });
 
