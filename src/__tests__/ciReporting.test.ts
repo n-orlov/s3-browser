@@ -496,3 +496,112 @@ describe("ci.yml gate job", () => {
     expect(runGate(ci, { ...PASSING, quality: "failure", e2e: "cancelled" })).not.toBe(0);
   });
 });
+
+type TriggerWorkflow = {
+  on?: { push?: { branches?: string[]; paths?: string[] }; pull_request?: { types?: string[]; branches?: string[] } };
+  concurrency?: { group?: string; "cancel-in-progress"?: string };
+  jobs?: Record<string, { if?: string }>;
+};
+
+const PR_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
+const PR_ARM =
+  "github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && " +
+  "github.event.pull_request.user.login == 'n-orlov' && github.actor == 'n-orlov' && github.event.pull_request.draft == false)";
+const GUARDED_JOBS = ["quality", "changes", "release-dryrun", "e2e", "report"];
+
+/** One problem per way the triggers deviate from: pull_request opened/synchronize/reopened/ready_for_review into master, push to master without paths. */
+function triggerProblems(workflow: TriggerWorkflow): string[] {
+  const problems: string[] = [];
+  const pr = workflow.on?.pull_request;
+  if (JSON.stringify(pr?.types) !== JSON.stringify(PR_TYPES)) problems.push(`pull_request types must be ${PR_TYPES.join(", ")}, got ${JSON.stringify(pr?.types)}`);
+  if (JSON.stringify(pr?.branches) !== JSON.stringify(["master"])) problems.push(`pull_request branches must be [master], got ${JSON.stringify(pr?.branches)}`);
+  const push = workflow.on?.push;
+  if (JSON.stringify(push?.branches) !== JSON.stringify(["master"])) problems.push(`push branches must be [master], got ${JSON.stringify(push?.branches)}`);
+  if (push?.paths !== undefined) problems.push("push must not filter by paths");
+  return problems;
+}
+
+/** The condition with the folded YAML whitespace collapsed, so it can be compared as one line. */
+const flat = (condition: string | undefined) => (condition ?? "").replace(/\s+/g, " ").trim();
+
+/** One problem per guarded job whose `if:` lacks the owner gate with the draft guard inside the pull_request arm. */
+function draftGuardProblems(workflow: TriggerWorkflow): string[] {
+  const problems: string[] = [];
+  for (const name of GUARDED_JOBS) {
+    const condition = flat(workflow.jobs?.[name]?.if);
+    if (!condition) problems.push(`${name} has no if:`);
+    else if (!condition.includes(PR_ARM)) problems.push(`${name} must carry the owner gate and the draft guard in the pull_request arm, got ${condition}`);
+  }
+  return problems;
+}
+
+/** One problem per way the concurrency group or the cancel rule changed. */
+function concurrencyProblems(workflow: TriggerWorkflow): string[] {
+  const problems: string[] = [];
+  if (workflow.concurrency?.group !== "ci-${{ github.event.pull_request.number || github.ref }}") problems.push(`concurrency group changed: ${workflow.concurrency?.group}`);
+  if (workflow.concurrency?.["cancel-in-progress"] !== "${{ github.event_name == 'pull_request' }}") problems.push(`cancel-in-progress changed: ${workflow.concurrency?.["cancel-in-progress"]}`);
+  return problems;
+}
+
+describe("ci.yml branch workflow (draft pull requests, master only)", () => {
+  const workflow = ci as TriggerWorkflow;
+  const mutate = (fn: (wf: TriggerWorkflow) => void) => {
+    const wf = clone(workflow);
+    fn(wf);
+    return wf;
+  };
+
+  it("runs on pull_request types opened, synchronize, reopened and ready_for_review into master, and on push to master, never main", () => {
+    expect(triggerProblems(workflow)).toEqual([]);
+    expect(workflow.on?.pull_request?.types).toEqual(PR_TYPES);
+    expect(JSON.stringify(workflow.on)).not.toMatch(/\bmain\b/);
+  });
+
+  it("flags a dropped ready_for_review, a main branch or a paths filter on the triggers (negative cases)", () => {
+    expect(triggerProblems(mutate((wf) => (wf.on!.pull_request!.types = ["opened", "synchronize", "reopened"])))).toHaveLength(1);
+    expect(triggerProblems(mutate((wf) => delete wf.on!.pull_request!.types))).toHaveLength(1);
+    expect(triggerProblems(mutate((wf) => (wf.on!.pull_request!.branches = ["master", "main"])))).toHaveLength(1);
+    expect(triggerProblems(mutate((wf) => (wf.on!.push!.branches = ["master", "main"])))).toHaveLength(1);
+    expect(triggerProblems(mutate((wf) => (wf.on!.push!.paths = ["src/**"])))).toHaveLength(1);
+  });
+
+  it("puts the draft guard beside the owner gate on quality, changes, release-dryrun, e2e and report", () => {
+    expect(draftGuardProblems(workflow)).toEqual([]);
+    for (const name of GUARDED_JOBS) expect(flat(workflow.jobs?.[name]?.if), name).toContain("github.event.pull_request.draft == false");
+  });
+
+  it("flags a job that loses the draft guard, an owner clause, or takes the guard out of the pull_request arm (negative cases)", () => {
+    for (const name of GUARDED_JOBS) {
+      const without = mutate((wf) => (wf.jobs![name].if = flat(wf.jobs![name].if).replace(" && github.event.pull_request.draft == false", "")));
+      expect(draftGuardProblems(without), name).toHaveLength(1);
+      const noActor = mutate((wf) => (wf.jobs![name].if = flat(wf.jobs![name].if).replace(" && github.actor == 'n-orlov'", "")));
+      expect(draftGuardProblems(noActor), name).toHaveLength(1);
+      const outside = mutate((wf) => (wf.jobs![name].if = `github.event.pull_request.draft == false && (${flat(wf.jobs![name].if).replace(" && github.event.pull_request.draft == false", "")})`));
+      expect(draftGuardProblems(outside), name).toHaveLength(1);
+      expect(draftGuardProblems(mutate((wf) => delete wf.jobs![name].if)), name).toHaveLength(1);
+    }
+  });
+
+  it("leaves push, schedule and workflow_dispatch unguarded: the guard sits only inside the pull_request arm", () => {
+    for (const name of GUARDED_JOBS) {
+      const condition = flat(workflow.jobs?.[name]?.if);
+      expect(condition.indexOf("github.event_name != 'pull_request' ||"), name).toBeGreaterThanOrEqual(0);
+      expect(condition.indexOf("github.event.pull_request.draft"), name).toBeGreaterThan(condition.indexOf("github.event_name != 'pull_request' ||"));
+    }
+  });
+
+  it("keeps publish push-to-master only and gate always() with no draft guard", () => {
+    expect(flat(workflow.jobs?.publish?.if)).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'");
+    expect(workflow.jobs?.gate?.if).toBe("always()");
+    expect(publishJobProblems(workflow as Workflow)).toEqual([]);
+    const loosened = mutate((wf) => (wf.jobs!.publish.if = "github.event_name == 'push' || github.event_name == 'pull_request'"));
+    expect(publishJobProblems(loosened as Workflow)).not.toEqual([]);
+  });
+
+  it("keeps the concurrency group and the cancel-in-progress rule", () => {
+    expect(concurrencyProblems(workflow)).toEqual([]);
+    expect(concurrencyProblems(mutate((wf) => (wf.concurrency!.group = "ci-${{ github.ref }}")))).toHaveLength(1);
+    expect(concurrencyProblems(mutate((wf) => (wf.concurrency!["cancel-in-progress"] = "false")))).toHaveLength(1);
+    expect(concurrencyProblems(mutate((wf) => delete wf.concurrency))).toHaveLength(2);
+  });
+});

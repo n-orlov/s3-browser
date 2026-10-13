@@ -5,7 +5,8 @@ name: Mutation
 # It is deliberately NOT part of ci.yml's `gate` (nothing in ci.yml `needs` it): a full run is too slow for every push.
 #   * weekly `schedule` (Mondays 06:41 UTC) and manual `workflow_dispatch` on any ref.
 #   * `pull_request` only (never `pull_request_target`) from an owner same-repo PR, and only when the PR touches a
-#     mutated module: `paths` below is exactly the `mutate` list of stryker.config.mjs (a test asserts they are equal).
+#     mutated module and the PR is not a draft (`ready_for_review` starts it): `paths` below is exactly the `mutate`
+#     list of stryker.config.mjs (a test asserts they are equal).
 # Default token is read-only; no secrets are used.
 
 on:
@@ -13,7 +14,8 @@ on:
     - cron: '41 6 * * 1'
   workflow_dispatch:
   pull_request:
-    branches: [master, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [master]
     paths:
       - 'scripts/crap/crapScore.ts'
       - 'scripts/ratchet/ratchetCheck.ts'
@@ -38,7 +40,8 @@ jobs:
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
        github.event.pull_request.user.login == 'n-orlov' &&
-       github.actor == 'n-orlov')
+       github.actor == 'n-orlov' &&
+       github.event.pull_request.draft == false)
     runs-on: [self-hosted, linux, x64, s3-browser]
     timeout-minutes: 90
     steps:

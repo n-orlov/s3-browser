@@ -131,17 +131,25 @@ src/
 - CI/CD with GitHub Actions
 
 ### In Progress / Pending
-- E2E tests with Playwright (using mocked S3 backend like LocalStack)
-- Detailed Playwright reports with screenshots and video recordings
-- macOS builds
+- Nothing planned. E2E tests (Playwright against LocalStack, with reports) and macOS builds are shipped.
 
 ## Quality Gates & CI
 
-CI (`.github/workflows/ci.yml`) runs on the owner's self-hosted runners (label `s3-browser` on `int21h-ws`) for pushes to master and for PRs **from this repo opened by the owner only** (fork PRs never run there; the runners have docker access). Release/packaging (`release.yml`) stays on GitHub-hosted runners (incl. macOS).
+CI (`.github/workflows/ci.yml`) runs on the owner's self-hosted runners (label `s3-browser` on `int21h-ws`) for PRs **from this repo opened by the owner only** (fork PRs never run there; the runners have docker access), and for pushes to `master`. Every push to `master` is the squash merge of a pull request (see Working practice below); nothing is committed to `master` directly. Draft PRs do not run CI. Release/packaging (`release.yml`) stays on GitHub-hosted runners (incl. macOS).
 
-Gates, all runnable locally: `npm run typecheck` (src + e2e + configs, tests included), `npm run lint` (ESLint; `--max-warnings 18` is a ratchet - lower it as warnings are fixed, never raise it), `npm run test:coverage` (thresholds in `vitest.config.ts`; only raise them), `npm run audit:prod` (high+), `npm run build`, and `npm run test:e2e:docker` (Playwright + Electron + LocalStack entirely in containers - use this instead of `npm run test:e2e`, which opens windows on the host).
+Gates, all runnable locally: `npm run typecheck` (src + e2e + configs, tests included), `npm run lint` (ESLint; `--max-warnings 0` - the lint script allows no warnings, never raise it), `npm run test:coverage` (thresholds in `vitest.config.ts`; only raise them), `npm run audit:prod` (high+), `npm run build`, and `npm run test:e2e:docker` (Playwright + Electron + LocalStack entirely in containers - use this instead of `npm run test:e2e`, which opens windows on the host).
 
 Tests that call real AWS (`s3.integration`, `e2e-ui-flow`, `editor-integration`) are opt-in: set `S3_BROWSER_REAL_AWS_TESTS=1`. They never run in CI.
+
+## Working practice
+
+How changes reach `master` (the owner is the only committer; the same rules apply to an assistant working here):
+
+- **One branch per scope.** Each piece of work gets its own branch cut from `master`; nothing is committed to `master` directly.
+- **Open the pull request only when the scope is complete.** Until then the work is either unpushed or a **draft** PR. CI does not run on a draft (the draft guard in `ci.yml`, `codeql.yml` and `mutation.yml`), so a draft's `gate` check fails closed rather than reading as passing. Mark it ready for review only when the scope is done.
+- **Required check:** `gate (quality, both e2e shards and, when it runs, release-dryrun succeeded)` - the `name:` of the `gate` job in `.github/workflows/ci.yml`. It must be green on the PR head before merging. If the job is renamed, the branch protection setting and this line change in the same PR (`src/__tests__/workingPracticeDocs.test.ts` enforces the match).
+- **Squash merge** the pull request, so each scope lands on `master` as one commit.
+- **Final check on the merged sha:** after the merge, run `gh workflow run ci.yml --ref master` (`workflow_dispatch`) on the merged sha and wait for it to go green. Nothing lands on `master` after that dispatch; a cure needs a fresh branch, a PR, a green `gate`, a squash merge and a new dispatch.
 
 ## Testing Philosophy
 
