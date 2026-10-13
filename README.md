@@ -195,6 +195,8 @@ Configure profiles in `~/.aws/credentials` and/or `~/.aws/config`.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+How changes reach `master` (a branch per scope, a draft until the scope is complete, the required `gate` check, a squash merge) is described in the [Working practice](CLAUDE.md#working-practice) section of `CLAUDE.md`.
+
 ### Code Style
 
 - TypeScript with strict mode

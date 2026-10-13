@@ -36,6 +36,23 @@ function workingPracticeProblems(markdown: string, gateName: string | undefined)
   return problems;
 }
 
+/** The `--max-warnings` value in the lint script of a package.json text; undefined when there is none. */
+function lintMaxWarnings(packageJson: string): number | undefined {
+  const lint = (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts?.lint;
+  const match = /--max-warnings\s+(\d+)/.exec(lint ?? "");
+  return match ? Number(match[1]) : undefined;
+}
+
+/** One problem per `--max-warnings N` in the markdown that differs from `expected`; one when there is none at all. */
+function maxWarningsProblems(markdown: string, expected: number | undefined): string[] {
+  if (expected === undefined) return ["package.json's lint script has no --max-warnings"];
+  const stated = [...markdown.matchAll(/--max-warnings\s+(\d+)/g)].map((m) => Number(m[1]));
+  if (stated.length === 0) return ["CLAUDE.md does not state the lint --max-warnings value"];
+  return stated.filter((n) => n !== expected).map((n) => `CLAUDE.md states --max-warnings ${n} but package.json's lint script uses ${expected}`);
+}
+
+const packageJson = readFileSync(path.join(root, "package.json"), "utf8");
+const readme = readFileSync(path.join(root, "README.md"), "utf8");
 const gateName = ci.jobs?.gate?.name;
 
 describe("CLAUDE.md Working practice section", () => {
@@ -63,5 +80,28 @@ describe("CLAUDE.md Working practice section", () => {
   it("reports a problem for each practice the section leaves out", () => {
     const thin = "## Working practice\n\nUse branches.\n";
     expect(workingPracticeProblems(thin, gateName).length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("CLAUDE.md lint ratchet statement", () => {
+  it("states the --max-warnings value of package.json's lint script, which is 0", () => {
+    expect(lintMaxWarnings(packageJson)).toBe(0);
+    expect(maxWarningsProblems(claudeMd, lintMaxWarnings(packageJson))).toEqual([]);
+  });
+
+  it("reports a fixture that still says 18 as a problem", () => {
+    const stale = claudeMd.replace("--max-warnings 0", "--max-warnings 18");
+    expect(maxWarningsProblems(stale, lintMaxWarnings(packageJson))).toEqual(["CLAUDE.md states --max-warnings 18 but package.json's lint script uses 0"]);
+  });
+
+  it("reports a problem when CLAUDE.md states no value", () => {
+    expect(maxWarningsProblems("no lint line", 0)).toHaveLength(1);
+  });
+});
+
+describe("README Contributing section", () => {
+  it("points at the Working practice section of CLAUDE.md", () => {
+    const contributing = /^## Contributing[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(readme)?.[1] ?? "";
+    expect(contributing).toMatch(/\]\(CLAUDE\.md#working-practice\)/);
   });
 });
