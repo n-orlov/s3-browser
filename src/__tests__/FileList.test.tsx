@@ -897,6 +897,18 @@ describe('FileList', () => {
       expect(onPendingFileSelectionHandled).toHaveBeenCalledTimes(1);
       expect(onSelectFile).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'other/b.txt' }));
     });
+
+    it('scrolls the found pending file row into view and highlights it', async () => {
+      const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
+      render(<FileList {...at('other/', { pendingFileSelection: 'other/b.txt', onPendingFileSelectionHandled: vi.fn() })} />);
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+      });
+      const row = screen.getByText('b.txt').closest('tr');
+      expect(scrollIntoView.mock.contexts).toEqual([row]);
+      expect(row).toHaveClass('highlight-found');
+    });
   });
 
   describe('pending file selection (URL navigation)', () => {
