@@ -1,0 +1,1 @@
+{"id":"004dbd0f9a1ccee0b06e3ee98d27639d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/TextEditor.test.tsx#TextEditor save functionality disables save button when no changes","name":"disables save button when no changes","status":"passed","testResultsByEnv":{"default":"b3f410086afbcefb995026f8b7cc796f"}}

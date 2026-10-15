@@ -1,0 +1,1 @@
+{"id":"3ea14c1bb9328dcd4c322490d3abb264.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service createFolder should not duplicate trailing slash if already present","name":"should not duplicate trailing slash if already present","status":"passed","testResultsByEnv":{"default":"59076c47e57a2fa96bcaf04e28483c72"}}

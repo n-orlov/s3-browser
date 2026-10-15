@@ -1,0 +1,1 @@
+{"id":"bd56345fd8825da2c674e28de78825ab.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciActionPins.test.ts#ci.yml action pinning records the release tag in a trailing comment on every uses: line","name":"records the release tag in a trailing comment on every uses: line","status":"passed","testResultsByEnv":{"default":"cf0fd86a18060811dd9aacc54ee1caf7"}}

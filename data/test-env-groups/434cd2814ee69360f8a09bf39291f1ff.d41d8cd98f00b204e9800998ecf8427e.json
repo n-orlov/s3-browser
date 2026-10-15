@@ -1,0 +1,1 @@
+{"id":"434cd2814ee69360f8a09bf39291f1ff.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#getProfileTypeDescription has a distinct non-empty description for every profile type","name":"has a distinct non-empty description for every profile type","status":"passed","testResultsByEnv":{"default":"c82ace84b79248e2dd72391376d05c4e"}}

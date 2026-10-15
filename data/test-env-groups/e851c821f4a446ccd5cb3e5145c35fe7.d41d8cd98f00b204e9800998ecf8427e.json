@@ -1,0 +1,1 @@
+{"id":"e851c821f4a446ccd5cb3e5145c35fe7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/AwsProfileContext.test.tsx#AwsProfileContext restores the last used profile after the initial load","name":"restores the last used profile after the initial load","status":"passed","testResultsByEnv":{"default":"a067c7af98fc0c68ec6896335dcd63e7"}}

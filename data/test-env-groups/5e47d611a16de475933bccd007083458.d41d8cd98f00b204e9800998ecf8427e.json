@@ -1,0 +1,1 @@
+{"id":"5e47d611a16de475933bccd007083458.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciFailurePathReporting.test.ts#vitest coverage on a failing run writes coverage when one file fails and another passes","name":"writes coverage when one file fails and another passes","status":"passed","testResultsByEnv":{"default":"673efd03ba78b3066e517e4c25047cfd"}}

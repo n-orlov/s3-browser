@@ -1,0 +1,1 @@
+{"id":"9657ffdb1d499575888e709aebdcaddb.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#findErrorRule matches pattern \"slowdown\" to rule \"Too Many Requests\"","name":"matches pattern \"slowdown\" to rule \"Too Many Requests\"","status":"passed","testResultsByEnv":{"default":"257c9c2a87ff7af2d0242e846a0629be"}}

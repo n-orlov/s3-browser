@@ -1,0 +1,1 @@
+{"id":"fd27b6330523db7597d6c9efb1236e0e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 2 when stryker.config.mjs is missing","name":"exits 2 when stryker.config.mjs is missing","status":"passed","testResultsByEnv":{"default":"2ebf277bc639998e967bbb7f654b6692"}}

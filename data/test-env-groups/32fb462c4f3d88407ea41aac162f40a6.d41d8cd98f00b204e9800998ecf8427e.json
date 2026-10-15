@@ -1,0 +1,1 @@
+{"id":"32fb462c4f3d88407ea41aac162f40a6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service renameFile should preserve path when renaming nested file","name":"should preserve path when renaming nested file","status":"passed","testResultsByEnv":{"default":"c304e1f4a9364e77119c851aa386dc75"}}

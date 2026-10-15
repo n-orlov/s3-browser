@@ -1,0 +1,1 @@
+{"id":"ab8696f0d8c06d51c0db4762735cd0c2.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service parseS3Url should parse virtual-hosted style URL","name":"should parse virtual-hosted style URL","status":"passed","testResultsByEnv":{"default":"317881621d43502a225ad3addb888230"}}

@@ -1,0 +1,1 @@
+{"id":"a68e0a41e0044e671cd4f956bacbb086.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#validated resolves to onInvalid(message) and skips the handler when invalid","name":"resolves to onInvalid(message) and skips the handler when invalid","status":"passed","testResultsByEnv":{"default":"4786ea59cb216636f62952e8f2da6bbd"}}

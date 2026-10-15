@@ -1,0 +1,1 @@
+{"id":"fbcc5c0f177df1eff5d11c448d1383ab.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#isSsoProfileComplete missing account id -> undefined","name":"missing account id -> undefined","status":"passed","testResultsByEnv":{"default":"e250df58784be9e80e690bed19998d99"}}

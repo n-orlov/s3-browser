@@ -1,0 +1,1 @@
+{"id":"1cab8be6ff25d2a4ee4bbe0375ffb4cf.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getObjectMetadata should return metadata for an object","name":"should return metadata for an object","status":"passed","testResultsByEnv":{"default":"cb5bdd5e43938ade10a911dbb254899d"}}

@@ -1,0 +1,1 @@
+{"id":"71804ec000056a91f3076588d777e34d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#renderBadges: colour boundaries colorForThreshold uses the same rule for any threshold","name":"colorForThreshold uses the same rule for any threshold","status":"passed","testResultsByEnv":{"default":"3d757ed8ab33c20e9d39d90f01a3101f"}}

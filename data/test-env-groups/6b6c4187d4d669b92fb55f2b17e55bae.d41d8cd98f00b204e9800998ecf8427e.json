@@ -1,0 +1,1 @@
+{"id":"6b6c4187d4d669b92fb55f2b17e55bae.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service copyFile should return error on failure","name":"should return error on failure","status":"passed","testResultsByEnv":{"default":"44b1e49ab74a49406075b4ee6c57fcfb"}}

@@ -1,0 +1,1 @@
+{"id":"74baca6ce67689ce3493cb03c94e17c0.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deletePrefix should return success result when prefix deletion succeeds","name":"should return success result when prefix deletion succeeds","status":"passed","testResultsByEnv":{"default":"a1aa66fac96fc7a1b18baba1aac5833e"}}

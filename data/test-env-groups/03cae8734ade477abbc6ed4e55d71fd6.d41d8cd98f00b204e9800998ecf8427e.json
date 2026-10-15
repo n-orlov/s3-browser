@@ -1,0 +1,1 @@
+{"id":"03cae8734ade477abbc6ed4e55d71fd6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service parseS3Url should parse path-style URL without region","name":"should parse path-style URL without region","status":"passed","testResultsByEnv":{"default":"1107b335c512825e4954c135cbfdc45d"}}

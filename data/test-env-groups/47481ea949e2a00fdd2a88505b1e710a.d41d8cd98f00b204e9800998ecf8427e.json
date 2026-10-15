@@ -1,0 +1,1 @@
+{"id":"47481ea949e2a00fdd2a88505b1e710a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useNetworkStatus.test.ts#useNetworkStatus sets wasOffline to true and keeps it after going offline once","name":"sets wasOffline to true and keeps it after going offline once","status":"passed","testResultsByEnv":{"default":"a614f85b9736d2b1b1aca782dca1331b"}}

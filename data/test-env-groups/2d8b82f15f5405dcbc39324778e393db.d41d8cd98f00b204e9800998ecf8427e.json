@@ -1,0 +1,1 @@
+{"id":"2d8b82f15f5405dcbc39324778e393db.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/TextEditor.test.tsx#TextEditor close functionality closes without prompt when no changes","name":"closes without prompt when no changes","status":"passed","testResultsByEnv":{"default":"b553cc70f45f0a7b2dbf5405b8ae59fa"}}

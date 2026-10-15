@@ -1,0 +1,1 @@
+{"id":"e9134feafeb81fcb98deaa197dd7c61f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/specWorkflowParity.test.ts#negative fixtures fails when a SPEC fixture still says `master` or `main`","name":"fails when a SPEC fixture still says `master` or `main`","status":"passed","testResultsByEnv":{"default":"47bc13a1f3c16850007bcd9a3d1e2317"}}

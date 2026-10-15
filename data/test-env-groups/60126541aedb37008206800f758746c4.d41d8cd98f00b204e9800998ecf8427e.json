@@ -1,0 +1,1 @@
+{"id":"60126541aedb37008206800f758746c4.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/appView.test.tsx#getDisplayPath bucket=\"bkt\" prefix=\"a/b/\" -> \"bkt/a/b/\"","name":"bucket=\"bkt\" prefix=\"a/b/\" -> \"bkt/a/b/\"","status":"passed","testResultsByEnv":{"default":"747d39a7b02699a24791779e0f53fe4f"}}

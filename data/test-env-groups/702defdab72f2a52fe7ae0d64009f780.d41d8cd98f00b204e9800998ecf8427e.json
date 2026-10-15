@@ -1,0 +1,1 @@
+{"id":"702defdab72f2a52fe7ae0d64009f780.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/csp.test.ts#renderer CSP the parser detects a remote origin (guard against a vacuous check)","name":"the parser detects a remote origin (guard against a vacuous check)","status":"passed","testResultsByEnv":{"default":"ace5e562fb2706b0b71966c3632bf156"}}

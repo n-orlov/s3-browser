@@ -1,0 +1,1 @@
+{"id":"4c91a0c3238f60f618eb21dfee37ac26.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useS3.test.ts#useS3 loadBuckets stores the buckets and clears loading on success","name":"stores the buckets and clears loading on success","status":"passed","testResultsByEnv":{"default":"63b2ec77c207ce09835772fa881de953"}}

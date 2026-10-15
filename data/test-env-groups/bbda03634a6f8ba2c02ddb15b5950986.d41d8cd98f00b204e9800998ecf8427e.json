@@ -1,0 +1,1 @@
+{"id":"bbda03634a6f8ba2c02ddb15b5950986.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#badges CLI a Playwright report with a report-level error stays green for an empty errors array","name":"stays green for an empty errors array","status":"passed","testResultsByEnv":{"default":"089290c9a58782b8d325c7b42a35a6ca"}}

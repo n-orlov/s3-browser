@@ -1,0 +1,1 @@
+{"id":"2bf943c014049fb9c89fe5e8790384ce.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials validateProfile should return valid for SSO profile with required fields","name":"should return valid for SSO profile with required fields","status":"passed","testResultsByEnv":{"default":"74175ff269488bb3e2963b7c644a99eb"}}

@@ -1,0 +1,1 @@
+{"id":"ac2468e19a005aaa92112088b27d3517.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 2 when .ratchet.json has no mutationScoreMin","name":"exits 2 when .ratchet.json has no mutationScoreMin","status":"passed","testResultsByEnv":{"default":"52a6a1b590830eb81039a9a76aed812a"}}

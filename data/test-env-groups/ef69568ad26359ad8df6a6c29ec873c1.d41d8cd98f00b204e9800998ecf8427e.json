@@ -1,0 +1,1 @@
+{"id":"ef69568ad26359ad8df6a6c29ec873c1.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/appState.test.ts#appState service loadAppState should return default state if file does not exist","name":"should return default state if file does not exist","status":"passed","testResultsByEnv":{"default":"602fe8b8ac07defcb08c338756f2487e"}}

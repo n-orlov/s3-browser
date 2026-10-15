@@ -1,0 +1,1 @@
+{"id":"ab15296ec6f3531fdbc6ec4058ddbd33.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcValidation.test.ts#IPC argument validation at the ipcMain.handle boundary s3:open-downloads-folder ignores unexpected arguments","name":"ignores unexpected arguments","status":"passed","testResultsByEnv":{"default":"af756a0248ae26f663ca53508cef365d"}}

@@ -1,0 +1,1 @@
+{"id":"b64419a05c8f2066e821796f883f6603.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getParentPrefix should handle deeply nested paths","name":"should handle deeply nested paths","status":"passed","testResultsByEnv":{"default":"72cdaa6ffca046d66fe44bba323447b0"}}

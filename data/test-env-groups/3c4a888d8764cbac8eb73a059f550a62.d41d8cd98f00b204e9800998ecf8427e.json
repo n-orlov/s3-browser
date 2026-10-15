@@ -1,0 +1,1 @@
+{"id":"3c4a888d8764cbac8eb73a059f550a62.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NewItemDialog.test.tsx#NewItemDialog when open for new file should call onCancel when overlay is clicked","name":"should call onCancel when overlay is clicked","status":"passed","testResultsByEnv":{"default":"adc1b8230bb23817e32e82fc88d04401"}}

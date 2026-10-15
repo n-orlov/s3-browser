@@ -1,0 +1,1 @@
+{"id":"987eaa561a3a757b05737cc0361d3b74.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/windowSecurity.test.ts#secureWebContents setWindowOpenHandler denies bad without calling shell.openExternal","name":"setWindowOpenHandler denies bad without calling shell.openExternal","status":"passed","testResultsByEnv":{"default":"a38af4319f42af429a9362f23b826b25"}}

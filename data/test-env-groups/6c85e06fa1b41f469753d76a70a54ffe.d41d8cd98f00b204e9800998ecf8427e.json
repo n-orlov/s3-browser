@@ -1,0 +1,1 @@
+{"id":"6c85e06fa1b41f469753d76a70a54ffe.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests Client Management should throw error for profile without credentials","name":"should throw error for profile without credentials","status":"passed","testResultsByEnv":{"default":"6354d2feb21376e1c4e9a691ce2c8257"}}

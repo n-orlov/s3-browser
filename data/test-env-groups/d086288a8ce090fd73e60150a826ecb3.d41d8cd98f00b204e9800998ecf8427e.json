@@ -1,0 +1,1 @@
+{"id":"d086288a8ce090fd73e60150a826ecb3.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciE2eShards.test.ts#ci.yml e2e shard matrix runs the e2e job as exactly two shards with unique artifact names","name":"runs the e2e job as exactly two shards with unique artifact names","status":"passed","testResultsByEnv":{"default":"87868c2bc9a108497a4d9f6aac0af07f"}}

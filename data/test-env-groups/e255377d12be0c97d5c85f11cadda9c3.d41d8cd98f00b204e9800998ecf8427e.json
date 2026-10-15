@@ -1,0 +1,1 @@
+{"id":"e255377d12be0c97d5c85f11cadda9c3.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFile should return false on failure","name":"should return false on failure","status":"passed","testResultsByEnv":{"default":"c30d9e913af8acf7b94e6086e2369f44"}}

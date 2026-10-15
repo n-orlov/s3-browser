@@ -1,0 +1,1 @@
+{"id":"d311d79a807b2cebaeb94ce11ff278f2.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials parseIniFile should handle profile sections with spaces","name":"should handle profile sections with spaces","status":"passed","testResultsByEnv":{"default":"39bdde8e1a337f4f407511cab4ae8a42"}}

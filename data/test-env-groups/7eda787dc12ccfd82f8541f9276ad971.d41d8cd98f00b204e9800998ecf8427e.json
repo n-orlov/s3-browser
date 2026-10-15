@@ -1,0 +1,1 @@
+{"id":"7eda787dc12ccfd82f8541f9276ad971.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deletePrefix should call electronAPI with correct bucket and prefix","name":"should call electronAPI with correct bucket and prefix","status":"passed","testResultsByEnv":{"default":"993f3dbab0c7aea19cb8b8a16ffef492"}}

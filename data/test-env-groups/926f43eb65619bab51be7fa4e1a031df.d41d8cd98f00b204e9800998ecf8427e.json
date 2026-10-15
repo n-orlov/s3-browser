@@ -1,0 +1,1 @@
+{"id":"926f43eb65619bab51be7fa4e1a031df.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#renderBadges: schema renders every badge as n/a lightgrey when its inputs are missing","name":"renders every badge as n/a lightgrey when its inputs are missing","status":"passed","testResultsByEnv":{"default":"2c60c3eceb5a91895d177eb26c7d2f9f"}}

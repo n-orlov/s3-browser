@@ -1,0 +1,1 @@
+{"id":"36493ae307367c7b925318c209236af2.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#isNetworkError patterns rejects \"AccessDenied\"","name":"rejects \"AccessDenied\"","status":"passed","testResultsByEnv":{"default":"5ed69f401ac3e7b1e6f14a7ebb849369"}}

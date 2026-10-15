@@ -1,0 +1,1 @@
+{"id":"6f2ef02bc019ba2b30fcc00d423ef044.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/App.test.tsx#App file operations deleting the selection deletes the file, refreshes the list and toasts success","name":"deletes the file, refreshes the list and toasts success","status":"passed","testResultsByEnv":{"default":"c5912e624ed846552b3ade21ba9f58e4"}}

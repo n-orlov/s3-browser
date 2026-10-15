@@ -1,0 +1,1 @@
+{"id":"a4a9452094d79a2cc3b0f2dbd96dc93c.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#readers reads thresholds.break from stryker.config.mjs","name":"reads thresholds.break from stryker.config.mjs","status":"passed","testResultsByEnv":{"default":"83ed6a30713e4f57d47427093472fd84"}}

@@ -1,0 +1,1 @@
+{"id":"4dd0fc684d1f32a2f5e8a0b4077bd9c7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/FileToolbar.test.tsx#FileToolbar gzip file support File type detection with nested paths correctly identifies .csv.gz in nested path","name":"correctly identifies .csv.gz in nested path","status":"passed","testResultsByEnv":{"default":"bff04dba16c5f15cc7d3255ae2b91dd3"}}

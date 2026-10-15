@@ -1,0 +1,1 @@
+{"id":"417480aaa1133ef0cea8de9202933948.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/appView.test.tsx#getRenameName {\"key\":\"dir/a.txt\",\"size\":7,\"isPrefix\":false} -> \"a.txt\"","name":"{\"key\":\"dir/a.txt\",\"size\":7,\"isPrefix\":false} -> \"a.txt\"","status":"passed","testResultsByEnv":{"default":"0c15c331efdc55ce0cd16b69a4a7f1b8"}}

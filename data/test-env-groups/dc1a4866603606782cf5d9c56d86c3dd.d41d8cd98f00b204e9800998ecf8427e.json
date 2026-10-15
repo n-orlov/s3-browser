@@ -1,0 +1,1 @@
+{"id":"dc1a4866603606782cf5d9c56d86c3dd.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/contentSizeCap.test.ts#content-read size cap (HEAD before GET) still downloads text, gzip and binary objects at the cap","name":"still downloads text, gzip and binary objects at the cap","status":"passed","testResultsByEnv":{"default":"79418c47723ed83634f009e7d0eb5d3e"}}

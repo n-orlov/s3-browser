@@ -1,0 +1,1 @@
+{"id":"1d1b591e70ca616cdcef7d0f7e182034.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials parseIniFile should ignore comments starting with ;","name":"should ignore comments starting with ;","status":"passed","testResultsByEnv":{"default":"eb203a9ddd1723b4bd7dcef986e41a50"}}

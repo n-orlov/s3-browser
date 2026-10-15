@@ -1,0 +1,1 @@
+{"id":"175467dd1cc6d1be65fd26bc8328c934.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/windowSecurity.test.ts#secureWebContents setWindowOpenHandler denies and opens an https URL externally","name":"setWindowOpenHandler denies and opens an https URL externally","status":"passed","testResultsByEnv":{"default":"9a5250a2adee10187bd537d36073a7bc"}}

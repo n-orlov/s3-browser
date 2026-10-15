@@ -1,0 +1,1 @@
+{"id":"fc1600393b4c481b04e3eb5d921b7d7d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useS3.test.ts#useS3 loadObjects shows an Error message when the call rejects","name":"shows an Error message when the call rejects","status":"passed","testResultsByEnv":{"default":"a884523c76f37fa26e0ff08ed1b148dc"}}

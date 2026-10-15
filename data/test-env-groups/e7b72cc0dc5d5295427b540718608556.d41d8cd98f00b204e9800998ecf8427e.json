@@ -1,0 +1,1 @@
+{"id":"e7b72cc0dc5d5295427b540718608556.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service listBuckets should return empty array when no buckets","name":"should return empty array when no buckets","status":"passed","testResultsByEnv":{"default":"7171b50e39027125391a637270d98992"}}

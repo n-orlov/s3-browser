@@ -1,0 +1,1 @@
+{"id":"0bdc773b20b24804979f8c342b0785a6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getCurrentClientProfile should return null initially","name":"should return null initially","status":"passed","testResultsByEnv":{"default":"9077ec81b83759a374f3240389240f05"}}

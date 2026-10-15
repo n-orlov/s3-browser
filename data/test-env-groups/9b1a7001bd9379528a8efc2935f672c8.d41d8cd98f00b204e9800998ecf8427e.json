@@ -1,0 +1,1 @@
+{"id":"9b1a7001bd9379528a8efc2935f672c8.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deletePrefix should handle non-Error exception gracefully","name":"should handle non-Error exception gracefully","status":"passed","testResultsByEnv":{"default":"9f1dae3cf059daefa850eabfa6a15ba7"}}

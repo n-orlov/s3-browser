@@ -1,0 +1,1 @@
+{"id":"a5520282b0c0a3cb33d33924188f4a12.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NavigationBar.test.tsx#NavigationBar error handling shows error when parseUrl returns no bucket","name":"shows error when parseUrl returns no bucket","status":"passed","testResultsByEnv":{"default":"8e64df61109187475e755f0aaeb15204"}}

@@ -1,0 +1,1 @@
+{"id":"4ac68ea16a27397904db166e3de85fe7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/deleteSelection.test.ts#deleteSelection deletes folders before files and accumulates counts and errors","name":"deletes folders before files and accumulates counts and errors","status":"passed","testResultsByEnv":{"default":"81654c4cac3017de96d9f0c65f4c4fd4"}}

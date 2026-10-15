@@ -1,0 +1,1 @@
+{"id":"398e2ca5f38b13320f83ebc13320a914.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useS3.test.ts#useS3 loadBuckets shows a fallback for a non-Error rejection when the call rejects","name":"shows a fallback for a non-Error rejection when the call rejects","status":"passed","testResultsByEnv":{"default":"60301fe58a1e8faa5a11c05cb6b2fe2f"}}

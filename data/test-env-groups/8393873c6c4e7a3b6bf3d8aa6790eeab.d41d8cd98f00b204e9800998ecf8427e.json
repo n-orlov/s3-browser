@@ -1,0 +1,1 @@
+{"id":"8393873c6c4e7a3b6bf3d8aa6790eeab.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NewItemDialog.test.tsx#NewItemDialog when open for new file should call onCancel when Cancel is clicked","name":"should call onCancel when Cancel is clicked","status":"passed","testResultsByEnv":{"default":"e9d3886f0278ecf792e0879cf3ae921f"}}

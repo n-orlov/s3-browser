@@ -1,0 +1,1 @@
+{"id":"5c2d7a792759bd85fe3e8fa3472985ab.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getKeyName should return key for root-level file","name":"should return key for root-level file","status":"passed","testResultsByEnv":{"default":"c96e2e7adb81de3893669a1a7c069c5d"}}

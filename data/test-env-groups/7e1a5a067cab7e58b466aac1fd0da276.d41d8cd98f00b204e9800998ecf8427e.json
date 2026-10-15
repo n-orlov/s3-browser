@@ -1,0 +1,1 @@
+{"id":"7e1a5a067cab7e58b466aac1fd0da276.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service parseS3Url should handle http:// URLs","name":"should handle http:// URLs","status":"passed","testResultsByEnv":{"default":"e8bc667c1eaef3682d2e6bf9251211ef"}}

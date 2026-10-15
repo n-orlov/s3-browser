@@ -1,0 +1,1 @@
+{"id":"6c14b84234da5564932d5d75c292c19b.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcHandlers.test.ts#credentials IPC handlers aws:set-profile rejects unknown and invalid profiles","name":"aws:set-profile rejects unknown and invalid profiles","status":"passed","testResultsByEnv":{"default":"691491894884a7881fa63e0a20d64dfb"}}

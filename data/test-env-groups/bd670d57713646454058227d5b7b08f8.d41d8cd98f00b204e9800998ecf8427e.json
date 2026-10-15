@@ -1,0 +1,1 @@
+{"id":"bd670d57713646454058227d5b7b08f8.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NewItemDialog.test.tsx#NewItemDialog when closed should not render anything when isOpen is false","name":"should not render anything when isOpen is false","status":"passed","testResultsByEnv":{"default":"4d41f52f73109ab2f9f4fcc19bd587f3"}}

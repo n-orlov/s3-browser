@@ -1,0 +1,1 @@
+{"id":"6d3219f8ac686a5e59bba60d1018bf05.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests URL Parsing Utilities should return null for invalid URLs","name":"should return null for invalid URLs","status":"passed","testResultsByEnv":{"default":"aeb0456a428d46432b34c77ff74c6905"}}

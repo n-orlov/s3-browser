@@ -1,0 +1,1 @@
+{"id":"e7c6c3a99e53b6558ab7264c9b6fb2aa.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials getConfigPath should return env var path when set","name":"should return env var path when set","status":"passed","testResultsByEnv":{"default":"7f8ce6556f5c7dced68a6e68d7677e84"}}

@@ -1,0 +1,1 @@
+{"id":"a37915324e759d9a27c721bb8e853063.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/codeqlWorkflow.test.ts#codeql.yml is triggered by a push to master, pull_request and a weekly schedule","name":"is triggered by a push to master, pull_request and a weekly schedule","status":"passed","testResultsByEnv":{"default":"18d889da6b64723509507bd7e2352b0b"}}

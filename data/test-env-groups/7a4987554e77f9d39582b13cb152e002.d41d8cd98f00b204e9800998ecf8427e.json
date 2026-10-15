@@ -1,0 +1,1 @@
+{"id":"7a4987554e77f9d39582b13cb152e002.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service parseS3Url should parse virtual-hosted style URL without region","name":"should parse virtual-hosted style URL without region","status":"passed","testResultsByEnv":{"default":"f8a09f7bf8d50b090956b6d676b037e0"}}

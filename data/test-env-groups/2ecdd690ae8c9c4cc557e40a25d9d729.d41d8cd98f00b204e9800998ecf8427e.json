@@ -1,0 +1,1 @@
+{"id":"2ecdd690ae8c9c4cc557e40a25d9d729.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#isIdentifier rejects empty, over-long, NUL and non-strings","name":"rejects empty, over-long, NUL and non-strings","status":"passed","testResultsByEnv":{"default":"7c3a693059809e14621584e861a1cde6"}}

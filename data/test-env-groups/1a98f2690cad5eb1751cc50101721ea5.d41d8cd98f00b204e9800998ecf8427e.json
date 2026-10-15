@@ -1,0 +1,1 @@
+{"id":"1a98f2690cad5eb1751cc50101721ea5.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NavigationBar.test.tsx#NavigationBar s3:// URL navigation navigates to bucket root for s3://bucket","name":"navigates to bucket root for s3://bucket","status":"passed","testResultsByEnv":{"default":"a733f34e9722c536ee1b661dc7a8a240"}}

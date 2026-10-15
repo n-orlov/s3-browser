@@ -1,0 +1,1 @@
+{"id":"160b9a93ff86fde9303147627e1dc13b.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials parseIniFile should handle empty lines","name":"should handle empty lines","status":"passed","testResultsByEnv":{"default":"b64bf2162b059c4f609a487521c14203"}}

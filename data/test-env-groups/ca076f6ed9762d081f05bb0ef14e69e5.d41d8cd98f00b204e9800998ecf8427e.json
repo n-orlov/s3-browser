@@ -1,0 +1,1 @@
+{"id":"ca076f6ed9762d081f05bb0ef14e69e5.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcValidation.test.ts#IPC argument validation at the ipcMain.handle boundary s3:clear-client ignores unexpected arguments","name":"ignores unexpected arguments","status":"passed","testResultsByEnv":{"default":"f7f874169a42286a2ac71eb477ae973d"}}

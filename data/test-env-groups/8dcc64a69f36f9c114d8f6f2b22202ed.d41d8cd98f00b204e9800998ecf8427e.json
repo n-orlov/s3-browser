@@ -1,0 +1,1 @@
+{"id":"8dcc64a69f36f9c114d8f6f2b22202ed.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/codeqlWorkflow.test.ts#codeql.yml skips draft pull requests in analyze-pr and leaves analyze unchanged","name":"skips draft pull requests in analyze-pr and leaves analyze unchanged","status":"passed","testResultsByEnv":{"default":"463c55736361a7b561cac77519ad44e3"}}

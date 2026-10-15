@@ -1,0 +1,1 @@
+{"id":"282cc8da95b24a26a4f09cc7187c3f0e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service uploadContent should set correct content type for JSON files","name":"should set correct content type for JSON files","status":"passed","testResultsByEnv":{"default":"f6b6083e6faad7bda354df6451d5eebe"}}

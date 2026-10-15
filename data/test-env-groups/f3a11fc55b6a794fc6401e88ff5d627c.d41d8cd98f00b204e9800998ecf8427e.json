@@ -1,0 +1,1 @@
+{"id":"f3a11fc55b6a794fc6401e88ff5d627c.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/gzipUtils.test.ts#gzipUtils getBaseExtension returns extension before .gz for gzipped files","name":"returns extension before .gz for gzipped files","status":"passed","testResultsByEnv":{"default":"5fac16970083a7983d983ac65c8c729d"}}

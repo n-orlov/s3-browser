@@ -1,0 +1,1 @@
+{"id":"438f3bb6706fee7f79d4d81ad0dc4ea3.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFile should set isLoading during operation","name":"should set isLoading during operation","status":"passed","testResultsByEnv":{"default":"79a85eb524d27a1d8ccaa30528f8dc8a"}}

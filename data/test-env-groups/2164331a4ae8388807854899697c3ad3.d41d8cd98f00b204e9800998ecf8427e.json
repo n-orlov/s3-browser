@@ -1,0 +1,1 @@
+{"id":"2164331a4ae8388807854899697c3ad3.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useNetworkStatus.test.ts#useNetworkStatus cleans up event listeners on unmount","name":"cleans up event listeners on unmount","status":"passed","testResultsByEnv":{"default":"07909c5e71f30b5812401232e4d9080d"}}

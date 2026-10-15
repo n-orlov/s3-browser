@@ -1,0 +1,1 @@
+{"id":"e147345c5a9f349ed0292b0891cbdea7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests Delete Prefix Operations should call progress callback during deletion","name":"should call progress callback during deletion","status":"passed","testResultsByEnv":{"default":"2f8b30480f8a2424d54ecba133c1555d"}}

@@ -1,0 +1,1 @@
+{"id":"ea9c92a7df8792f0c92726443c9cbe9f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#appStateData rejects non-string values, null prefix and NUL","name":"rejects non-string values, null prefix and NUL","status":"passed","testResultsByEnv":{"default":"d59b0a15415d40fd8dab2dd7565f15c3"}}

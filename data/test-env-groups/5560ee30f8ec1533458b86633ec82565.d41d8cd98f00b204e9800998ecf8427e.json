@@ -1,0 +1,1 @@
+{"id":"5560ee30f8ec1533458b86633ec82565.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 1 when .ratchet.json records a non-zero crapBaselineMax","name":"exits 1 when .ratchet.json records a non-zero crapBaselineMax","status":"passed","testResultsByEnv":{"default":"507fd062aff51b52aaff40cd186941dd"}}

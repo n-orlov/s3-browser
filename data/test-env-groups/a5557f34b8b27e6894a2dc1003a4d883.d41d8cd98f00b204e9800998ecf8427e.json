@@ -1,0 +1,1 @@
+{"id":"a5557f34b8b27e6894a2dc1003a4d883.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/crapScore.test.ts#judgeCrap does not treat inherited object keys as baseline entries","name":"does not treat inherited object keys as baseline entries","status":"passed","testResultsByEnv":{"default":"41a81b339b40c345157b965c661eb474"}}

@@ -1,0 +1,1 @@
+{"id":"fe2a52ce9d6aca1788be697a9df57d86.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getParentPrefix should return parent for prefix with trailing slash","name":"should return parent for prefix with trailing slash","status":"passed","testResultsByEnv":{"default":"aa7bc62ef29948901d8a3f3c6b7c8b2d"}}

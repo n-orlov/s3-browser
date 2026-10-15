@@ -1,0 +1,1 @@
+{"id":"bc93ea9ad929b9a6861bedf372de371e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#findErrorRule matches pattern \"no such bucket\" to rule \"Bucket Not Found\"","name":"matches pattern \"no such bucket\" to rule \"Bucket Not Found\"","status":"passed","testResultsByEnv":{"default":"8bf44312cf3ef437c6988e5ea8bcd946"}}

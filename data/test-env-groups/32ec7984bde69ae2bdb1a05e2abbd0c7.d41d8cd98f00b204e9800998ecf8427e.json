@@ -1,0 +1,1 @@
+{"id":"32ec7984bde69ae2bdb1a05e2abbd0c7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NewItemDialog.test.tsx#NewItemDialog form submission should call onConfirm when form is submitted via Enter key","name":"should call onConfirm when form is submitted via Enter key","status":"passed","testResultsByEnv":{"default":"aef4e1ba38d06c69e2d4b9e2882b2e72"}}

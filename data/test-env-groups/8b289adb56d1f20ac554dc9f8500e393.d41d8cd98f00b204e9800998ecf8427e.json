@@ -1,0 +1,1 @@
+{"id":"8b289adb56d1f20ac554dc9f8500e393.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 0 when the Stryker break (80) equals mutationScoreMin (80)","name":"exits 0 when the Stryker break (80) equals mutationScoreMin (80)","status":"passed","testResultsByEnv":{"default":"9e19cd36990ac685e5808e8368b686fb"}}

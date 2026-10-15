@@ -1,0 +1,1 @@
+{"id":"32c69659defd45f6c92f529966d05644.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFiles (batch) should return partial result when some files fail","name":"should return partial result when some files fail","status":"passed","testResultsByEnv":{"default":"7a2c2b3080e0bdf431700cde59854891"}}

@@ -1,0 +1,1 @@
+{"id":"f3d0d0008ca83b7d23d22847f5567e93.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service listAllObjects should call progress callback","name":"should call progress callback","status":"passed","testResultsByEnv":{"default":"aa59efd569d1bdc2cc170fa6e05dbfe3"}}

@@ -1,0 +1,1 @@
+{"id":"0318429ab1ec9348241b4d5b2eab5bf7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useS3.test.ts#useS3 loadObjects requests the first page and stores objects, prefixes and hasMore","name":"requests the first page and stores objects, prefixes and hasMore","status":"passed","testResultsByEnv":{"default":"c977f49719a6a8bf8e4433d71c0f856a"}}

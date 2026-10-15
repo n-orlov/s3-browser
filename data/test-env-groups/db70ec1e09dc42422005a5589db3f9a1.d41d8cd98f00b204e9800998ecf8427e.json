@@ -1,0 +1,1 @@
+{"id":"db70ec1e09dc42422005a5589db3f9a1.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFiles (batch) should handle exception gracefully","name":"should handle exception gracefully","status":"passed","testResultsByEnv":{"default":"2c94cd89ab58554779e1343d36bd4281"}}

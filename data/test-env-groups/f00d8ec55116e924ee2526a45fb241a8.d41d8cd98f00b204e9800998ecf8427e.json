@@ -1,0 +1,1 @@
+{"id":"f00d8ec55116e924ee2526a45fb241a8.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getS3Client should return cached client for same profile","name":"should return cached client for same profile","status":"passed","testResultsByEnv":{"default":"71d71e8658a1ed314d7b8512e0d94845"}}

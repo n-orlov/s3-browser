@@ -1,0 +1,1 @@
+{"id":"513d9b1f5f65bd28415226fc123f58b2.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/mutationWorkflow.test.ts#mutation.yml runs `npm run mutation` on the s3-browser self-hosted runner","name":"runs `npm run mutation` on the s3-browser self-hosted runner","status":"passed","testResultsByEnv":{"default":"593541c7ccbb3ebc87ed4946c1c47733"}}

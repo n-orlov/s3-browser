@@ -1,0 +1,1 @@
+{"id":"b19c6efa7be02b9c68df67d75b2117f4.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/strykerConfig.test.ts#stryker.config.mjs parity has thresholds.break equal to .ratchet.json's mutationScoreMin","name":"has thresholds.break equal to .ratchet.json's mutationScoreMin","status":"passed","testResultsByEnv":{"default":"6f071cd4a8d330ab011829f1a168c819"}}

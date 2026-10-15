@@ -1,0 +1,1 @@
+{"id":"71d515b45660c5800de97a50f7d5baf6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service uploadContent should set correct content type for YAML files","name":"should set correct content type for YAML files","status":"passed","testResultsByEnv":{"default":"9f423eecc1407987d92b2c72bdc9e43a"}}

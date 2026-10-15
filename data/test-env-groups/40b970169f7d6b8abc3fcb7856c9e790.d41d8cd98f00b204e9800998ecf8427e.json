@@ -1,0 +1,1 @@
+{"id":"40b970169f7d6b8abc3fcb7856c9e790.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getKeyName should return folder name for single folder","name":"should return folder name for single folder","status":"passed","testResultsByEnv":{"default":"5388dd3d2641f55be12ef07951e54ba9"}}

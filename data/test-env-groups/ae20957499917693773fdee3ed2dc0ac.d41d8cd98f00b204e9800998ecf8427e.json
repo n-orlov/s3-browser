@@ -1,0 +1,1 @@
+{"id":"ae20957499917693773fdee3ed2dc0ac.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getS3Client should create a new S3 client for a valid profile","name":"should create a new S3 client for a valid profile","status":"passed","testResultsByEnv":{"default":"f5c7f2c0be51c1a06b7db81a64ff46da"}}

@@ -1,0 +1,1 @@
+{"id":"b90460d5ebfcf00c30e50f25d1f81b39.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useNetworkStatus.test.ts#useNetworkStatus returns offline status when navigator is offline","name":"returns offline status when navigator is offline","status":"passed","testResultsByEnv":{"default":"24f9c36d5478ae8efd2fea4259de823d"}}

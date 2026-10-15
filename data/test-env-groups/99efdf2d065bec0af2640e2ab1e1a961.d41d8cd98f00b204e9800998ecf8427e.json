@@ -1,0 +1,1 @@
+{"id":"99efdf2d065bec0af2640e2ab1e1a961.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service deleteFile should delete file from S3","name":"should delete file from S3","status":"passed","testResultsByEnv":{"default":"0ffbfa256dec60151e47046845e52c5d"}}

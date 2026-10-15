@@ -1,0 +1,1 @@
+{"id":"3bcd2e73eb844535ed3e1b54ea5c4204.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/contentSizeCap.test.ts#content-read size cap (HEAD before GET) defaults to 50 MB","name":"defaults to 50 MB","status":"passed","testResultsByEnv":{"default":"18d114b4c0b83c87a8db3fd6f8169ef3"}}

@@ -1,0 +1,1 @@
+{"id":"0c8d96e6534e1296a931edaeb9f0dc50.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/gzipUtils.test.ts#gzipUtils isGzipFile returns false for non-.gz files","name":"returns false for non-.gz files","status":"passed","testResultsByEnv":{"default":"b6b57bf7185e497861dbf257603ed308"}}

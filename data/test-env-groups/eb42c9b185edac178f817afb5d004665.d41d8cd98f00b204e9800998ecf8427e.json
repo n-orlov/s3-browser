@@ -1,0 +1,1 @@
+{"id":"eb42c9b185edac178f817afb5d004665.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcHandlers.test.ts#S3 IPC handlers returns the no-profile error from handlers that need credentials","name":"returns the no-profile error from handlers that need credentials","status":"passed","testResultsByEnv":{"default":"dd6096b3aed5449f67965b3d4f7a7fba"}}

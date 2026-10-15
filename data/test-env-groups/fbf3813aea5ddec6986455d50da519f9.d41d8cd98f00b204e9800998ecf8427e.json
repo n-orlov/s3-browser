@@ -1,0 +1,1 @@
+{"id":"fbf3813aea5ddec6986455d50da519f9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcValidation.test.ts#IPC argument validation at the ipcMain.handle boundary aws:refresh-profiles ignores unexpected arguments","name":"ignores unexpected arguments","status":"passed","testResultsByEnv":{"default":"983540228a441a91908e23d7822ea323"}}

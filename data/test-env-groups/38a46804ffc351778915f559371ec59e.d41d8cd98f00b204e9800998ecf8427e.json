@@ -1,0 +1,1 @@
+{"id":"38a46804ffc351778915f559371ec59e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcHandlers.test.ts#credentials IPC handlers aws:get-profiles maps profiles to ProfileInfo","name":"aws:get-profiles maps profiles to ProfileInfo","status":"passed","testResultsByEnv":{"default":"4f6f21eb558b7a52727fc67b9794b5a5"}}

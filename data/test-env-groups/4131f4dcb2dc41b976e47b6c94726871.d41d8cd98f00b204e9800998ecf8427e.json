@@ -1,0 +1,1 @@
+{"id":"4131f4dcb2dc41b976e47b6c94726871.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/AwsProfileContext.test.tsx#AwsProfileContext clears S3 client when profile is changed","name":"clears S3 client when profile is changed","status":"passed","testResultsByEnv":{"default":"ec792b650c09376cbc7b3ea7f80477cb"}}

@@ -1,0 +1,1 @@
+{"id":"9993a4e11e5157e97e2e8634178a663e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#isNetworkError patterns detects \"econnrefused\"","name":"detects \"econnrefused\"","status":"passed","testResultsByEnv":{"default":"45bb30835918dd5be58a95180a271c37"}}

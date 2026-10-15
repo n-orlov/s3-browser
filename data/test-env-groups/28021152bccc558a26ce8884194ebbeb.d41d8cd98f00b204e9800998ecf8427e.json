@@ -1,0 +1,1 @@
+{"id":"28021152bccc558a26ce8884194ebbeb.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/e2eSoakWorkflow.test.ts#e2e-soak.yml uploads the Playwright and Allure reports with if: always()","name":"uploads the Playwright and Allure reports with if: always()","status":"passed","testResultsByEnv":{"default":"55335bfced2b78b4368bcdc66eae98a8"}}

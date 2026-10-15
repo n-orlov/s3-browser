@@ -1,0 +1,1 @@
+{"id":"190c53e500565c9506170c465fd1d659.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests ETag Processing should strip quotes from ETag","name":"should strip quotes from ETag","status":"passed","testResultsByEnv":{"default":"af698b42822859953ab0dde574d2a6e4"}}

@@ -1,0 +1,1 @@
+{"id":"387d3b0c915940906f73a3214a5f2ff7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/windowSecurity.test.ts#isExternalOpenAllowed https://example.com/a?b=1 -> true","name":"https://example.com/a?b=1 -> true","status":"passed","testResultsByEnv":{"default":"4e62088da055c8fc9ba6a89b63b9c554"}}

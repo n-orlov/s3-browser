@@ -1,0 +1,1 @@
+{"id":"efed2a82da5167b9db859d6a9ab3e9bb.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service listObjects should list common prefixes (folders)","name":"should list common prefixes (folders)","status":"passed","testResultsByEnv":{"default":"6446df702c57bf82f2514bd1b64e4736"}}

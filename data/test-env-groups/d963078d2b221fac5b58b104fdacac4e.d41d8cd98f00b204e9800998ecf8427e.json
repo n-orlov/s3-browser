@@ -1,0 +1,1 @@
+{"id":"d963078d2b221fac5b58b104fdacac4e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#isBucketName rejects an over-long name, empty, slash, NUL and non-strings","name":"rejects an over-long name, empty, slash, NUL and non-strings","status":"passed","testResultsByEnv":{"default":"c582446ec4b564f4ea76142c51480513"}}

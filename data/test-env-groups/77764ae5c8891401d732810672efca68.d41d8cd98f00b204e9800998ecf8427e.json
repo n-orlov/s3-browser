@@ -1,0 +1,1 @@
+{"id":"77764ae5c8891401d732810672efca68.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ParquetViewer.test.tsx#ParquetViewer IPC data transfer handling should handle Uint8Array with non-zero byteOffset","name":"should handle Uint8Array with non-zero byteOffset","status":"passed","testResultsByEnv":{"default":"869acc463434e76a9a1b8ab567cd8a0b"}}

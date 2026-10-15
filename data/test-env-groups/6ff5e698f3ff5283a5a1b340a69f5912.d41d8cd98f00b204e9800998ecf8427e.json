@@ -1,0 +1,1 @@
+{"id":"6ff5e698f3ff5283a5a1b340a69f5912.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciReporting.test.ts#ci.yml gate job needs quality and e2e, always runs and checks both results","name":"needs quality and e2e, always runs and checks both results","status":"passed","testResultsByEnv":{"default":"bb8206d4268e2c1501d18c0109ede4be"}}

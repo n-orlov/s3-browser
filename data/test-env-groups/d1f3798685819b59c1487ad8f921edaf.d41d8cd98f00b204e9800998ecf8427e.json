@@ -1,0 +1,1 @@
+{"id":"d1f3798685819b59c1487ad8f921edaf.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service parseS3Url should return null for invalid URL","name":"should return null for invalid URL","status":"passed","testResultsByEnv":{"default":"40155e14fb100a4192463739fa02028b"}}

@@ -1,0 +1,1 @@
+{"id":"43ef21b061065612ea75970f056358d9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#hasStaticKeyPair only secret key -> Map { 'aws_secret_access_key' => 'SK' }","name":"only secret key -> Map { 'aws_secret_access_key' => 'SK' }","status":"passed","testResultsByEnv":{"default":"d50d202c36c6fa5e70cbc3da97df4295"}}

@@ -1,0 +1,1 @@
+{"id":"0c1ae4f9d78a89e96ed50197c54f6d12.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/csp.test.ts#renderer CSP allows no remote origin in script-src, style-src or font-src","name":"allows no remote origin in script-src, style-src or font-src","status":"passed","testResultsByEnv":{"default":"503e4997c17abb1b955763609bc18020"}}

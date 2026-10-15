@@ -1,0 +1,1 @@
+{"id":"183b3e42cb7fae31ae8cb2cb6a74306d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/DeleteConfirmDialog.test.tsx#DeleteConfirmDialog single file delete calls onCancel when cancel button is clicked","name":"calls onCancel when cancel button is clicked","status":"passed","testResultsByEnv":{"default":"da9cd48d674b7171b7b1ece12488e589"}}

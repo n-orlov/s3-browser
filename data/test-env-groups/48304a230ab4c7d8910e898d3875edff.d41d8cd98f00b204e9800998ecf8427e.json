@@ -1,0 +1,1 @@
+{"id":"48304a230ab4c7d8910e898d3875edff.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/sbomWiring.test.ts#SBOM wiring release.yml generates the SBOM and attaches its path","name":"release.yml generates the SBOM and attaches its path","status":"passed","testResultsByEnv":{"default":"ed102ba019c2e97f3e8468f1b54b287a"}}

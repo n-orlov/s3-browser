@@ -1,0 +1,1 @@
+{"id":"7f2f2a0c58b8b558e1768ac675c9f0f8.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcHandlers.test.ts#S3 IPC handlers s3:upload-files aggregates per-file results and honours cancellation","name":"s3:upload-files aggregates per-file results and honours cancellation","status":"passed","testResultsByEnv":{"default":"900f4f84ebdc0ccc2eb1ad5395dba039"}}

@@ -1,0 +1,1 @@
+{"id":"8ba695c407633c355985e0c81ac4d53f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/readmeBadges.test.ts#README badge drift check derives the static badges from package.json instead of constants","name":"derives the static badges from package.json instead of constants","status":"passed","testResultsByEnv":{"default":"3659acc98d5a243bc8ddb535b1f6775c"}}

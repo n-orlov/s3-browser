@@ -1,0 +1,1 @@
+{"id":"18f9b5ddb8c5272a97560ba95ac9d92a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciActionPins.test.ts#codeql.yml action pinning pins every uses: ref to a full commit SHA","name":"pins every uses: ref to a full commit SHA","status":"passed","testResultsByEnv":{"default":"f99b0874efbf0b3fc6e59163ab1ed3c8"}}

@@ -1,0 +1,1 @@
+{"id":"bc03bc0224f89e5029185d12bc5c8292.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getFileSize should return error on failure","name":"should return error on failure","status":"passed","testResultsByEnv":{"default":"1e5356c496163f8f270a1d13198efcb7"}}

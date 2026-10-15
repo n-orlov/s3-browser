@@ -1,0 +1,1 @@
+{"id":"89590dcf159bf30b66328c6b9e0265d7.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/AwsProfileContext.test.tsx#AwsProfileContext fetches profiles once when the provider mounts and exposes them","name":"fetches profiles once when the provider mounts and exposes them","status":"passed","testResultsByEnv":{"default":"de7e827784f3a14254a9880f43c8c544"}}

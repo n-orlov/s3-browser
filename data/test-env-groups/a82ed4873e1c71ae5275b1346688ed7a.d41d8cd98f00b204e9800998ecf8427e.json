@@ -1,0 +1,1 @@
+{"id":"a82ed4873e1c71ae5275b1346688ed7a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcHandlers.test.ts#S3 IPC handlers s3:upload-content gzips .gz keys and reports compression failures","name":"s3:upload-content gzips .gz keys and reports compression failures","status":"passed","testResultsByEnv":{"default":"b8683fe9a4868c4c03f710b2757d91d0"}}

@@ -1,0 +1,1 @@
+{"id":"e84d6739c6181fc05dffef42fd42a1b0.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service listBuckets should return list of buckets sorted alphabetically","name":"should return list of buckets sorted alphabetically","status":"passed","testResultsByEnv":{"default":"52abf2bba402bc913f126b72e0148b2d"}}

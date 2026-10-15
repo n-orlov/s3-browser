@@ -1,0 +1,1 @@
+{"id":"d7afc8f32a750623dae3eebe678e3ed1.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 2 when crap-baseline.json is missing","name":"exits 2 when crap-baseline.json is missing","status":"passed","testResultsByEnv":{"default":"97d197a5597dcdcf8908f938df7fed4a"}}

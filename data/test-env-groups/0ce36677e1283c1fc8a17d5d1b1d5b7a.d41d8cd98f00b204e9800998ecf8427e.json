@@ -1,0 +1,1 @@
+{"id":"0ce36677e1283c1fc8a17d5d1b1d5b7a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/gzipUtils.test.ts#gzipUtils decompressGzip throws on invalid gzip data","name":"throws on invalid gzip data","status":"passed","testResultsByEnv":{"default":"3b2c4eaf9325cf0fc0e3abce5ed3f957"}}

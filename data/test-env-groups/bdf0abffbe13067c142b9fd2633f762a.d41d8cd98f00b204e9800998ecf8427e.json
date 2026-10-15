@@ -1,0 +1,1 @@
+{"id":"bdf0abffbe13067c142b9fd2633f762a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#findErrorRule matches pattern \"socket hang up\" to rule \"Connection Error\"","name":"matches pattern \"socket hang up\" to rule \"Connection Error\"","status":"passed","testResultsByEnv":{"default":"588e5211245b229487b55a8c8e592d21"}}

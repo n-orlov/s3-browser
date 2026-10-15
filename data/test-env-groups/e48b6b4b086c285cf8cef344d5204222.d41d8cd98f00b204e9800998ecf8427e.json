@@ -1,0 +1,1 @@
+{"id":"e48b6b4b086c285cf8cef344d5204222.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits non-zero when a vitest threshold is lowered","name":"exits non-zero when a vitest threshold is lowered","status":"passed","testResultsByEnv":{"default":"b2974256389ab39995f0025b039f5dc2"}}

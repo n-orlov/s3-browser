@@ -1,0 +1,1 @@
+{"id":"5844900b67cb3ae62253591f3a6b24c4.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/gzipUtils.test.ts#gzipUtils round-trip compression compresses and decompresses back to original","name":"compresses and decompresses back to original","status":"passed","testResultsByEnv":{"default":"a3ed486f718c35ad6b0a2b9c03adabeb"}}

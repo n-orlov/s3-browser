@@ -1,0 +1,1 @@
+{"id":"4c9d63823100a6f0ed01743d7b8f632e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getKeyName should return folder name from prefix","name":"should return folder name from prefix","status":"passed","testResultsByEnv":{"default":"95e5f6c8d4fd7ae9721175427c5f0f38"}}

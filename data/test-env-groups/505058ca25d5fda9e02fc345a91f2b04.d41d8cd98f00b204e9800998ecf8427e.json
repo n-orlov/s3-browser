@@ -1,0 +1,1 @@
+{"id":"505058ca25d5fda9e02fc345a91f2b04.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/DeleteConfirmDialog.test.tsx#DeleteConfirmDialog single file delete calls onCancel when overlay is clicked","name":"calls onCancel when overlay is clicked","status":"passed","testResultsByEnv":{"default":"158e6bdc73e6ee387b3617eb887ac370"}}

@@ -1,0 +1,1 @@
+{"id":"2e804d820ef63251697e74140546b930.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 1 when .ratchet.json records a non-zero maxWarnings","name":"exits 1 when .ratchet.json records a non-zero maxWarnings","status":"passed","testResultsByEnv":{"default":"66aa401aeeac84e6ec7cb3829a0981ae"}}

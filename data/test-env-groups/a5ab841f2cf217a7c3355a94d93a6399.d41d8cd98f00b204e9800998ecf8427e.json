@@ -1,0 +1,1 @@
+{"id":"a5ab841f2cf217a7c3355a94d93a6399.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#badges CLI still sums the e2e-tests badge when both shard files are present","name":"still sums the e2e-tests badge when both shard files are present","status":"passed","testResultsByEnv":{"default":"2845c129fba15d15fc4d9978ec4f5b5b"}}

@@ -1,0 +1,1 @@
+{"id":"a8eb0d5509f8a5a292ef7346f651dabb.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getObjectMetadata should handle empty custom metadata","name":"should handle empty custom metadata","status":"passed","testResultsByEnv":{"default":"5d2b76e542fc3016a1e744d7e7cafd58"}}

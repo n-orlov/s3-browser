@@ -1,0 +1,1 @@
+{"id":"b182e9e1821f3acac09f81c856ba1d6b.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#isPlainObject rejects arrays, null, primitives and instances of other prototypes","name":"rejects arrays, null, primitives and instances of other prototypes","status":"passed","testResultsByEnv":{"default":"1a9496b6c097417e902a5a8caa11eb6d"}}

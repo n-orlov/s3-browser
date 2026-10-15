@@ -1,0 +1,1 @@
+{"id":"741093bb07738a4ded49ed3b52b2840d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/gzipUtils.test.ts#gzipUtils gunzip output cap round-trips a payload under the cap, also exactly at the cap","name":"round-trips a payload under the cap, also exactly at the cap","status":"passed","testResultsByEnv":{"default":"415666fe87a36a157503b07a277e3455"}}

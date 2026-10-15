@@ -1,0 +1,1 @@
+{"id":"3432f50e36eb8f29c4d4faa63361302f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#isSsoProfileComplete fields split across both files -> Map { 'sso_account_id' => '1' }","name":"fields split across both files -> Map { 'sso_account_id' => '1' }","status":"passed","testResultsByEnv":{"default":"b13eeec699b9cb137574b35460c755d7"}}

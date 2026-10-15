@@ -1,0 +1,1 @@
+{"id":"cec623a36197352af8584e86060519b9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits non-zero when --max-warnings is raised","name":"exits non-zero when --max-warnings is raised","status":"passed","testResultsByEnv":{"default":"d14ebc63a579476ccc3f23d59945f407"}}

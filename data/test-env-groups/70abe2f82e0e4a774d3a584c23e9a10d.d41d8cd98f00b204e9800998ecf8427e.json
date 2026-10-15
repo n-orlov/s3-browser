@@ -1,0 +1,1 @@
+{"id":"70abe2f82e0e4a774d3a584c23e9a10d.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ratchetCheck.test.ts#ratchet:check CLI exits 2 when .ratchet.json is missing","name":"exits 2 when .ratchet.json is missing","status":"passed","testResultsByEnv":{"default":"ed8d56206339c9e513e5bd1aa9007c16"}}

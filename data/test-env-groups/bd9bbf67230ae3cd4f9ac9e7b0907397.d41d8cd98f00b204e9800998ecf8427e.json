@@ -1,0 +1,1 @@
+{"id":"bd9bbf67230ae3cd4f9ac9e7b0907397.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/DeleteConfirmDialog.test.tsx#DeleteConfirmDialog single file delete calls onCancel on Escape key","name":"calls onCancel on Escape key","status":"passed","testResultsByEnv":{"default":"51d9a53238c66693ac083eb7340acd57"}}

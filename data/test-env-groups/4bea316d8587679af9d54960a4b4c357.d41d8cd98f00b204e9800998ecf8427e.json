@@ -1,0 +1,1 @@
+{"id":"4bea316d8587679af9d54960a4b4c357.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#isSsoProfileComplete no url or session -> undefined","name":"no url or session -> undefined","status":"passed","testResultsByEnv":{"default":"fafd8994e39babf6b02f7fd087b014d9"}}

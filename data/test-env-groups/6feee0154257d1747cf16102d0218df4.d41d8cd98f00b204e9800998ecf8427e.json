@@ -1,0 +1,1 @@
+{"id":"6feee0154257d1747cf16102d0218df4.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/mutationWorkflow.test.ts#mutation.yml has pull_request paths equal to the Stryker config's mutate list","name":"has pull_request paths equal to the Stryker config's mutate list","status":"passed","testResultsByEnv":{"default":"a9b4a5ef5a9920e870d4bb49d619c126"}}

@@ -1,0 +1,1 @@
+{"id":"d7d2c5eaed652548413184ee311bf69f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#isWebIdentityProfileComplete split across files -> Map { 'role_arn' => 'arn' }","name":"split across files -> Map { 'role_arn' => 'arn' }","status":"passed","testResultsByEnv":{"default":"cc0f2a8db3ee2bc3d57b3bf03e8a3e81"}}

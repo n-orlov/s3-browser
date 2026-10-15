@@ -1,0 +1,1 @@
+{"id":"1ff49ad3d8c4ee60681b625b76b63cf3.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFiles (batch) should set isLoading during batch delete operation","name":"should set isLoading during batch delete operation","status":"passed","testResultsByEnv":{"default":"117f9b3673f45dd60c45b075374f1fc9"}}

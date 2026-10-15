@@ -1,0 +1,1 @@
+{"id":"de380e51ecec1ed0d4553358c6a50ef5.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getParentPrefix should return empty string for root-level key","name":"should return empty string for root-level key","status":"passed","testResultsByEnv":{"default":"c0fcb6fbdf58d26e6ee0c9e69dc5cd5b"}}

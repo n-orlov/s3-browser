@@ -1,0 +1,1 @@
+{"id":"d93b4c73d24f2c2ac362d7cf93d5ac62.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/appState.test.ts#appState service clearAppState should return true if file does not exist","name":"should return true if file does not exist","status":"passed","testResultsByEnv":{"default":"9e9b0b52b0360fc92859f52a770996a9"}}

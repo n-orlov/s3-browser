@@ -1,0 +1,1 @@
+{"id":"8b7b1601154f4626b449072d31b72a9c.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#isKeyPrefix / isObjectKey measures the limit in UTF-8 bytes, inclusive of exactly 1024","name":"measures the limit in UTF-8 bytes, inclusive of exactly 1024","status":"passed","testResultsByEnv":{"default":"a8637a328c17da9a3baff4a77b905f80"}}

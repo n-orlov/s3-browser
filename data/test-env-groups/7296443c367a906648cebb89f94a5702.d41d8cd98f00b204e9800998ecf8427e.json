@@ -1,0 +1,1 @@
+{"id":"7296443c367a906648cebb89f94a5702.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/codeqlWorkflow.test.ts#codeql.yml flags a pull-request job without the owner gate (negative case)","name":"flags a pull-request job without the owner gate (negative case)","status":"passed","testResultsByEnv":{"default":"07ec6fe25741ffac202e2722a4acbec0"}}

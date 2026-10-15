@@ -1,0 +1,1 @@
+{"id":"9466bceed9ed3af82bd752f5b9bd4b55.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/NewItemDialog.test.tsx#NewItemDialog when open for new file should disable Create button when name is empty","name":"should disable Create button when name is empty","status":"passed","testResultsByEnv":{"default":"e2554676a36f33480560905e3c176b10"}}

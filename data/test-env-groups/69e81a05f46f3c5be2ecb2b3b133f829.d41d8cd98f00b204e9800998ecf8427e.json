@@ -1,0 +1,1 @@
+{"id":"69e81a05f46f3c5be2ecb2b3b133f829.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useFileOperations.test.ts#useFileOperations deleteFiles (batch) should return success result when all files deleted","name":"should return success result when all files deleted","status":"passed","testResultsByEnv":{"default":"9b4268d053cf3cd64a4383cafed09668"}}

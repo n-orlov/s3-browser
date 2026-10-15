@@ -1,0 +1,1 @@
+{"id":"b40e1f99907e8e48b18c4bbf0678ac0f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service createEmptyFile should create an empty JSON file with correct content type","name":"should create an empty JSON file with correct content type","status":"passed","testResultsByEnv":{"default":"296ab8acd79f4281e44fc09223d80e08"}}

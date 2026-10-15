@@ -1,0 +1,1 @@
+{"id":"7b9d6fa4fdd2c33095c938a5f5ccacc9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Url.test.ts#parseS3Url (pure module) returns null for non-S3 inputs","name":"returns null for non-S3 inputs","status":"passed","testResultsByEnv":{"default":"f07c289fdaa4e10e46ddeb6f3aae71c9"}}

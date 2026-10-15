@@ -1,0 +1,1 @@
+{"id":"e60230a123573c186f35b211ec0b1771.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#badges CLI treats an unreadable input as missing and says so on stderr","name":"treats an unreadable input as missing and says so on stderr","status":"passed","testResultsByEnv":{"default":"a4618557eb412f4a804afc470ba65833"}}

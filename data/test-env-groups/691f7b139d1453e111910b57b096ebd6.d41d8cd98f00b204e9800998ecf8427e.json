@@ -1,0 +1,1 @@
+{"id":"691f7b139d1453e111910b57b096ebd6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service uploadContent should upload string content to S3","name":"should upload string content to S3","status":"passed","testResultsByEnv":{"default":"5d446ac2f32e92ad19e965c8bbed4ddc"}}

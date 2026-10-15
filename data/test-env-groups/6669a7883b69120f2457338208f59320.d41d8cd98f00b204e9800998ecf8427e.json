@@ -1,0 +1,1 @@
+{"id":"6669a7883b69120f2457338208f59320.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/badges.test.ts#input parsers parseRatchetInput reads the thresholds and rejects a file without them","name":"parseRatchetInput reads the thresholds and rejects a file without them","status":"passed","testResultsByEnv":{"default":"c718777bb5ab8817c026db9ec4608d86"}}

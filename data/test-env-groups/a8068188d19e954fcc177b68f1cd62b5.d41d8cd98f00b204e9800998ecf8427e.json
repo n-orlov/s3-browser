@@ -1,0 +1,1 @@
+{"id":"a8068188d19e954fcc177b68f1cd62b5.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/appView.test.tsx#getLastSegment / getFileNameOrKey key=\"dir/sub/\" -> last \"\", name-or-key \"dir/sub/\"","name":"key=\"dir/sub/\" -> last \"\", name-or-key \"dir/sub/\"","status":"passed","testResultsByEnv":{"default":"b2504646c716a3ef668c26cd5178857f"}}

@@ -1,0 +1,1 @@
+{"id":"bedebb0f57d1a4d695732961295f9de5.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#isSsoProfileComplete missing role name -> undefined","name":"missing role name -> undefined","status":"passed","testResultsByEnv":{"default":"92eb8e58e63a206903c966edf6af44a7"}}

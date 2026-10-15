@@ -1,0 +1,1 @@
+{"id":"fac237540748ed95b5f51e2e8c9116e9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests Delete Prefix Operations should handle pagination when listing objects","name":"should handle pagination when listing objects","status":"passed","testResultsByEnv":{"default":"2aeef89ee5d7cbb6bafe244d4c293d94"}}

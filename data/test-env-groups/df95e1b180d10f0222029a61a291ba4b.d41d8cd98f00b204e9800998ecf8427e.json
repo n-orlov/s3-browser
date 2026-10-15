@@ -1,0 +1,1 @@
+{"id":"df95e1b180d10f0222029a61a291ba4b.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ImagePreview.test.tsx#ImagePreview close functionality calls onClose when Escape key is pressed","name":"calls onClose when Escape key is pressed","status":"passed","testResultsByEnv":{"default":"ad8f2e3cb42e9a5aeeeee2514a3ecb31"}}

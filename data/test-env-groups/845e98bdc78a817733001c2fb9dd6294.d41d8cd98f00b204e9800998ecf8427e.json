@@ -1,0 +1,1 @@
+{"id":"845e98bdc78a817733001c2fb9dd6294.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/useS3.test.ts#useS3 loadObjects a failed reset load clears previous results and shows the error","name":"a failed reset load clears previous results and shows the error","status":"passed","testResultsByEnv":{"default":"a9ef1fda69776ec07c888bb1e3402e92"}}

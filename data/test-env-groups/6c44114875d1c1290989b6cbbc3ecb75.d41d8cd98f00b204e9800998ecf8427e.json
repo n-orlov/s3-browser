@@ -1,0 +1,1 @@
+{"id":"6c44114875d1c1290989b6cbbc3ecb75.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getParentPrefix should return empty string for single folder","name":"should return empty string for single folder","status":"passed","testResultsByEnv":{"default":"496c7390c887d6614215d80b26431121"}}

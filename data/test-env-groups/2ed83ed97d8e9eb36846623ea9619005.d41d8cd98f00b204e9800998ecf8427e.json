@@ -1,0 +1,1 @@
+{"id":"2ed83ed97d8e9eb36846623ea9619005.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests Object Listing should filter out the prefix itself from objects","name":"should filter out the prefix itself from objects","status":"passed","testResultsByEnv":{"default":"543d6894356cd938e891d4cb05c13f01"}}

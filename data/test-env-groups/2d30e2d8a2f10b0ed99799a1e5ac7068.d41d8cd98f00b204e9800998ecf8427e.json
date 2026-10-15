@@ -1,0 +1,1 @@
+{"id":"2d30e2d8a2f10b0ed99799a1e5ac7068.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#parseError via rules does not expose the shared rule object to mutation","name":"does not expose the shared rule object to mutation","status":"passed","testResultsByEnv":{"default":"0cbca6251638c3a7486698889fe3c84f"}}

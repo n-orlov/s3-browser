@@ -1,0 +1,1 @@
+{"id":"c26c22f037cfe8199b5a68673cfb6276.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ipcSpecParity.test.ts#IPC channel parity every registered channel is reachable from the preload script","name":"every registered channel is reachable from the preload script","status":"passed","testResultsByEnv":{"default":"03b0ae541bd4318c6fd2c37fa93f77c6"}}

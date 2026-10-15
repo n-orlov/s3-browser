@@ -1,0 +1,1 @@
+{"id":"649ef7fad79c3428e66c24ac80ef1505.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getFileSize should return 0 for undefined ContentLength","name":"should return 0 for undefined ContentLength","status":"passed","testResultsByEnv":{"default":"b4d8d98c5fac00d9d2d3a4c2e1be5f39"}}

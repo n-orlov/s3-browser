@@ -1,0 +1,1 @@
+{"id":"77e0f80e62b6dd37402a62bc0e123b2e.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.mock.test.ts#S3 Service Mock Integration Tests Delete Operations should report partial failure in batch delete","name":"should report partial failure in batch delete","status":"passed","testResultsByEnv":{"default":"365bf51e4bb980145944cd61b8c5b3d0"}}

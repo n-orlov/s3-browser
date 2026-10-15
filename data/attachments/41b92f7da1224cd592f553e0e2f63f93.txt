@@ -1,0 +1,19 @@
+Initializing LocalStack test environment...
+Starting LocalStack container...
+LocalStack is already running
+Created bucket: test-bucket
+Created bucket: secondary-bucket
+Created bucket: empty-bucket
+Uploaded: documents/readme.txt
+Uploaded: data/config.json
+Uploaded: data/config.yaml
+Uploaded: data/users.csv
+Uploaded: nested/level1/level2/deep-file.txt
+Uploaded: data/sample.bin
+Uploaded: images/test.png
+Uploaded: documents/file1.txt
+Uploaded: documents/file2.txt
+Uploaded: documents/file3.txt
+Uploaded: documents/file4.txt
+Test environment initialized successfully
+Using LocalStack endpoint for Electron: http://localstack:4566

@@ -1,0 +1,1 @@
+{"id":"6d8d05f5aea5347879ae9877e2aa92e9.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service getObjectMetadata should return error on HeadObject failure","name":"should return error on HeadObject failure","status":"passed","testResultsByEnv":{"default":"b2c17dc4a2ad48506b22569775d92c69"}}

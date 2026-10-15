@@ -1,0 +1,1 @@
+{"id":"1416a2bf0a5ed2919522f4d47b12627a.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/fileIcons.test.ts#getIconForExtension falls back to the default icon for \"toString\"","name":"falls back to the default icon for \"toString\"","status":"passed","testResultsByEnv":{"default":"255bed3cf64c8dd1816fae19bd968fac"}}

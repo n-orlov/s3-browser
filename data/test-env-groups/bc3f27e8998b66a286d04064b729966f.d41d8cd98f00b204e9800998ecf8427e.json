@@ -1,0 +1,1 @@
+{"id":"bc3f27e8998b66a286d04064b729966f.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/s3Service.test.ts#s3Service createFolder should return error on failure","name":"should return error on failure","status":"passed","testResultsByEnv":{"default":"471e3836ab85c6a5c9ab8edc46f2eeba"}}

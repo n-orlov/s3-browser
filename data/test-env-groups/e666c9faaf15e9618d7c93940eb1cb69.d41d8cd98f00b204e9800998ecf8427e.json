@@ -1,0 +1,1 @@
+{"id":"e666c9faaf15e9618d7c93940eb1cb69.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/TextEditor.test.tsx#TextEditor close functionality closes when user confirms closing with unsaved changes","name":"closes when user confirms closing with unsaved changes","status":"passed","testResultsByEnv":{"default":"9fd5db20943655b0e3942986a5b2fc6c"}}

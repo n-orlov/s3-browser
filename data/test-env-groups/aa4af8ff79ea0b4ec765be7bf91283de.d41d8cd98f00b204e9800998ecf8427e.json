@@ -1,0 +1,1 @@
+{"id":"aa4af8ff79ea0b4ec765be7bf91283de.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ImagePreview.test.tsx#ImagePreview close functionality calls onClose when Close button is clicked","name":"calls onClose when Close button is clicked","status":"passed","testResultsByEnv":{"default":"299ed6fffa279f4a9eff16183472912e"}}

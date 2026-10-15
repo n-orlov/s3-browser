@@ -1,0 +1,1 @@
+{"id":"14d38fd52927d617814c9f4590197244.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/ciFailurePathReporting.test.ts#vitest coverage on a failing run writes coverage when a suite fails to load","name":"writes coverage when a suite fails to load","status":"passed","testResultsByEnv":{"default":"118a9a73364e553c8ff2c102bd07536d"}}

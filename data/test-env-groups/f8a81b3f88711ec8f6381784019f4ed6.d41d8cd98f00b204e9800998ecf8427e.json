@@ -1,0 +1,1 @@
+{"id":"f8a81b3f88711ec8f6381784019f4ed6.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/errorRules.test.ts#isNetworkError patterns detects \"econnreset\"","name":"detects \"econnreset\"","status":"passed","testResultsByEnv":{"default":"9f17a170a9565bbbf7b294aa40e86830"}}

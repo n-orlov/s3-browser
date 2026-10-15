@@ -1,0 +1,1 @@
+{"id":"36cd96c11fcd4c6535f94d4ae19c2a91.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/awsCredentials.test.ts#awsCredentials parseIniFile should return empty map for empty content","name":"should return empty map for empty content","status":"passed","testResultsByEnv":{"default":"a4c199b4e0ebc23541b3bc961bfd17bc"}}

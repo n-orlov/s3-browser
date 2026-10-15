@@ -1,0 +1,1 @@
+{"id":"2ff3367d1bd4c0747a8b5d3aace4c3fe.d41d8cd98f00b204e9800998ecf8427e","fullName":"s3-browser:src/__tests__/validate.test.ts#list options only the paginated variant accepts continuationToken","name":"only the paginated variant accepts continuationToken","status":"passed","testResultsByEnv":{"default":"43dc6d079cb025c61df1a053223e022b"}}
