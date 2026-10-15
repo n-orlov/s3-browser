@@ -163,4 +163,4 @@ How changes reach `master` (the owner is the only committer; the same rules appl
 
 - Namespace: `org.github.n-orlov`
 - Author: Nikolai Orlov
-- License: MIT
+- License: Apache-2.0

@@ -66,7 +66,7 @@ describe("README badge block", () => {
 
   it("has the license, Electron and Node static badges and an Allure report link badge", () => {
     const block = blockOf(readme);
-    expect(block).toContain("img.shields.io/badge/license-MIT-blue");
+    expect(block).toContain("img.shields.io/badge/license-Apache--2.0-blue");
     const images = [...block.matchAll(/!\[[^\]]*\]\((https:[^)]+)\)/g)].map((m) => m[1]);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/electron-\d+-blue$/.test(url))).toHaveLength(1);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/node-%3E%3D\d+-blue$/.test(url))).toHaveLength(1);

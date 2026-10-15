@@ -4,7 +4,7 @@
   "description": "Lightweight desktop S3 file browser",
   "main": "dist/main/index.js",
   "author": "Nikolai Orlov",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
   },

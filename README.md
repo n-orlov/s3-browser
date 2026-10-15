@@ -15,7 +15,7 @@
 [![e2e-tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fn-orlov.github.io%2Fs3-browser%2Fbadges%2Fe2e-tests.json)](https://n-orlov.github.io/s3-browser/)
 [![mutation](https://img.shields.io/endpoint?url=https%3A%2F%2Fn-orlov.github.io%2Fs3-browser%2Fbadges%2Fmutation.json)](https://n-orlov.github.io/s3-browser/)
 [![audit](https://img.shields.io/endpoint?url=https%3A%2F%2Fn-orlov.github.io%2Fs3-browser%2Fbadges%2Faudit.json)](https://n-orlov.github.io/s3-browser/)
-[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/n-orlov/s3-browser/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/n-orlov/s3-browser/blob/master/LICENSE)
 [![Electron](https://img.shields.io/badge/electron-40-blue)](https://www.electronjs.org/)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org/)
 [![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)
@@ -187,17 +187,17 @@ S3 Browser uses the AWS SDK credential provider chain and supports:
 
 Configure profiles in `~/.aws/credentials` and/or `~/.aws/config`.
 
-## Contributing
+## Remix, don't PR
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+This project is **closed to pull requests and open to remix**. It is Apache-2.0: fork it, rewrite it,
+let your agent adapt it, and keep your version. I don't review or merge outside pull requests and
+there is no maintenance promise. Ideas, bug reports and links to your remix are welcome in
+[Discussions](https://github.com/n-orlov/s3-browser/discussions). How to do it: [REMIX.md](REMIX.md).
+Background: [Geoff Huntley's remix model](https://ghuntley.com/remix/).
 
-How changes reach `master` (a branch per scope, a draft until the scope is complete, the required `gate` check, a squash merge) is described in the [Working practice](CLAUDE.md#working-practice) section of `CLAUDE.md`.
+How the maintainer's own changes reach `master` is in the [Working practice](CLAUDE.md#working-practice) section of `CLAUDE.md`.
 
-### Code Style
+### Code style (for remixers)
 
 - TypeScript with strict mode
 - React functional components with hooks
@@ -205,7 +205,7 @@ How changes reach `master` (a branch per scope, a draft until the scope is compl
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache-2.0 (see [LICENSE](LICENSE)).
 
 ## Author
 
