@@ -187,7 +187,7 @@ S3 Browser uses the AWS SDK credential provider chain and supports:
 
 Configure profiles in `~/.aws/credentials` and/or `~/.aws/config`.
 
-## Remix, don't PR
+## Contributing
 
 This project is **closed to pull requests and open to remix**. It is Apache-2.0: fork it, rewrite it,
 let your agent adapt it, and keep your version. I don't review or merge outside pull requests and
