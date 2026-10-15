@@ -214,9 +214,9 @@ describe("static badges come from package.json", () => {
   });
 
   it("changes with a fixture package.json that names other versions", () => {
-    const fixture = { license: "Apache-2.0", devDependencies: { electron: "^55.2.1" }, engines: { node: ">=26.1.0" } };
+    const fixture = { license: "ISC", devDependencies: { electron: "^55.2.1" }, engines: { node: ">=26.1.0" } };
     const badges = staticBadges(fixture);
-    expect(badges.license.message).toBe("Apache-2.0");
+    expect(badges.license.message).toBe("ISC");
     expect(badges.electron.message).toBe("55");
     expect(badges.node.message).toBe("26");
     expect(badges.license.message).not.toBe(repoPackage.license);
