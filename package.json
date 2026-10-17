@@ -137,7 +137,7 @@
     "allure-playwright": "^3.13.0",
     "allure-vitest": "^3.13.0",
     "aws-sdk-client-mock": "^4.1.0",
-    "aws-sdk-client-mock-vitest": "^7.0.1",
+    "aws-sdk-client-mock-vitest": "^8.0.0",
     "concurrently": "^10.0.6",
     "electron": "^40.1.0",
     "electron-builder": "^26.15.3",
