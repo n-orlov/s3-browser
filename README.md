@@ -16,7 +16,7 @@
 [![mutation](https://img.shields.io/endpoint?url=https%3A%2F%2Fn-orlov.github.io%2Fs3-browser%2Fbadges%2Fmutation.json)](https://n-orlov.github.io/s3-browser/)
 [![audit](https://img.shields.io/endpoint?url=https%3A%2F%2Fn-orlov.github.io%2Fs3-browser%2Fbadges%2Faudit.json)](https://n-orlov.github.io/s3-browser/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/n-orlov/s3-browser/blob/master/LICENSE)
-[![Electron](https://img.shields.io/badge/electron-40-blue)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/electron-44-blue)](https://www.electronjs.org/)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org/)
 [![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)
 <!-- badges:end -->
