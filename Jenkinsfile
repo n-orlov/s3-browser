@@ -26,6 +26,38 @@ def nodeSh(String cmd) {
   }
 }
 
+// Paths that can change the packaged app, as shell `case` patterns (`*` also matches `/`). This is ci.yml's `changes`
+// list (RELEASE_PATHS), with the release definition files in place of .github/workflows/release.yml. A change to any of
+// them makes the Release dry-run stage run; `master` runs it unconditionally.
+def releasePaths() {
+  return [
+    'package.json',
+    'build/**',
+    'electron-builder*',
+    'Jenkinsfile.release',
+    'ci/release-build.sh',
+    'ci/release-stage.sh',
+    'vite.config.*',
+    'tsconfig*.json',
+  ]
+}
+
+// 'true' when the change against origin/master touches a packaging path. POSIX sh only: the phone agents have no bash.
+// Run in Quality (which has the checkout and the fetched origin/master) so the Release dry-run stage can decide in
+// `when` before it takes an amd64 executor.
+def packagingChanged() {
+  withEnv(["S3B_RELEASE_PATHS=${releasePaths().join(' ')}"]) {
+    return sh(returnStdout: true, script: '''
+      set -f
+      git diff --name-only origin/master...HEAD | while IFS= read -r file; do
+        for pattern in $S3B_RELEASE_PATHS; do
+          case "$file" in $pattern) echo true; exit 0 ;; esac
+        done
+      done | head -n 1
+    ''').trim() == 'true' ? 'true' : 'false'
+  }
+}
+
 // The PR head sha a status belongs to. A PR build checks out the target merged INTO the PR head;
 // when that merge is not a fast-forward, HEAD is a merge commit whose first parent is the PR head.
 def gateSha() {
@@ -154,6 +186,7 @@ pipeline {
         // ratchet:check compares against the merge base with origin/master, which a PR
         // merge checkout may not carry as a ref.
         sh 'git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master'
+        script { env.PACKAGING_CHANGED = packagingChanged() }
         nodeSh('npm ci --no-audit --no-fund')
         nodeSh('npm run typecheck')
         nodeSh('npm run lint')
@@ -212,6 +245,31 @@ pipeline {
             }
           }
         }
+      }
+    }
+
+    // Builds the x64 AppImage and smoke-tests it headless, on the amd64 agent: the phones are arm64 and the smoke test
+    // cannot run an x64 binary there. Runs on master always, elsewhere only when the change touches a packaging path
+    // (PACKAGING_CHANGED, set in Quality); `beforeAgent` decides before an executor is taken. Never publishes.
+    stage('Release dry-run') {
+      when {
+        beforeAgent true
+        anyOf {
+          branch 'master'
+          expression { env.PACKAGING_CHANGED == 'true' }
+        }
+      }
+      agent { label 'amd64 && docker && s3-browser' }
+      options { timeout(time: 20, unit: 'MINUTES') }
+      steps {
+        script { gateStage('Release dry-run') }
+        sh 'git clean -ffdxq'
+        nodeSh('npm ci --no-audit --no-fund')
+        nodeSh('npm run build')
+        // --x64 is explicit so the build does not depend on the agent's architecture. The Electron and
+        // electron-builder downloads go to the agent's npm cache directory instead of the throwaway container.
+        nodeSh('ELECTRON_CACHE=/npm-cache/electron ELECTRON_BUILDER_CACHE=/npm-cache/electron-builder npx electron-builder --linux AppImage --x64 -p never')
+        sh 'S3B_SMOKE_DOCKER_ARGS="--memory 3g" scripts/smoke-appimage.sh'
       }
     }
   }

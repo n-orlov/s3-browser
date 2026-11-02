@@ -76,7 +76,9 @@ if [[ -z "$APPIMAGE" ]]; then
 fi
 [[ -f "$APPIMAGE" ]] || { echo "smoke: $APPIMAGE does not exist" >&2; exit 2; }
 
-PLAYWRIGHT_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
+# Read from the lockfile with awk: the Jenkins agents have no host Node.
+PLAYWRIGHT_VERSION=$(awk '/"node_modules\/@playwright\/test": \{/ { f = 1; next } f && /"version":/ { gsub(/[",]/, "", $2); print $2; exit }' package-lock.json)
+[[ -n "$PLAYWRIGHT_VERSION" ]] || { echo "smoke: no @playwright/test version in package-lock.json" >&2; exit 2; }
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble"
 
 # shellcheck disable=SC2086

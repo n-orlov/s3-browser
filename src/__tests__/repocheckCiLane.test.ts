@@ -180,6 +180,61 @@ function e2eProblems(jenkinsfile: string): string[] {
   return problems;
 }
 
+/** The packaging paths ci.yml's `changes` job lists, with the release definition files in place of release.yml. */
+const RELEASE_PATHS = [
+  "package.json",
+  "build/**",
+  "electron-builder*",
+  "Jenkinsfile.release",
+  "ci/release-build.sh",
+  "ci/release-stage.sh",
+  "vite.config.*",
+  "tsconfig*.json",
+];
+
+/** One problem string per property of the Release dry-run stage the Jenkinsfile lacks. */
+function releaseProblems(jenkinsfile: string): string[] {
+  const problems: string[] = [];
+  const code = codeOf(jenkinsfile);
+  const stages = blockOf(blockOf(code, /^pipeline\s*\{/m), /\bstages\s*\{/);
+  const stage = blockOf(stages, /\bstage\('Release dry-run'\)\s*\{/);
+  if (!stage) return ["no Release dry-run stage"];
+  const label = /\blabel\s+'([^']*)'/.exec(blockOf(stage, /\bagent\s*\{/))?.[1];
+  if (label !== "amd64 && docker && s3-browser") {
+    problems.push(`Release dry-run label is ${label ?? "unset"}, expected amd64 && docker && s3-browser`);
+  }
+  if (!/\btimeout\(time: \d+, unit: 'MINUTES'\)/.test(blockOf(stage, /\boptions\s*\{/))) problems.push("Release dry-run has no stage timeout");
+
+  const when = blockOf(stage, /\bwhen\s*\{/);
+  if (!/\bbeforeAgent true\b/.test(when)) problems.push("Release dry-run does not decide before taking an agent (beforeAgent true)");
+  const anyOf = blockOf(when, /\banyOf\s*\{/);
+  if (!/^\s*branch 'master'\s*$/m.test(anyOf)) problems.push("Release dry-run does not run unconditionally on master (branch 'master')");
+  if (!/expression\s*\{\s*env\.PACKAGING_CHANGED == 'true'\s*\}/.test(anyOf)) problems.push("Release dry-run does not run when a packaging path changed (PACKAGING_CHANGED)");
+
+  const steps = blockOf(stage, /\bsteps\s*\{/);
+  if (!/electron-builder --linux AppImage --x64 -p never\b/.test(steps)) problems.push("Release dry-run does not build electron-builder --linux AppImage --x64 -p never");
+  if (/electron-builder\b[^\n]*\s-p\s+(?!never\b)/.test(steps)) problems.push("Release dry-run publishes");
+  const build = steps.search(/electron-builder --linux/);
+  const smoke = steps.search(/scripts\/smoke-appimage\.sh/);
+  if (smoke < 0) problems.push("Release dry-run does not run scripts/smoke-appimage.sh");
+  else if (build >= 0 && smoke < build) problems.push("Release dry-run smoke-tests before it builds the AppImage");
+
+  const paths = blockOf(code, /^def releasePaths\(\)\s*\{/m);
+  const listed = [...paths.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  for (const p of RELEASE_PATHS) {
+    if (!listed.includes(p)) problems.push(`the packaging path list lacks ${p}`);
+  }
+  if (listed.includes(".github/workflows/release.yml")) problems.push("the packaging path list still names release.yml");
+
+  const quality = blockOf(stages, /\bstage\('Quality'\)\s*\{/);
+  if (!/env\.PACKAGING_CHANGED = packagingChanged\(\)/.test(quality)) problems.push("Quality does not compute PACKAGING_CHANGED from the path list");
+  const helper = blockOf(code, /^def packagingChanged\(\)\s*\{/m);
+  if (!/git diff --name-only origin\/master\.\.\.HEAD/.test(helper) || !/S3B_RELEASE_PATHS/.test(helper)) {
+    problems.push("packagingChanged does not match the changed files against the path list");
+  }
+  return problems;
+}
+
 const real = readFileSync(path.join(__dirname, "..", "..", "Jenkinsfile"), "utf8");
 
 /** The real Jenkinsfile with one property removed; throws if the edit did not apply. */
@@ -213,6 +268,14 @@ const E2E_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noCleanup (without post { aborted } and cleanup)": without(/\n {10}post \{\n {12}aborted \{[\s\S]*?\n {10}\}\n(?= {8}\}\n {8}stage\('E2E shard 2)/, "\n"),
   "Jenkinsfile.twoShards (shard count 2)": without(/ {8}stage\('E2E shard 3\/3'\) \{[\s\S]*?\n {8}\}\n(?= {6}\})/, ""),
   "Jenkinsfile.wrongLabel (shard on linux)": without('node("arm64 && docker && s3-browser${exclude}")', 'node("linux${exclude}")'),
+};
+
+const RELEASE_FIXTURES: Record<string, string> = {
+  "Jenkinsfile.noX64 (electron-builder without --x64)": without(" --x64 -p never", " -p never"),
+  "Jenkinsfile.noMasterCondition (without branch 'master')": without("          branch 'master'\n", ""),
+  "Jenkinsfile.noSmoke (without the smoke call)": without(/ {8}sh 'S3B_SMOKE_DOCKER_ARGS[^\n]*\n/, ""),
+  "Jenkinsfile.wrongLabel (Release dry-run on arm64)": without("agent { label 'amd64 && docker && s3-browser' }", "agent { label 'arm64 && docker && s3-browser' }"),
+  "Jenkinsfile.noPackageJson (path list without package.json)": without("    'package.json',\n", ""),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -358,5 +421,51 @@ describe("the Jenkinsfile runs the e2e suite as three parallel shards (repocheck
     expect(cleanup).toContain("post { cleanup }");
     expect(count).toContain("2 shards, expected 3");
     expect(label).toContain("label is linux");
+  });
+});
+
+describe("the Jenkinsfile runs the release dry run on the amd64 agent (repocheck)", () => {
+  it("has no release dry-run problem", () => {
+    expect(releaseProblems(real)).toEqual([]);
+  });
+
+  it("runs on amd64 && docker && s3-browser, on master always and elsewhere when a packaging path changed", () => {
+    const stage = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /\bstages\s*\{/), /\bstage\('Release dry-run'\)\s*\{/);
+    expect(blockOf(stage, /\bagent\s*\{/)).toContain("label 'amd64 && docker && s3-browser'");
+    const anyOf = blockOf(blockOf(stage, /\bwhen\s*\{/), /\banyOf\s*\{/);
+    expect(anyOf).toContain("branch 'master'");
+    expect(anyOf).toContain("env.PACKAGING_CHANGED == 'true'");
+  });
+
+  it("builds electron-builder --linux AppImage --x64 -p never and then runs scripts/smoke-appimage.sh", () => {
+    const stage = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /\bstages\s*\{/), /\bstage\('Release dry-run'\)\s*\{/);
+    const steps = blockOf(stage, /\bsteps\s*\{/);
+    expect(steps).toContain("npx electron-builder --linux AppImage --x64 -p never");
+    expect(steps.indexOf("scripts/smoke-appimage.sh")).toBeGreaterThan(steps.indexOf("electron-builder"));
+  });
+
+  it("lists ci.yml's packaging paths with the release definition files in place of release.yml", () => {
+    const ci = readFileSync(path.join(__dirname, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
+    const block = /RELEASE_PATHS: \|\n((?: {12}\S.*\n)+)/.exec(ci)?.[1] ?? "";
+    const ciPaths = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    expect(ciPaths.length).toBeGreaterThan(0);
+    const expected = ciPaths.filter((p) => p !== ".github/workflows/release.yml");
+    for (const p of expected) expect(RELEASE_PATHS).toContain(p);
+    expect(RELEASE_PATHS).toEqual(expect.arrayContaining(["Jenkinsfile.release", "ci/release-build.sh", "ci/release-stage.sh"]));
+    const listed = [...blockOf(codeOf(real), /^def releasePaths\(\)\s*\{/m).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(listed).toEqual(RELEASE_PATHS);
+  });
+
+  it.each(Object.entries(RELEASE_FIXTURES))("is red for %s", (_name, fixture) => {
+    expect(releaseProblems(fixture).length).toBeGreaterThan(0);
+  });
+
+  it("names the broken property in each red release fixture", () => {
+    const [x64, master, smoke, label, paths] = Object.values(RELEASE_FIXTURES).map((f) => releaseProblems(f).join("; "));
+    expect(x64).toContain("--x64");
+    expect(master).toContain("branch 'master'");
+    expect(smoke).toContain("scripts/smoke-appimage.sh");
+    expect(label).toContain("label is arm64");
+    expect(paths).toContain("lacks package.json");
   });
 });
