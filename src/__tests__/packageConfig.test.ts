@@ -117,3 +117,13 @@ describe("package.json build config vs release workflow", () => {
     expect(exclusionProblems(without)).toEqual(["build.files does not exclude source maps (*.map)"]);
   });
 });
+
+describe("package version", () => {
+  it("is exactly 0.20.0 in package.json and package-lock.json", () => {
+    const pkg = JSON.parse(readText("package.json")) as { version: string };
+    const lock = JSON.parse(readText("package-lock.json")) as { version: string; packages: Record<string, { version: string }> };
+    expect(pkg.version).toBe("0.20.0");
+    expect(lock.version).toBe("0.20.0");
+    expect(lock.packages[""].version).toBe("0.20.0");
+  });
+});
