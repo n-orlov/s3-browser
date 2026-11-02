@@ -68,33 +68,59 @@ def finishGate(String state, String desc) {
   }
 }
 
-// One e2e shard of three. The phones are small (delta 2 executors / 7.5 GB, hotel 8 GB, bravo 6 GB) and a
-// shard wants ~3 GB for Playwright plus 1 GB for LocalStack, so the lock admits one shard per agent at a
-// time. The run id scripts/e2e-docker.sh puts in its container names is derived from BUILD_TAG the same way.
+// One e2e shard of three, on an arm64 phone of its own. The phones are small (delta 2 executors / 7.5 GB,
+// hotel 8 GB, bravo 6 GB) and a shard wants ~3 GB for Playwright plus 1 GB for LocalStack, so the lock admits
+// one shard per agent at a time. Waiting for that lock on a node would hold an executor and serialise two
+// shards on the same phone (delta has two executors), so a shard that finds its node's lock taken gives the
+// executor back and asks again for a node other than the ones it was refused on. The node a shard ran on is
+// kept in E2E_NODE_<i> for its cleanup. The run id scripts/e2e-docker.sh puts in its container names is
+// derived from BUILD_TAG the same way e2eShardCleanup does.
 def e2eShard(int index) {
   gateStage('E2E')
-  sh 'git clean -ffdxq'
-  lock(resource: "s3b-e2e-${env.NODE_NAME}") {
-    sh "CI=1 scripts/e2e-docker.sh --shard=${index}/3"
+  String exclude = ''
+  boolean ran = false
+  for (int attempt = 0; attempt < 4 && !ran; attempt++) {
+    node("arm64 && docker && s3-browser${exclude}") {
+      lock(resource: "s3b-e2e-${env.NODE_NAME}", skipIfLocked: true) {
+        ran = true
+        env."E2E_NODE_${index}" = env.NODE_NAME
+        checkout scm
+        sh 'git clean -ffdxq'
+        sh "CI=1 scripts/e2e-docker.sh --shard=${index}/3"
+      }
+      if (!ran) {
+        exclude += " && !${env.NODE_NAME}"
+      }
+    }
+  }
+  if (!ran) {
+    error "E2E shard ${index}/3 found no free arm64 phone"
   }
 }
 
-// Removes what a shard left behind when it was aborted or its script could not run its own trap: the
-// shard's s3b- containers (with their anonymous volumes), any named volume they mounted and its network.
+// Removes what a shard left behind when it was aborted or its script could not run its own trap, on the
+// node the shard ran on: the shard's s3b- containers (with their anonymous volumes), any named volume they
+// mounted and its network.
 def e2eShardCleanup(int index) {
-  withEnv(["S3B_SHARD=${index}"]) {
-    sh '''
-      tag="$(printf %s "$BUILD_TAG" | tr -c 'A-Za-z0-9_.-' '-')-shard${S3B_SHARD}-"
-      ids="$(docker ps -aq --filter "name=s3b-.*-${tag}" || true)"
-      vols=""
-      for id in $ids; do
-        vols="$vols $(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' "$id" 2>/dev/null || true)"
-      done
-      if [ -n "$ids" ]; then docker rm -fv $ids >/dev/null 2>&1 || true; fi
-      if [ -n "$(echo $vols)" ]; then docker volume rm $vols >/dev/null 2>&1 || true; fi
-      nets="$(docker network ls -q --filter "name=s3b-e2e-${tag}" || true)"
-      if [ -n "$nets" ]; then docker network rm $nets >/dev/null 2>&1 || true; fi
-    '''
+  String nodeName = env."E2E_NODE_${index}"
+  if (!nodeName) {
+    return
+  }
+  node(nodeName) {
+    withEnv(["S3B_SHARD=${index}"]) {
+      sh '''
+        tag="$(printf %s "$BUILD_TAG" | tr -c 'A-Za-z0-9_.-' '-')-shard${S3B_SHARD}-"
+        ids="$(docker ps -aq --filter "name=s3b-.*-${tag}" || true)"
+        vols=""
+        for id in $ids; do
+          vols="$vols $(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' "$id" 2>/dev/null || true)"
+        done
+        if [ -n "$ids" ]; then docker rm -fv $ids >/dev/null 2>&1 || true; fi
+        if [ -n "$(echo $vols)" ]; then docker volume rm $vols >/dev/null 2>&1 || true; fi
+        nets="$(docker network ls -q --filter "name=s3b-e2e-${tag}" || true)"
+        if [ -n "$nets" ]; then docker network rm $nets >/dev/null 2>&1 || true; fi
+      '''
+    }
   }
 }
 
@@ -141,12 +167,10 @@ pipeline {
       }
     }
 
-    // Three shards of the Playwright suite, one per phone: the lock inside each shard keeps two of them
-    // off the same agent's memory, and the three together fit the stage in a few minutes.
+    // Three shards of the Playwright suite, one per phone (e2eShard takes the node and the per-node lock).
     stage('E2E') {
       parallel {
         stage('E2E shard 1/3') {
-          agent { label 'arm64 && docker && s3-browser' }
           options { timeout(time: 20, unit: 'MINUTES') }
           steps {
             script { e2eShard(1) }
@@ -161,7 +185,6 @@ pipeline {
           }
         }
         stage('E2E shard 2/3') {
-          agent { label 'arm64 && docker && s3-browser' }
           options { timeout(time: 20, unit: 'MINUTES') }
           steps {
             script { e2eShard(2) }
@@ -176,7 +199,6 @@ pipeline {
           }
         }
         stage('E2E shard 3/3') {
-          agent { label 'arm64 && docker && s3-browser' }
           options { timeout(time: 20, unit: 'MINUTES') }
           steps {
             script { e2eShard(3) }
