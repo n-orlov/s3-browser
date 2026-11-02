@@ -1,5 +1,5 @@
 // Ratchet gate: `npm run ratchet:check` fails when the lint --max-warnings ceiling rose or a vitest
-// coverage threshold or the Stryker mutation break (stryker.config.mjs) fell, or crap-baseline.json holds more entries than allowed, relative to .ratchet.json. Run from the repository root.
+// coverage threshold or the Stryker mutation break (stryker.config.mjs) fell, or crap-baseline.json holds more entries than allowed, or the CRAP limit (DEFAULT_CRAP_MAX) rose, relative to .ratchet.json. Run from the repository root.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
   parseRatchet,
   readCoverageThresholds,
   readCrapBaselineSize,
+  readCrapMax,
   readLintCeiling,
   readMutationBreak,
 } from './ratchetCheck.ts';
@@ -20,6 +21,7 @@ try {
   const current = {
     maxWarnings: readLintCeiling(read('package.json')),
     crapBaselineMax: readCrapBaselineSize(read('crap-baseline.json')),
+    crapMax: readCrapMax(read('scripts/crap/crapScore.ts')),
     coverageThresholds: readCoverageThresholds(read('vitest.config.ts')),
     mutationScoreMin: readMutationBreak(read('stryker.config.mjs')),
   };

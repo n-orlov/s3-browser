@@ -1,7 +1,7 @@
-// The ratchet: lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), coverage thresholds and the mutation break (recorded as at least 80) may only rise, versus .ratchet.json.
+// The ratchet: lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), the CRAP limit may only fall (recorded as at most 20), coverage thresholds and the mutation break (recorded as at least 80) may only rise, versus .ratchet.json.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -10,6 +10,7 @@ import {
   parseRatchet,
   readCoverageThresholds,
   readCrapBaselineSize,
+  readCrapMax,
   readLintCeiling,
   readMutationBreak,
   type RatchetValues,
@@ -18,7 +19,7 @@ import {
 const repo = path.resolve(__dirname, '../..');
 const cli = path.join(repo, 'scripts/ratchet/ratchet.ts');
 
-const base: RatchetValues = { maxWarnings: 0, crapBaselineMax: 0, mutationScoreMin: 80, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
+const base: RatchetValues = { maxWarnings: 0, crapBaselineMax: 0, crapMax: 20, mutationScoreMin: 80, coverageThresholds: { lines: 80, functions: 78, branches: 70, statements: 78 } };
 const withThreshold = (key: keyof RatchetValues['coverageThresholds'], value: number): RatchetValues => ({
   ...base,
   coverageThresholds: { ...base.coverageThresholds, [key]: value },
@@ -47,6 +48,28 @@ describe('judgeRatchet', () => {
     const violations = judgeRatchet(base, { ...base, crapBaselineMax: 2 });
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain('crap-baseline.json has 2 entries');
+  });
+
+  it('rejects a fixture baseline holding 1 entry when crapBaselineMax is 0', () => {
+    const violations = judgeRatchet({ ...base, crapBaselineMax: 0 }, { ...base, crapBaselineMax: 1 });
+    expect(violations).toEqual(['crap-baseline.json has 1 entries, above the ratchet ceiling 0']);
+  });
+
+  it('fails when the in-tree CRAP limit is raised above the recorded 20', () => {
+    const violations = judgeRatchet(base, { ...base, crapMax: 21 });
+    expect(violations).toEqual(['CRAP limit DEFAULT_CRAP_MAX is 21, above the ratchet ceiling 20']);
+  });
+
+  it('fails when .ratchet.json records a CRAP limit above 20, even if the code matches it', () => {
+    const loose = { ...base, crapMax: 30 };
+    const violations = judgeRatchet(loose, loose);
+    expect(violations).toEqual(['.ratchet.json records crapMax 30; the CRAP gate requires at most 20']);
+  });
+
+  it('reports a lowered CRAP limit for tightening and accepts it', () => {
+    const tighter = { ...base, crapMax: 15 };
+    expect(judgeRatchet(base, tighter)).toEqual([]);
+    expect(findImprovements(base, tighter)).toEqual(['crapMax 20 -> 15']);
   });
 
   it('passes an empty crap-baseline.json against crapBaselineMax 0', () => {
@@ -108,10 +131,11 @@ describe('judgeRatchet', () => {
     const worse = {
       maxWarnings: 2,
       crapBaselineMax: 1,
+      crapMax: 21,
       mutationScoreMin: 1,
       coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 },
     };
-    expect(judgeRatchet(base, worse)).toHaveLength(7);
+    expect(judgeRatchet(base, worse)).toHaveLength(8);
   });
 });
 
@@ -154,6 +178,7 @@ describe('readers', () => {
     const text = (patch: Record<string, unknown>) => JSON.stringify({ ...base, ...patch }).replace('"__inf"', '1e999');
     expect(() => parseRatchet(text({ maxWarnings: '__inf' }))).toThrow('.ratchet.json needs a numeric "maxWarnings"');
     expect(() => parseRatchet(text({ crapBaselineMax: '__inf' }))).toThrow('.ratchet.json needs a numeric "crapBaselineMax"');
+    expect(() => parseRatchet(text({ crapMax: '__inf' }))).toThrow('.ratchet.json needs a numeric "crapMax"');
     expect(() => parseRatchet(text({ mutationScoreMin: '__inf' }))).toThrow('.ratchet.json needs a numeric "mutationScoreMin"');
     expect(() => parseRatchet(text({ maxWarnings: '0' }))).toThrow('.ratchet.json needs a numeric "maxWarnings"');
     expect(() => parseRatchet(text({ coverageThresholds: { ...base.coverageThresholds, lines: '__inf' } }))).toThrow(
@@ -173,6 +198,12 @@ describe('readers', () => {
     }
     expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: null }))).toThrow('.ratchet.json needs "coverageThresholds"');
     expect(() => parseRatchet(JSON.stringify({ ...base, coverageThresholds: 'x' }))).toThrow('.ratchet.json needs "coverageThresholds"');
+  });
+
+  it('reads DEFAULT_CRAP_MAX from crapScore.ts and rejects a file without it', () => {
+    expect(readCrapMax('export const DEFAULT_CRAP_MAX = 20;')).toBe(20);
+    expect(readCrapMax('export const DEFAULT_CRAP_MAX=17.5;')).toBe(17.5);
+    expect(() => readCrapMax('export const OTHER = 20;')).toThrow('has no DEFAULT_CRAP_MAX value');
   });
 
   it('counts the entries of crap-baseline.json', () => {
@@ -199,8 +230,9 @@ describe('readers', () => {
   it('rejects a malformed ratchet file', () => {
     expect(() => parseRatchet('{}')).toThrow(/maxWarnings/);
     expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1 }))).toThrow(/crapBaselineMax/);
-    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0 }))).toThrow(/mutationScoreMin/);
-    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0, mutationScoreMin: 80 }))).toThrow(/coverageThresholds/);
+    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0 }))).toThrow(/crapMax/);
+    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0, crapMax: 20 }))).toThrow(/mutationScoreMin/);
+    expect(() => parseRatchet(JSON.stringify({ maxWarnings: 1, crapBaselineMax: 0, crapMax: 20, mutationScoreMin: 80 }))).toThrow(/coverageThresholds/);
     expect(parseRatchet(JSON.stringify(base))).toEqual(base);
   });
 });
@@ -216,6 +248,8 @@ describe('ratchet:check CLI', () => {
       path.join(dir, 'package.json'),
       JSON.stringify({ scripts: { lint: `eslint . --max-warnings ${current.maxWarnings}` } }),
     );
+    mkdirSync(path.join(dir, 'scripts/crap'), { recursive: true });
+    writeFileSync(path.join(dir, 'scripts/crap/crapScore.ts'), `export const DEFAULT_CRAP_MAX = ${current.crapMax};\n`);
     writeFileSync(
       path.join(dir, 'stryker.config.mjs'),
       `export default { thresholds: { high: 90, low: 85, break: ${current.mutationScoreMin} } };\n`,
@@ -269,6 +303,19 @@ describe('ratchet:check CLI', () => {
     const { status, out } = run();
     expect(status).toBe(1);
     expect(out).toContain('records crapBaselineMax 2');
+  });
+
+  it('exits 1 when the in-tree CRAP limit is set to 21 against the recorded 20', () => {
+    writeProject({ ...base, crapMax: 21 });
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('DEFAULT_CRAP_MAX is 21');
+  });
+
+  it('exits 2 when crapScore.ts is missing', () => {
+    writeProject(base);
+    rmSync(path.join(dir, 'scripts/crap/crapScore.ts'));
+    expect(run().status).toBe(2);
   });
 
   it('exits 2 when crap-baseline.json is missing', () => {
@@ -335,6 +382,8 @@ describe('ratchet:check CLI', () => {
     }
     expect(committed.maxWarnings).toBe(0);
     expect(committed.crapBaselineMax).toBe(0);
+    expect(committed.crapMax).toBe(20);
+    expect(readCrapMax(readFileSync(path.join(repo, 'scripts/crap/crapScore.ts'), 'utf8'))).toBe(20);
     expect(committed.mutationScoreMin).toBeGreaterThanOrEqual(80);
     expect(readCrapBaselineSize(readFileSync(path.join(repo, 'crap-baseline.json'), 'utf8'))).toBe(0);
   });

@@ -37,10 +37,20 @@ describe('judgeCrap', () => {
   const over = { id: 'src/main/a.ts:over', complexity: 10, coverage: 0 };
   const fine = { id: 'src/main/a.ts:fine', complexity: 5, coverage: 0.5 };
 
-  it('defaults the limit to 30', () => {
-    expect(DEFAULT_CRAP_MAX).toBe(30);
+  it('defaults the limit to 20', () => {
+    expect(DEFAULT_CRAP_MAX).toBe(20);
     expect(judgeCrap([fine]).ok).toBe(true);
     expect(judgeCrap([over]).ok).toBe(false);
+  });
+
+  it('fails a function scoring 21 under the default limit and passes one scoring exactly 20', () => {
+    const twentyOne = { id: 'src/main/a.ts:twentyOne', complexity: 21, coverage: 1 }; // crap 21
+    const twenty = { id: 'src/main/a.ts:twenty', complexity: 20, coverage: 1 }; // crap 20
+    expect(crapScore(21, 1)).toBe(21);
+    expect(judgeCrap([twenty]).ok).toBe(true);
+    const verdict = judgeCrap([twentyOne]);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.violations).toEqual([{ id: twentyOne.id, crap: 21, reason: 'over-limit', limit: 20 }]);
   });
 
   it('fails a non-baselined function over the limit', () => {
@@ -66,10 +76,10 @@ describe('judgeCrap', () => {
   });
 
   it('passes a non-baselined function that exceeds the limit by exactly the rounding slack', () => {
-    const atLimit = { id: 'src/main/a.ts:atLimit', complexity: 5, coverage: 0 }; // crap 30
+    const atLimit = { id: 'src/main/a.ts:atLimit', complexity: 4, coverage: 0 }; // crap 20
     expect(judgeCrap([atLimit]).ok).toBe(true);
-    expect(judgeCrap([atLimit], { max: 30 - 1e-6 }).ok).toBe(true);
-    expect(judgeCrap([atLimit], { max: 30 - 2e-6 }).ok).toBe(false);
+    expect(judgeCrap([atLimit], { max: 20 - 1e-6 }).ok).toBe(true);
+    expect(judgeCrap([atLimit], { max: 20 - 2e-6 }).ok).toBe(false);
   });
 
   it('passes a baselined function below its baseline', () => {

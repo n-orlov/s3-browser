@@ -327,6 +327,57 @@ describe('App', () => {
       });
     });
 
+    describe('copying the S3 URL of the selection', () => {
+      const writeText = vi.fn();
+      beforeEach(() => {
+        writeText.mockReset();
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      });
+
+      async function selectFile() {
+        renderApp();
+        await waitFor(() => expect(screen.getByText('test-bucket')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('test-bucket'));
+        await waitFor(() => expect(screen.getByText('file.txt')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('file.txt'));
+        return screen.findByTitle('Copy S3 URL to clipboard');
+      }
+
+      it('writes the s3:// URL to the clipboard and toasts it', async () => {
+        writeText.mockResolvedValue(undefined);
+        const button = await selectFile();
+        await act(async () => {
+          fireEvent.click(button);
+        });
+        expect(writeText).toHaveBeenCalledWith('s3://test-bucket/file.txt');
+        expect(await screen.findByText('URL Copied')).toBeInTheDocument();
+        expect(screen.getByText('s3://test-bucket/file.txt')).toBeInTheDocument();
+      });
+
+      it('toasts an error and logs it when the clipboard write is rejected', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        writeText.mockRejectedValue(new Error('denied'));
+        const button = await selectFile();
+        await act(async () => {
+          fireEvent.click(button);
+        });
+        expect(await screen.findByText('Copy Failed')).toBeInTheDocument();
+        expect(screen.getByText('Failed to copy URL to clipboard')).toBeInTheDocument();
+        expect(consoleError).toHaveBeenCalledWith('Failed to copy URL to clipboard:', expect.any(Error));
+        expect(screen.queryByText('URL Copied')).not.toBeInTheDocument();
+        consoleError.mockRestore();
+      });
+
+      it('does not touch the clipboard when no file is selected', async () => {
+        renderApp();
+        await waitFor(() => expect(screen.getByText('test-bucket')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('test-bucket'));
+        await waitFor(() => expect(screen.getByText('file.txt')).toBeInTheDocument());
+        fireEvent.click(screen.getByTitle('Select a file to copy URL'));
+        expect(writeText).not.toHaveBeenCalled();
+      });
+    });
+
     describe('deleting the selection', () => {
       async function selectFileAndOpenDelete() {
         renderApp();

@@ -1,6 +1,7 @@
 {
   "maxWarnings": 0,
   "crapBaselineMax": 0,
+  "crapMax": 20,
   "mutationScoreMin": 80,
   "coverageThresholds": {
     "lines": 84,
