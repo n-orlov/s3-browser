@@ -131,7 +131,7 @@ function gateProblems(jenkinsfile: string): string[] {
   const pipeline = blockOf(code, /^pipeline\s*\{/m);
   const stages = blockOf(pipeline, /\bstages\s*\{/);
   if (!/\bpostGate\('pending',/.test(stages)) problems.push("no pending status at the start of the build");
-  const postBlock = blockOf(pipeline, /\bpost\s*\{/);
+  const postBlock = blockOf(pipeline, /^ {2}post\s*\{/m);
   const success = blockOf(postBlock, /\bsuccess\s*\{/);
   if (!/\bfinishGate\('success',/.test(success)) problems.push("no success status in post { success }");
   if (/\bfinishGate\('success',/.test(postBlock.replace(success, ""))) problems.push("success is posted outside post { success }");
@@ -140,6 +140,42 @@ function gateProblems(jenkinsfile: string): string[] {
   if (!/GATE_STAGE/.test(unsuccessful)) problems.push("the failure description does not name the failed stage");
   const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
   if (!/HEAD\^1/.test(gateSha) || !/HEAD\^2/.test(gateSha)) problems.push("gateSha does not take the first parent of a merge commit");
+  return problems;
+}
+
+/** One problem string per property of the sharded E2E stage the Jenkinsfile lacks. */
+function e2eProblems(jenkinsfile: string): string[] {
+  const problems: string[] = [];
+  const code = codeOf(jenkinsfile);
+  const stages = blockOf(blockOf(code, /^pipeline\s*\{/m), /\bstages\s*\{/);
+  const e2e = blockOf(stages, /\bstage\('E2E'\)\s*\{/);
+  if (!e2e) return ["no E2E stage"];
+  const parallel = blockOf(e2e, /\bparallel\s*\{/);
+  if (!parallel) problems.push("E2E does not run its shards in parallel");
+  const shards = [...parallel.matchAll(/\bstage\('[^']*'\)\s*\{/g)].map((m) => blockOf(parallel, new RegExp(m[0].replace(/[()]/g, "\\$&")  )));
+  if (shards.length !== 3) problems.push(`E2E has ${shards.length} shards, expected 3`);
+  shards.forEach((shard, n) => {
+    const label = /\blabel\s+'([^']*)'/.exec(blockOf(shard, /\bagent\s*\{/))?.[1];
+    if (label !== "arm64 && docker && s3-browser") problems.push(`shard ${n + 1} label is ${label ?? "unset"}`);
+    if (!new RegExp(`\\be2eShard\\(${n + 1}\\)`).test(shard)) problems.push(`shard ${n + 1} does not call e2eShard(${n + 1})`);
+    if (!/\btimeout\(time: \d+, unit: 'MINUTES'\)/.test(blockOf(shard, /\boptions\s*\{/))) problems.push(`shard ${n + 1} has no stage timeout`);
+    const post = blockOf(shard, /\bpost\s*\{/);
+    for (const cond of ["aborted", "cleanup"]) {
+      if (!new RegExp(`\\be2eShardCleanup\\(${n + 1}\\)`).test(blockOf(post, new RegExp(`\\b${cond}\\s*\\{`)))) {
+        problems.push(`shard ${n + 1} does not remove its containers and volumes in post { ${cond} }`);
+      }
+    }
+  });
+  const body = blockOf(code, /^def e2eShard\(int index\)\s*\{/m);
+  if (!body) problems.push("no e2eShard helper");
+  const locked = blockOf(body, /\block\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}"\)\s*\{/);
+  if (!locked) problems.push("the shard body is not inside lock(resource: \"s3b-e2e-${env.NODE_NAME}\")");
+  if (!/scripts\/e2e-docker\.sh --shard=\$\{index\}\/3/.test(locked)) problems.push("the lock does not wrap scripts/e2e-docker.sh --shard=<i>/3");
+  if (!/\bgateStage\('E2E'\)/.test(body)) problems.push("the shard does not name its stage for the gate");
+  const cleanup = blockOf(code, /^def e2eShardCleanup\(int index\)\s*\{/m);
+  if (!/docker rm -fv\b/.test(cleanup)) problems.push("the cleanup does not remove containers with their volumes (docker rm -fv)");
+  if (!/docker volume rm\b/.test(cleanup)) problems.push("the cleanup does not remove volumes");
+  if (!/s3b-\.\*-\$\{tag\}/.test(cleanup)) problems.push("the cleanup does not select the shard's s3b- containers");
   return problems;
 }
 
@@ -169,6 +205,13 @@ const GATE_FIXTURES: Record<string, string> = {
   "Jenkinsfile.ciGate (context renamed to ci/gate)": without(/jenkins\/gate(?=\\+")/, "ci/gate"),
   "Jenkinsfile.noFailurePost (without post { unsuccessful })": without(/\n {4}unsuccessful \{[\s\S]*?\n {4}\}\n/, "\n"),
   "Jenkinsfile.tokenOutside (token used outside withCredentials)": without("        sh 'git clean -ffdxq'\n", "        sh 'git clean -ffdxq'\n        sh 'curl -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/user'\n"),
+};
+
+const E2E_FIXTURES: Record<string, string> = {
+  "Jenkinsfile.noLock (shard body without lock)": without(/ {2}lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}"\) \{\n {4}(sh "[^\n]*")\n {2}\}\n/, "  $1\n"),
+  "Jenkinsfile.noCleanup (without post { aborted } and cleanup)": without(/\n {10}post \{\n {12}aborted \{[\s\S]*?\n {10}\}\n(?= {8}\}\n {8}stage\('E2E shard 2)/, "\n"),
+  "Jenkinsfile.twoShards (shard count 2)": without(/ {8}stage\('E2E shard 3\/3'\) \{[\s\S]*?\n {8}\}\n(?= {6}\})/, ""),
+  "Jenkinsfile.wrongLabel (shard on linux)": without("agent { label 'arm64 && docker && s3-browser' }\n          options { timeout(time: 20", "agent { label 'linux' }\n          options { timeout(time: 20"),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -217,7 +260,7 @@ describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
 
   it("is red for a copy with the wrong label, no reset or no stage timeout", () => {
     expect(laneProblems(without("label 'arm64 && docker && s3-browser'", "label 'linux'")).join()).toContain("Quality label");
-    expect(laneProblems(without("sh 'git clean -ffdxq'", "echo skip")).join()).toContain("git clean");
+    expect(laneProblems(without("        sh 'git clean -ffdxq'", "        echo skip")).join()).toContain("git clean");
     expect(laneProblems(without("options { timeout(time: 30, unit: 'MINUTES') }", "")).join()).toContain("stage timeout");
   });
 });
@@ -236,7 +279,7 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
   });
 
   it("posts failure from post { unsuccessful }, which covers FAILURE and ABORTED, and success only from post { success }", () => {
-    const post = blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /\bpost\s*\{/);
+    const post = blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m);
     expect(blockOf(post, /\bunsuccessful\s*\{/)).toContain("finishGate('failure'");
     expect(blockOf(post, /\bsuccess\s*\{/)).toContain("finishGate('success'");
     expect(post).not.toMatch(/\b(failure|always|cleanup)\s*\{/);
@@ -271,5 +314,47 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     expect(ctx).toContain("jenkins/gate");
     expect(failure).toContain("failure status");
     expect(token).toContain("outside withCredentials");
+  });
+});
+
+describe("the Jenkinsfile runs the e2e suite as three parallel shards (repocheck)", () => {
+  it("has no e2e problem", () => {
+    expect(e2eProblems(real)).toEqual([]);
+  });
+
+  it("runs three shards scripts/e2e-docker.sh --shard=<i>/3 on arm64 && docker && s3-browser", () => {
+    const code = codeOf(real);
+    const parallel = blockOf(blockOf(blockOf(blockOf(code, /^pipeline\s*\{/m), /\bstages\s*\{/), /\bstage\('E2E'\)\s*\{/), /\bparallel\s*\{/);
+    expect([...parallel.matchAll(/\bstage\('E2E shard (\d)\/3'\)/g)].map((m) => m[1])).toEqual(["1", "2", "3"]);
+    expect([...parallel.matchAll(/label 'arm64 && docker && s3-browser'/g)]).toHaveLength(3);
+    expect(code).toContain('scripts/e2e-docker.sh --shard=${index}/3');
+  });
+
+  it("wraps the shard body in lock(resource: \"s3b-e2e-${env.NODE_NAME}\")", () => {
+    const body = blockOf(codeOf(real), /^def e2eShard\(int index\)\s*\{/m);
+    expect(blockOf(body, /\block\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}"\)\s*\{/)).toContain("e2e-docker.sh");
+  });
+
+  it("removes the shard's s3b- containers and volumes in post { aborted } and post { cleanup }", () => {
+    const code = codeOf(real);
+    const parallel = blockOf(blockOf(blockOf(blockOf(code, /^pipeline\s*\{/m), /\bstages\s*\{/), /\bstage\('E2E'\)\s*\{/), /\bparallel\s*\{/);
+    expect([...parallel.matchAll(/\be2eShardCleanup\(\d\)/g)]).toHaveLength(6);
+    const cleanup = blockOf(code, /^def e2eShardCleanup\(int index\)\s*\{/m);
+    expect(cleanup).toContain("docker rm -fv");
+    expect(cleanup).toContain("docker volume rm");
+    expect(cleanup).toContain("s3b-.*-${tag}");
+  });
+
+  it.each(Object.entries(E2E_FIXTURES))("is red for %s", (_name, fixture) => {
+    expect(e2eProblems(fixture).length).toBeGreaterThan(0);
+  });
+
+  it("names the broken property in each red e2e fixture", () => {
+    const [lock, cleanup, count, label] = Object.values(E2E_FIXTURES).map((f) => e2eProblems(f).join("; "));
+    expect(lock).toContain("lock(resource:");
+    expect(cleanup).toContain("post { aborted }");
+    expect(cleanup).toContain("post { cleanup }");
+    expect(count).toContain("2 shards, expected 3");
+    expect(label).toContain("label is linux");
   });
 });

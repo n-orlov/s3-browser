@@ -12,7 +12,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PLAYWRIGHT_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
+# Read from the lockfile with awk: the Jenkins phone agents have no host Node.
+PLAYWRIGHT_VERSION=$(awk '/"node_modules\/@playwright\/test": \{/ { f = 1; next } f && /"version":/ { gsub(/[",]/, "", $2); print $2; exit }' package-lock.json)
+if [[ -z "$PLAYWRIGHT_VERSION" ]]; then echo "e2e-docker.sh: no @playwright/test version in package-lock.json" >&2; exit 1; fi
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble"
 LOCALSTACK_IMAGE="localstack/localstack:3.8"
 

@@ -68,6 +68,36 @@ def finishGate(String state, String desc) {
   }
 }
 
+// One e2e shard of three. The phones are small (delta 2 executors / 7.5 GB, hotel 8 GB, bravo 6 GB) and a
+// shard wants ~3 GB for Playwright plus 1 GB for LocalStack, so the lock admits one shard per agent at a
+// time. The run id scripts/e2e-docker.sh puts in its container names is derived from BUILD_TAG the same way.
+def e2eShard(int index) {
+  gateStage('E2E')
+  sh 'git clean -ffdxq'
+  lock(resource: "s3b-e2e-${env.NODE_NAME}") {
+    sh "CI=1 scripts/e2e-docker.sh --shard=${index}/3"
+  }
+}
+
+// Removes what a shard left behind when it was aborted or its script could not run its own trap: the
+// shard's s3b- containers (with their anonymous volumes), any named volume they mounted and its network.
+def e2eShardCleanup(int index) {
+  withEnv(["S3B_SHARD=${index}"]) {
+    sh '''
+      tag="$(printf %s "$BUILD_TAG" | tr -c 'A-Za-z0-9_.-' '-')-shard${S3B_SHARD}-"
+      ids="$(docker ps -aq --filter "name=s3b-.*-${tag}" || true)"
+      vols=""
+      for id in $ids; do
+        vols="$vols $(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' "$id" 2>/dev/null || true)"
+      done
+      if [ -n "$ids" ]; then docker rm -fv $ids >/dev/null 2>&1 || true; fi
+      if [ -n "$(echo $vols)" ]; then docker volume rm $vols >/dev/null 2>&1 || true; fi
+      nets="$(docker network ls -q --filter "name=s3b-e2e-${tag}" || true)"
+      if [ -n "$nets" ]; then docker network rm $nets >/dev/null 2>&1 || true; fi
+    '''
+  }
+}
+
 pipeline {
   // Each stage names its own agent: a build must not hold a phone while another stage runs elsewhere.
   agent none
@@ -108,6 +138,58 @@ pipeline {
         sh 'ci/trivy.sh'
         nodeSh('npm run build')
         nodeSh('npm run sbom')
+      }
+    }
+
+    // Three shards of the Playwright suite, one per phone: the lock inside each shard keeps two of them
+    // off the same agent's memory, and the three together fit the stage in a few minutes.
+    stage('E2E') {
+      parallel {
+        stage('E2E shard 1/3') {
+          agent { label 'arm64 && docker && s3-browser' }
+          options { timeout(time: 20, unit: 'MINUTES') }
+          steps {
+            script { e2eShard(1) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(1) }
+            }
+            cleanup {
+              script { e2eShardCleanup(1) }
+            }
+          }
+        }
+        stage('E2E shard 2/3') {
+          agent { label 'arm64 && docker && s3-browser' }
+          options { timeout(time: 20, unit: 'MINUTES') }
+          steps {
+            script { e2eShard(2) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(2) }
+            }
+            cleanup {
+              script { e2eShardCleanup(2) }
+            }
+          }
+        }
+        stage('E2E shard 3/3') {
+          agent { label 'arm64 && docker && s3-browser' }
+          options { timeout(time: 20, unit: 'MINUTES') }
+          steps {
+            script { e2eShard(3) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(3) }
+            }
+            cleanup {
+              script { e2eShardCleanup(3) }
+            }
+          }
+        }
       }
     }
   }
