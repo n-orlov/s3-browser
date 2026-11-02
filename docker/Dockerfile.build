@@ -3,17 +3,27 @@
 
 FROM electronuserland/builder:wine
 
+# Unprivileged user that owns the app directory and its own Wine prefix
+RUN useradd --create-home --uid 1000 --shell /bin/bash builder \
+    && mkdir /app \
+    && chown builder:builder /app
+ENV HOME=/home/builder \
+    WINEPREFIX=/home/builder/.wine
+
 # Set working directory
 WORKDIR /app
 
+# Everything below runs as the unprivileged user
+USER builder
+
 # Copy package files first for better caching
-COPY package*.json ./
+COPY --chown=builder:builder package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source code
-COPY . .
+COPY --chown=builder:builder . .
 
 # Build the app
 RUN npm run build
