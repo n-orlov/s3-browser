@@ -90,8 +90,8 @@ export function parsePlaywrightCounts(text: string): E2eCounts {
 /** True when the counts hold any failure: a failed test or a report-level error. */
 export const e2eHasFailure = (counts: E2eCounts): boolean => counts.failed > 0 || counts.errors > 0;
 
-const mark = (ok: boolean): string => (ok ? '✅' : '❌');
-const pct = (value: number): string => `${Math.round(value * 100) / 100}%`;
+export const mark = (ok: boolean): string => (ok ? '✅' : '❌');
+export const pct = (value: number): string => `${Math.round(value * 100) / 100}%`;
 
 export function renderQualitySummary(input: QualityInput): string {
   const lines: string[] = ['## Quality', '', '### Unit tests', ''];

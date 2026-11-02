@@ -253,6 +253,10 @@ function reportProblems(jenkinsfile: string): string[] {
     if (!inputs.includes(dir)) problems.push(`the Allure report does not take ${dir}`);
   }
   if (!/\bpublishHTML\(\[reportName: 'Allure'/.test(always)) problems.push("post { always } does not publish the Allure report with publishHTML");
+  if (!/\bsummary\.ts html ci-summary\b/.test(always)) problems.push("post { always } does not render the CI summary page");
+  if (!/\bpublishHTML\(\[reportName: 'CI summary', reportDir: 'ci-summary'/.test(always)) {
+    problems.push("post { always } does not publish the CI summary page with publishHTML");
+  }
   const archive = /\barchiveArtifacts\s+artifacts:\s*'([^']*)'/.exec(always)?.[1] ?? "";
   if (!archive) problems.push("post { always } archives nothing");
   for (const piece of ["coverage/", "reports/eslint.json", "sbom/", "reports/trivy.txt", "playwright-report/"]) {
@@ -322,6 +326,8 @@ const REPORT_FIXTURES: Record<string, string> = {
   ),
   "Jenkinsfile.noHistory (without the copyArtifacts history step)": without(/ {10}copyArtifacts projectName:[^\n]*\n[^\n]*\n/, ""),
   "Jenkinsfile.noPublish (without publishHTML)": without(/ {10}publishHTML\(\[reportName: 'Allure'[^\n]*\n[^\n]*\n/, ""),
+  "Jenkinsfile.noSummaryPublish (without publishing the CI summary page)": without(/ {10}publishHTML\(\[reportName: 'CI summary'[^\n]*\n[^\n]*\n/, ""),
+  "Jenkinsfile.noSummaryRender (without rendering the CI summary page)": without(/ {12}nodeSh\('node scripts\/summary\/summary\.ts html ci-summary'\)\n/, ""),
   "Jenkinsfile.noPlaywrightArchive (archive without the Playwright report)": without(", e2e-*/playwright-report/**", ""),
   "Jenkinsfile.noEslintArchive (archive without the ESLint JSON)": without(", reports/eslint.json", ""),
 };
@@ -544,7 +550,9 @@ describe("the Jenkinsfile publishes the reports in post { always } (repocheck)",
   });
 
   it("names the broken property in each red report fixture", () => {
-    const [junit, history, publish, playwright, eslint] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    const [junit, history, publish, summaryPublish, summaryRender, playwright, eslint] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    expect(summaryPublish).toContain("does not publish the CI summary page");
+    expect(summaryRender).toContain("does not render the CI summary page");
     expect(junit).toContain("does not record the unit JUnit");
     expect(junit).toContain("junit sits outside post { always }");
     expect(history).toContain("copyArtifacts");

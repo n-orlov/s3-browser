@@ -329,6 +329,13 @@ pipeline {
           }
           publishHTML([reportName: 'Allure', reportDir: 'allure-report', reportFiles: 'index.html',
                        keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
+          // The CI summary page: unit and e2e counts, coverage against the thresholds, CRAP and the flaky count,
+          // rendered by scripts/summary from the reports above (a missing report reads as "no data").
+          catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+            nodeSh('node scripts/summary/summary.ts html ci-summary')
+          }
+          publishHTML([reportName: 'CI summary', reportDir: 'ci-summary', reportFiles: 'index.html',
+                       keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
           archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**',
                            allowEmptyArchive: true
         }
