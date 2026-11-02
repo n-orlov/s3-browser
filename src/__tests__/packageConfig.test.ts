@@ -127,3 +127,37 @@ describe("package version", () => {
     expect(lock.packages[""].version).toBe("0.20.0");
   });
 });
+
+const MIN_ELECTRON = "44.9.1";
+
+/** True when dotted numeric version `a` is at least `b`. */
+function versionAtLeast(a: string, b: string): boolean {
+  const pa = a.split("-")[0].split(".").map(Number);
+  const pb = b.split("-")[0].split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  }
+  return true;
+}
+
+/** Lowest version a caret/tilde/exact range such as ^44.10.1 admits. */
+const rangeFloor = (range: string): string => range.replace(/^[\^~>=\s]+/, "");
+
+describe("electron security floor", () => {
+  it("locks node_modules/electron to 44.9.1 or later", () => {
+    const lock = JSON.parse(readText("package-lock.json")) as { packages: Record<string, { version: string }> };
+    expect(versionAtLeast(lock.packages["node_modules/electron"].version, MIN_ELECTRON)).toBe(true);
+  });
+
+  it("declares an electron range that excludes versions below 44.9.1", () => {
+    const pkg = JSON.parse(readText("package.json")) as { devDependencies: Record<string, string> };
+    expect(versionAtLeast(rangeFloor(pkg.devDependencies.electron), MIN_ELECTRON)).toBe(true);
+  });
+
+  it("rejects the vulnerable 44.7.2 (negative fixture)", () => {
+    expect(versionAtLeast("44.7.2", MIN_ELECTRON)).toBe(false);
+    expect(versionAtLeast(rangeFloor("^44.7.2"), MIN_ELECTRON)).toBe(false);
+    expect(versionAtLeast("44.9.1", MIN_ELECTRON)).toBe(true);
+    expect(versionAtLeast("45.0.0", MIN_ELECTRON)).toBe(true);
+  });
+});
