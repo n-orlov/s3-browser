@@ -97,6 +97,52 @@ function laneProblems(jenkinsfile: string): string[] {
   return problems;
 }
 
+/** One problem string per property of the jenkins/gate commit status the Jenkinsfile lacks. */
+function gateProblems(jenkinsfile: string): string[] {
+  const problems: string[] = [];
+  const code = codeOf(jenkinsfile);
+
+  const post = blockOf(code, /^def postGate\(String state, String desc\)\s*\{/m);
+  if (!post) {
+    problems.push("no postGate helper");
+    return problems;
+  }
+  if (!/"context\\*":\\*"jenkins\/gate\\*"/.test(post)) problems.push("postGate does not post the context jenkins/gate");
+  if (!/api\.github\.com\/repos\/n-orlov\/s3-browser\/statuses\/\$GATE_SHA/.test(post)) {
+    problems.push("postGate does not post to the statuses API of the gate sha");
+  }
+  if (!/\$BUILD_URL|\$\{BUILD_URL\}/.test(post) || !/target_url/.test(post)) problems.push("postGate sets no target_url of the build");
+  const creds = blockOf(post, /\bwithCredentials\(\[[^\n]*\]\)\s*\{/);
+  if (!/credentialsId: 'github-n-orlov'/.test(post)) problems.push("postGate does not use the credential github-n-orlov");
+  if (!creds) problems.push("postGate has no withCredentials block");
+
+  // The token is read only inside a withCredentials body.
+  const head = /\bwithCredentials\(\[[^\n]*\]\)\s*\{/;
+  let outside = code;
+  for (const m of code.matchAll(new RegExp(head.source, "g"))) {
+    const body = blockOf(code, head, m.index);
+    outside = outside.replace(code.slice(m.index, m.index + m[0].length + body.length + 1), "");
+  }
+  const stripped = outside.replace(/passwordVariable: 'GH_TOKEN'/g, "");
+  if (/GH_TOKEN/.test(stripped)) problems.push("the token GH_TOKEN is used outside withCredentials");
+
+  const states = [...post.matchAll(/GATE_STATE/g)].length;
+  if (states === 0) problems.push("postGate posts no state");
+  const pipeline = blockOf(code, /^pipeline\s*\{/m);
+  const stages = blockOf(pipeline, /\bstages\s*\{/);
+  if (!/\bpostGate\('pending',/.test(stages)) problems.push("no pending status at the start of the build");
+  const postBlock = blockOf(pipeline, /\bpost\s*\{/);
+  const success = blockOf(postBlock, /\bsuccess\s*\{/);
+  if (!/\bfinishGate\('success',/.test(success)) problems.push("no success status in post { success }");
+  if (/\bfinishGate\('success',/.test(postBlock.replace(success, ""))) problems.push("success is posted outside post { success }");
+  const unsuccessful = blockOf(postBlock, /\bunsuccessful\s*\{/);
+  if (!/\bfinishGate\('failure',/.test(unsuccessful)) problems.push("no failure status in post { unsuccessful } (FAILURE and ABORTED)");
+  if (!/GATE_STAGE/.test(unsuccessful)) problems.push("the failure description does not name the failed stage");
+  const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
+  if (!/HEAD\^1/.test(gateSha) || !/HEAD\^2/.test(gateSha)) problems.push("gateSha does not take the first parent of a merge commit");
+  return problems;
+}
+
 const real = readFileSync(path.join(__dirname, "..", "..", "Jenkinsfile"), "utf8");
 
 /** The real Jenkinsfile with one property removed; throws if the edit did not apply. */
@@ -117,6 +163,12 @@ const FIXTURES: Record<string, string> = {
   "Jenkinsfile.noConcurrencyGuard (without disableConcurrentBuilds)": without(/^\s*disableConcurrentBuilds\(\)\n/m, ""),
   "Jenkinsfile.noMemoryCap (without --memory)": without(/--memory 3g --memory-swap 3g/, ""),
   "Jenkinsfile.lintAfterBuild (lint moved after build)": lintAfterBuild(),
+};
+
+const GATE_FIXTURES: Record<string, string> = {
+  "Jenkinsfile.ciGate (context renamed to ci/gate)": without(/jenkins\/gate(?=\\+")/, "ci/gate"),
+  "Jenkinsfile.noFailurePost (without post { unsuccessful })": without(/\n {4}unsuccessful \{[\s\S]*?\n {4}\}\n/, "\n"),
+  "Jenkinsfile.tokenOutside (token used outside withCredentials)": without("        sh 'git clean -ffdxq'\n", "        sh 'git clean -ffdxq'\n        sh 'curl -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/user'\n"),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -164,8 +216,60 @@ describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
   });
 
   it("is red for a copy with the wrong label, no reset or no stage timeout", () => {
-    expect(laneProblems(without("arm64 && docker && s3-browser", "linux")).join()).toContain("Quality label");
+    expect(laneProblems(without("label 'arm64 && docker && s3-browser'", "label 'linux'")).join()).toContain("Quality label");
     expect(laneProblems(without("sh 'git clean -ffdxq'", "echo skip")).join()).toContain("git clean");
     expect(laneProblems(without("options { timeout(time: 30, unit: 'MINUTES') }", "")).join()).toContain("stage timeout");
+  });
+});
+
+describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () => {
+  it("has no gate problem", () => {
+    expect(gateProblems(real)).toEqual([]);
+  });
+
+  it("posts the context jenkins/gate with the states pending, success and failure", () => {
+    const code = codeOf(real);
+    expect(code).toMatch(/\\+"context\\+":\\+"jenkins\/gate\\+"/);
+    expect(code).toContain("postGate('pending',");
+    expect(code).toContain("finishGate('success',");
+    expect(code).toContain("finishGate('failure',");
+  });
+
+  it("posts failure from post { unsuccessful }, which covers FAILURE and ABORTED, and success only from post { success }", () => {
+    const post = blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /\bpost\s*\{/);
+    expect(blockOf(post, /\bunsuccessful\s*\{/)).toContain("finishGate('failure'");
+    expect(blockOf(post, /\bsuccess\s*\{/)).toContain("finishGate('success'");
+    expect(post).not.toMatch(/\b(failure|always|cleanup)\s*\{/);
+  });
+
+  it("names the failed stage in the failure description", () => {
+    expect(codeOf(real)).toMatch(/finishGate\('failure',[^\n]*\$\{env\.GATE_STAGE/);
+    expect(codeOf(real)).toContain("gateStage('Quality')");
+  });
+
+  it("uses the token only inside withCredentials on github-n-orlov", () => {
+    const code = codeOf(real);
+    const body = blockOf(code, /\bwithCredentials\(\[[^\n]*\]\)\s*\{/);
+    expect(body).toContain("GH_TOKEN");
+    expect(body.length).toBeGreaterThan(0);
+    expect(code.replace(body, "").replace("passwordVariable: 'GH_TOKEN'", "")).not.toContain("GH_TOKEN");
+    expect(code).toContain("credentialsId: 'github-n-orlov'");
+  });
+
+  it("posts on the first parent when the PR build is a merge commit", () => {
+    const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
+    expect(sha).toContain("HEAD^2");
+    expect(sha).toContain("git rev-parse HEAD^1");
+  });
+
+  it.each(Object.entries(GATE_FIXTURES))("is red for %s", (_name, fixture) => {
+    expect(gateProblems(fixture).length).toBeGreaterThan(0);
+  });
+
+  it("names the broken property in each red gate fixture", () => {
+    const [ctx, failure, token] = Object.values(GATE_FIXTURES).map((f) => gateProblems(f).join("; "));
+    expect(ctx).toContain("jenkins/gate");
+    expect(failure).toContain("failure status");
+    expect(token).toContain("outside withCredentials");
   });
 });

@@ -26,6 +26,48 @@ def nodeSh(String cmd) {
   }
 }
 
+// The PR head sha a status belongs to. A PR build checks out the target merged INTO the PR head;
+// when that merge is not a fast-forward, HEAD is a merge commit whose first parent is the PR head.
+def gateSha() {
+  return sh(returnStdout: true, script: '''
+    if [ -n "$CHANGE_ID" ] && git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi
+  ''').trim()
+}
+
+// Names the stage a failure post reports. Every stage calls it first.
+def gateStage(String name) {
+  env.GATE_STAGE = name
+}
+
+// Posts the custom commit status jenkins/gate (the required check) on the PR head. The token is
+// only ever read inside withCredentials. The description is stripped to a safe alphabet because it
+// is spliced into a JSON body by the shell.
+def postGate(String state, String desc) {
+  String safe = desc.replaceAll('[^A-Za-z0-9 :._/-]', '').take(140)
+  withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+    withEnv(["GATE_STATE=${state}", "GATE_DESC=${safe}"]) {
+      sh '''
+        curl -fsS -o /dev/null -X POST \
+          -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/n-orlov/s3-browser/statuses/$GATE_SHA" \
+          -d "{\\"state\\":\\"$GATE_STATE\\",\\"context\\":\\"jenkins/gate\\",\\"description\\":\\"$GATE_DESC\\",\\"target_url\\":\\"${BUILD_URL}\\"}"
+      '''
+    }
+  }
+}
+
+// The final status, from post (the pipeline agent is none, so it takes a node; a build that never
+// reached a checkout takes one here).
+def finishGate(String state, String desc) {
+  node('arm64 && docker && s3-browser') {
+    if (!env.GATE_SHA) {
+      checkout scm
+      env.GATE_SHA = gateSha()
+    }
+    postGate(state, desc)
+  }
+}
+
 pipeline {
   // Each stage names its own agent: a build must not hold a phone while another stage runs elsewhere.
   agent none
@@ -46,6 +88,11 @@ pipeline {
       agent { label 'arm64 && docker && s3-browser' }
       options { timeout(time: 30, unit: 'MINUTES') }
       steps {
+        script {
+          gateStage('Quality')
+          env.GATE_SHA = gateSha()
+        }
+        postGate('pending', 'Build running')
         // The workspace persists between builds: start from the checkout alone.
         sh 'git clean -ffdxq'
         // ratchet:check compares against the merge base with origin/master, which a PR
@@ -62,6 +109,16 @@ pipeline {
         nodeSh('npm run build')
         nodeSh('npm run sbom')
       }
+    }
+  }
+
+  post {
+    success {
+      script { finishGate('success', 'All stages passed') }
+    }
+    // FAILURE, ABORTED and UNSTABLE alike: only a succeeded build may leave a green gate.
+    unsuccessful {
+      script { finishGate('failure', "Build ${currentBuild.currentResult.toLowerCase()} in stage ${env.GATE_STAGE ?: 'startup'}") }
     }
   }
 }
