@@ -5,6 +5,9 @@
 # A `--shard=<i>/<n>` (or `--shard <i>/<n>`) argument is forwarded to `playwright test` as every other argument is,
 # and its index <i> is part of the docker network and LocalStack container names.
 # Safe to run concurrently (resource names are suffixed with a unique run id and the shard index).
+# The run id comes from BUILD_TAG (Jenkins) when set, else from GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT, else "local".
+# The LocalStack container (with its anonymous volume) and the network are removed on EXIT, INT and TERM;
+# both containers carry a --memory cap so a runaway run cannot take the agent down.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,27 +28,42 @@ for arg in "$@"; do
   prev="$arg"
 done
 
-RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-shard${SHARD_INDEX}-$$"
+if [[ -n "${BUILD_TAG:-}" ]]; then
+  # Docker names allow [a-zA-Z0-9_.-] only.
+  RUN_BASE="$(printf '%s' "$BUILD_TAG" | tr -c 'a-zA-Z0-9_.-' '-')"
+else
+  RUN_BASE="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}"
+fi
+RUN_ID="${RUN_BASE}-shard${SHARD_INDEX}-$$"
 NET="s3b-e2e-${RUN_ID}"
 LS="s3b-localstack-${RUN_ID}"
+PW="s3b-playwright-${RUN_ID}"
 NPM_CACHE="${S3B_NPM_CACHE:-$HOME/.cache/s3b-e2e-npm}"
 
 mkdir -p "$NPM_CACHE"
 
+PW_PID=""
 cleanup() {
-  docker rm -f "$LS" >/dev/null 2>&1 || true
+  trap - EXIT INT TERM
+  if [[ -n "$PW_PID" ]]; then kill "$PW_PID" >/dev/null 2>&1 || true; fi
+  docker rm -fv "$PW" >/dev/null 2>&1 || true
+  docker rm -fv "$LS" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 docker network create "$NET" >/dev/null
 docker run -d --name "$LS" --network "$NET" --network-alias localstack \
+  --memory 1g \
   -e SERVICES=s3 -e DEBUG=0 -e AWS_DEFAULT_REGION=us-east-1 -e DISABLE_EVENTS=1 \
   "$LOCALSTACK_IMAGE" >/dev/null
 
 # Run as the invoking user so files created in the bind-mounted workspace stay deletable.
 # Isolated node_modules per run would be slower; reuse the workspace's but build inside the container (Linux binaries).
-docker run --rm --network "$NET" --ipc=host \
+# Run in the background and wait, so INT/TERM reach the trap at once instead of after the foreground command.
+docker run --rm --name "$PW" --network "$NET" --ipc=host --memory 3g \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:/app" -v "$NPM_CACHE:/npm-cache" -w /app \
   -e HOME=/tmp/home -e npm_config_cache=/npm-cache \
@@ -57,4 +75,9 @@ docker run --rm --network "$NET" --ipc=host \
     npm ci --no-audit --no-fund
     npm run build
     xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" npx playwright test "$@"
-  ' _ "$@"
+  ' _ "$@" &
+PW_PID=$!
+PW_STATUS=0
+wait "$PW_PID" || PW_STATUS=$?
+PW_PID=""
+exit "$PW_STATUS"
