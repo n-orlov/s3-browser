@@ -257,6 +257,14 @@ function reportProblems(jenkinsfile: string): string[] {
   if (!/\bpublishHTML\(\[reportName: 'CI summary', reportDir: 'ci-summary'/.test(always)) {
     problems.push("post { always } does not publish the CI summary page with publishHTML");
   }
+  for (const id of ["tests", "coverage", "quality", "mutation"]) {
+    if (!new RegExp(`addEmbeddableBadgeConfiguration\\(id: '${id}', subject: '${id}', status: 'not run'`).test(always)) {
+      problems.push(`post { always } does not configure the embeddable badge ${id}`);
+    }
+  }
+  if (!/\bbadges:ci\b/.test(always) || !/\.setStatus\(/.test(always) || !/\.setColor\(/.test(always)) {
+    problems.push("post { always } does not set the badges' status and color from the build's results");
+  }
   const archive = /\barchiveArtifacts\s+artifacts:\s*'([^']*)'/.exec(always)?.[1] ?? "";
   if (!archive) problems.push("post { always } archives nothing");
   for (const piece of ["coverage/", "reports/eslint.json", "sbom/", "reports/trivy.txt", "playwright-report/"]) {
@@ -330,6 +338,8 @@ const REPORT_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noSummaryRender (without rendering the CI summary page)": without(/ {12}nodeSh\('node scripts\/summary\/summary\.ts html ci-summary'\)\n/, ""),
   "Jenkinsfile.noPlaywrightArchive (archive without the Playwright report)": without(", e2e-*/playwright-report/**", ""),
   "Jenkinsfile.noEslintArchive (archive without the ESLint JSON)": without(", reports/eslint.json", ""),
+  "Jenkinsfile.noMutationBadge (without the mutation badge)": without(/ {12}mutation: addEmbeddableBadgeConfiguration[^\n]*\n/, ""),
+  "Jenkinsfile.badgesNeverSet (badges declared but status and color never set)": without(/ {16}badges\[line\.substring\(0, eq\)\]\.setStatus[^\n]*\n {16}badges\[line\.substring\(0, eq\)\]\.setColor[^\n]*\n/, ""),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -550,7 +560,9 @@ describe("the Jenkinsfile publishes the reports in post { always } (repocheck)",
   });
 
   it("names the broken property in each red report fixture", () => {
-    const [junit, history, publish, summaryPublish, summaryRender, playwright, eslint] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    const [junit, history, publish, summaryPublish, summaryRender, playwright, eslint, mutationBadge, neverSet] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    expect(mutationBadge).toContain("embeddable badge mutation");
+    expect(neverSet).toContain("status and color");
     expect(summaryPublish).toContain("does not publish the CI summary page");
     expect(summaryRender).toContain("does not render the CI summary page");
     expect(junit).toContain("does not record the unit JUnit");

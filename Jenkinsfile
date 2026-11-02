@@ -336,6 +336,26 @@ pipeline {
           }
           publishHTML([reportName: 'CI summary', reportDir: 'ci-summary', reportFiles: 'index.html',
                        keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
+          // README badges, served publicly at https://int21h.mooo.com/jenkins-static/s3-browser/ci/<branch>/<id>.svg
+          // (`build` is the plugin's own). Declared on every build, so a build without a report shows "not run" and
+          // never the previous build's numbers; scripts/badges/jenkins.ts computes status and colour from the reports.
+          def badges = [
+            tests: addEmbeddableBadgeConfiguration(id: 'tests', subject: 'tests', status: 'not run', color: 'lightgrey'),
+            coverage: addEmbeddableBadgeConfiguration(id: 'coverage', subject: 'coverage', status: 'not run', color: 'lightgrey'),
+            quality: addEmbeddableBadgeConfiguration(id: 'quality', subject: 'quality', status: 'not run', color: 'lightgrey'),
+            mutation: addEmbeddableBadgeConfiguration(id: 'mutation', subject: 'mutation', status: 'not run', color: 'lightgrey'),
+          ]
+          catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+            nodeSh('npm run --silent badges:ci -- ci-summary/badges.txt')
+            for (String line : readFile('ci-summary/badges.txt').split('\n')) {
+              int eq = line.indexOf('=')
+              int bar = line.lastIndexOf('|')
+              if (eq > 0 && bar > eq && badges.containsKey(line.substring(0, eq))) {
+                badges[line.substring(0, eq)].setStatus(line.substring(eq + 1, bar))
+                badges[line.substring(0, eq)].setColor(line.substring(bar + 1))
+              }
+            }
+          }
           archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**',
                            allowEmptyArchive: true
         }
