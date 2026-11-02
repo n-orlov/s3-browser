@@ -235,6 +235,43 @@ function releaseProblems(jenkinsfile: string): string[] {
   return problems;
 }
 
+/** One problem string per report step the Jenkinsfile's pipeline-level `post { always }` lacks. */
+function reportProblems(jenkinsfile: string): string[] {
+  const problems: string[] = [];
+  const code = codeOf(jenkinsfile);
+  const post = blockOf(blockOf(code, /^pipeline\s*\{/m), /^ {2}post\s*\{/m);
+  const always = blockOf(post, /\balways\s*\{/);
+  if (!always) return ["no post { always }"];
+  if (!/\bjunit\s+testResults:[^\n]*junit\/junit\.xml/.test(always)) problems.push("post { always } does not record the unit JUnit (junit/junit.xml)");
+  if (!/\bjunit\s+testResults:[^\n]*e2e-\*\/junit\/e2e-junit\.xml/.test(always)) problems.push("post { always } does not record the e2e JUnit");
+  if (!/\bcopyArtifacts\b[^\n]*\n?[^\n]*lastCompleted\(\)/.test(always) || !/previous\/allure-history\/history\.jsonl/.test(always)) {
+    problems.push("post { always } does not copy the previous build's Allure history with copyArtifacts");
+  }
+  if (!/\ballure@[\d.]+ generate\b/.test(always)) problems.push("post { always } does not generate the Allure report");
+  const inputs = always.match(/for d in ([^;]*);/)?.[1] ?? "";
+  for (const dir of ["allure-results-unit", "e2e-1/allure-results", "e2e-2/allure-results", "e2e-3/allure-results"]) {
+    if (!inputs.includes(dir)) problems.push(`the Allure report does not take ${dir}`);
+  }
+  if (!/\bpublishHTML\(\[reportName: 'Allure'/.test(always)) problems.push("post { always } does not publish the Allure report with publishHTML");
+  const archive = /\barchiveArtifacts\s+artifacts:\s*'([^']*)'/.exec(always)?.[1] ?? "";
+  if (!archive) problems.push("post { always } archives nothing");
+  for (const piece of ["coverage/", "reports/eslint.json", "sbom/", "reports/trivy.txt", "playwright-report/"]) {
+    if (archive && !archive.includes(piece)) problems.push(`post { always } does not archive ${piece}`);
+  }
+  // The reports must not hang on the build's outcome.
+  for (const step of ["junit", "publishHTML", "archiveArtifacts", "copyArtifacts"]) {
+    const outside = post.replace(always, "");
+    if (new RegExp(`\\b${step}\\b`).test(outside)) problems.push(`${step} sits outside post { always }`);
+  }
+  // What the reports are built from is stashed on every outcome.
+  const stages = blockOf(blockOf(code, /^pipeline\s*\{/m), /\bstages\s*\{/);
+  const qualityAlways = blockOf(blockOf(blockOf(stages, /\bstage\('Quality'\)\s*\{/), /\bpost\s*\{/), /\balways\s*\{/);
+  if (!/stash name: 'quality-results'/.test(qualityAlways)) problems.push("Quality does not stash its results in post { always }");
+  const shard = blockOf(code, /^def e2eShard\(int index\)\s*\{/m);
+  if (!/\bfinally\s*\{[^}]*stash name: "e2e-results-\$\{index\}"/.test(shard)) problems.push("an e2e shard does not stash its results in a finally");
+  return problems;
+}
+
 const real = readFileSync(path.join(__dirname, "..", "..", "Jenkinsfile"), "utf8");
 
 /** The real Jenkinsfile with one property removed; throws if the edit did not apply. */
@@ -276,6 +313,17 @@ const RELEASE_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noSmoke (without the smoke call)": without(/ {8}sh 'S3B_SMOKE_DOCKER_ARGS[^\n]*\n/, ""),
   "Jenkinsfile.wrongLabel (Release dry-run on arm64)": without("agent { label 'amd64 && docker && s3-browser' }", "agent { label 'arm64 && docker && s3-browser' }"),
   "Jenkinsfile.noPackageJson (path list without package.json)": without("    'package.json',\n", ""),
+};
+
+const REPORT_FIXTURES: Record<string, string> = {
+  "Jenkinsfile.junitOnSuccess (junit moved to post { success })": without(/ {10}junit testResults:[^\n]*\n[^\n]*\n(?= {10}\/\/ One Allure)/, "").replace(
+    "    success {\n",
+    "    success {\n      junit testResults: 'junit/junit.xml, e2e-*/junit/e2e-junit.xml', allowEmptyResults: true\n",
+  ),
+  "Jenkinsfile.noHistory (without the copyArtifacts history step)": without(/ {10}copyArtifacts projectName:[^\n]*\n[^\n]*\n/, ""),
+  "Jenkinsfile.noPublish (without publishHTML)": without(/ {10}publishHTML\(\[reportName: 'Allure'[^\n]*\n[^\n]*\n/, ""),
+  "Jenkinsfile.noPlaywrightArchive (archive without the Playwright report)": without(", e2e-*/playwright-report/**", ""),
+  "Jenkinsfile.noEslintArchive (archive without the ESLint JSON)": without(", reports/eslint.json", ""),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -346,7 +394,9 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     const post = blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m);
     expect(blockOf(post, /\bunsuccessful\s*\{/)).toContain("finishGate('failure'");
     expect(blockOf(post, /\bsuccess\s*\{/)).toContain("finishGate('success'");
-    expect(post).not.toMatch(/\b(failure|always|cleanup)\s*\{/);
+    expect(post).not.toMatch(/\b(failure|cleanup)\s*\{/);
+    // The reports of post { always } run on every outcome and never decide the gate.
+    expect(blockOf(post, /\balways\s*\{/)).not.toContain("Gate(");
   });
 
   it("names the failed stage in the failure description", () => {
@@ -467,5 +517,39 @@ describe("the Jenkinsfile runs the release dry run on the amd64 agent (repocheck
     expect(smoke).toContain("scripts/smoke-appimage.sh");
     expect(label).toContain("label is arm64");
     expect(paths).toContain("lacks package.json");
+  });
+});
+
+describe("the Jenkinsfile publishes the reports in post { always } (repocheck)", () => {
+  it("has no report problem", () => {
+    expect(reportProblems(real)).toEqual([]);
+  });
+
+  it("records unit and e2e JUnit and builds one Allure report from the unit and all three shards' results", () => {
+    const always = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m), /\balways\s*\{/);
+    expect(always).toContain("junit/junit.xml");
+    expect(always).toContain("e2e-*/junit/e2e-junit.xml");
+    expect(always).toContain("allure@3.20.1 generate");
+    expect(always).toContain("--config scripts/allurerc.mjs");
+    expect(always).toContain("cp previous/allure-history/history.jsonl allure-report/history.jsonl");
+  });
+
+  it("archives coverage, the ESLint JSON, the SBOM, the Trivy report and the Playwright report", () => {
+    const archive = /archiveArtifacts artifacts: '([^']*)'/.exec(codeOf(real))?.[1].split(/,\s*/);
+    expect(archive).toEqual(expect.arrayContaining(["coverage/**", "reports/eslint.json", "sbom/**", "reports/trivy.txt", "e2e-*/playwright-report/**"]));
+  });
+
+  it.each(Object.entries(REPORT_FIXTURES))("is red for %s", (_name, fixture) => {
+    expect(reportProblems(fixture).length).toBeGreaterThan(0);
+  });
+
+  it("names the broken property in each red report fixture", () => {
+    const [junit, history, publish, playwright, eslint] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    expect(junit).toContain("does not record the unit JUnit");
+    expect(junit).toContain("junit sits outside post { always }");
+    expect(history).toContain("copyArtifacts");
+    expect(publish).toContain("publishHTML");
+    expect(playwright).toContain("does not archive playwright-report/");
+    expect(eslint).toContain("does not archive reports/eslint.json");
   });
 });

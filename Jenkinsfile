@@ -118,7 +118,13 @@ def e2eShard(int index) {
         env."E2E_NODE_${index}" = env.NODE_NAME
         checkout scm
         sh 'git clean -ffdxq'
-        sh "CI=1 scripts/e2e-docker.sh --shard=${index}/3"
+        try {
+          sh "CI=1 scripts/e2e-docker.sh --shard=${index}/3"
+        } finally {
+          // On every outcome: the pipeline's post { always } builds the reports from these.
+          stash name: "e2e-results-${index}", allowEmpty: true,
+                includes: 'junit/**, allure-results/**, playwright-report/**, test-results/results.json'
+        }
       }
       if (!ran) {
         exclude += " && !${env.NODE_NAME}"
@@ -189,6 +195,8 @@ pipeline {
         script { env.PACKAGING_CHANGED = packagingChanged() }
         nodeSh('npm ci --no-audit --no-fund')
         nodeSh('npm run typecheck')
+        // The ESLint JSON report is written first (a red lint still leaves it) and archived by post { always }.
+        nodeSh('npm run lint:report || true')
         nodeSh('npm run lint')
         nodeSh('npm run test:coverage')
         nodeSh('npm run crap')
@@ -197,6 +205,13 @@ pipeline {
         sh 'ci/trivy.sh'
         nodeSh('npm run build')
         nodeSh('npm run sbom')
+      }
+      // Whatever the stage produced, red or green, goes to the reports in the pipeline's post { always }.
+      post {
+        always {
+          stash name: 'quality-results', allowEmpty: true,
+                includes: 'junit/**, coverage/**, allure-results-unit/**, reports/**, sbom/**'
+        }
       }
     }
 
@@ -275,6 +290,50 @@ pipeline {
   }
 
   post {
+    // Reports on every outcome, so a red build still shows what ran. The pipeline agent is none: the reports
+    // are built on a phone from the stashes Quality and the e2e shards left (a stash a stage never reached is skipped).
+    always {
+      script {
+        node('arm64 && docker && s3-browser') {
+          checkout scm
+          sh 'git clean -ffdxq'
+          Map stashes = ['quality-results': '.', 'e2e-results-1': 'e2e-1', 'e2e-results-2': 'e2e-2', 'e2e-results-3': 'e2e-3']
+          for (def entry : stashes.entrySet()) {
+            try {
+              dir(entry.value) {
+                unstash entry.key
+              }
+            } catch (err) {
+              echo "No stash ${entry.key} (its stage did not reach the end): ${err.message}"
+            }
+          }
+          // Unit JUnit from Quality, e2e JUnit from each shard. skipMarkingBuildUnstable: a failing test already fails its stage.
+          junit testResults: 'junit/junit.xml, e2e-*/junit/e2e-junit.xml', allowEmptyResults: true,
+                skipMarkingBuildUnstable: true, skipPublishingChecks: true
+          // One Allure report from the unit and every shard's e2e results, with the trend history of the previous
+          // build (history.jsonl inside the archived allure-history/) copied in before it is generated.
+          copyArtifacts projectName: env.JOB_NAME, selector: lastCompleted(), filter: 'allure-history/**',
+                        target: 'previous', optional: true, fingerprintArtifacts: false
+          catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+            sh '''
+              mkdir -p allure-report allure-history
+              if [ -f previous/allure-history/history.jsonl ]; then cp previous/allure-history/history.jsonl allure-report/history.jsonl; fi
+              inputs=""
+              for d in allure-results-unit e2e-1/allure-results e2e-2/allure-results e2e-3/allure-results; do
+                if [ -d "$d" ]; then inputs="$inputs $d"; fi
+              done
+              echo "$inputs" > allure-inputs.txt
+            '''
+            nodeSh('npx --yes allure@3.20.1 generate $(cat allure-inputs.txt) --config scripts/allurerc.mjs --output allure-report')
+            sh 'if [ -f allure-report/history.jsonl ]; then cp allure-report/history.jsonl allure-history/history.jsonl; fi'
+          }
+          publishHTML([reportName: 'Allure', reportDir: 'allure-report', reportFiles: 'index.html',
+                       keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
+          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**',
+                           allowEmptyArchive: true
+        }
+      }
+    }
     success {
       script { finishGate('success', 'All stages passed') }
     }

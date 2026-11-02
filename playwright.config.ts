@@ -15,6 +15,7 @@ export default defineConfig({
     ['list'],
     ['allure-playwright', { resultsDir: 'allure-results' }],
     ['json', { outputFile: 'test-results/results.json' }],
+    ['junit', { outputFile: 'junit/e2e-junit.xml' }],
   ],
 
   // Global setup/teardown for LocalStack

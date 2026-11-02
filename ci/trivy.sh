@@ -7,6 +7,8 @@
 # Environment:
 #   TRIVY_SCAN_ROOT     directory to scan (default: the repository root)
 #   TRIVY_CACHE_VOLUME  named docker volume that caches the DB (default: s3b-trivy-cache)
+#   TRIVY_REPORT        file that also receives the scan output (default: reports/trivy.txt under the
+#                       current directory); written on a red scan too, so the build archives it.
 #
 # The tree is streamed into the scanner container with `docker cp`, so the script works the
 # same on a host and inside a container that talks to the host docker daemon (no bind-mount paths).
@@ -50,4 +52,7 @@ tar -C "$ROOT" \
   --exclude=./test-results --exclude=./.stryker-tmp --exclude=./ci-results \
   -cf - . | docker cp - "$CONTAINER:/tmp"
 
-docker start -a "$CONTAINER"
+REPORT="${TRIVY_REPORT:-reports/trivy.txt}"
+mkdir -p "$(dirname "$REPORT")"
+# pipefail (set above) keeps the scanner's exit status through the tee.
+docker start -a "$CONTAINER" 2>&1 | tee "$REPORT"
