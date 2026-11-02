@@ -38,15 +38,16 @@ CONTAINER="$(docker create --memory 2g -v "$VOLUME:/cache" "$IMAGE" \
   --severity HIGH,CRITICAL \
   --include-dev-deps \
   --exit-code 1 \
-  /src)"
+  /tmp)"
 trap 'docker rm -f "$CONTAINER" >/dev/null 2>&1 || true' EXIT
 
-# Build outputs, VCS data and installed packages are not part of the scanned tree.
+# Build outputs, VCS data and installed packages are not part of the scanned tree. Only options
+# BusyBox tar (the phone agents) also knows are used: the tree lands in the image's empty /tmp.
 tar -C "$ROOT" \
   --exclude=./node_modules --exclude=./.git --exclude=./dist --exclude=./release \
   --exclude=./coverage --exclude=./reports --exclude=./sbom --exclude=./junit \
   --exclude=./allure-results --exclude=./allure-results-unit --exclude=./playwright-report \
   --exclude=./test-results --exclude=./.stryker-tmp --exclude=./ci-results \
-  --transform 's,^\.,src,' -cf - . | docker cp - "$CONTAINER:/"
+  -cf - . | docker cp - "$CONTAINER:/tmp"
 
 docker start -a "$CONTAINER"
