@@ -43,16 +43,19 @@ export function readCrapMax(crapScoreText: string): number {
   return Number(found[1]);
 }
 
-/** Reads the four coverage thresholds out of the text of vitest.config.ts. */
-export function readCoverageThresholds(vitestConfigText: string): Record<ThresholdKey, number> {
+/** Reads one coverage threshold out of the text of vitest.config.ts. */
+export function readCoverageThreshold(vitestConfigText: string, key: ThresholdKey): number {
   const block = /\bthresholds\s*:\s*\{([^}]*)\}/.exec(vitestConfigText);
   if (!block) throw new Error('vitest.config.ts has no coverage "thresholds" block');
+  const found = new RegExp(`\\b${key}\\s*:\\s*(\\d+(?:\\.\\d+)?)`).exec(block[1]);
+  if (!found) throw new Error(`vitest.config.ts thresholds has no "${key}" value`);
+  return Number(found[1]);
+}
+
+/** Reads the four coverage thresholds out of the text of vitest.config.ts. */
+export function readCoverageThresholds(vitestConfigText: string): Record<ThresholdKey, number> {
   const result = {} as Record<ThresholdKey, number>;
-  for (const key of THRESHOLD_KEYS) {
-    const found = new RegExp(`\\b${key}\\s*:\\s*(\\d+(?:\\.\\d+)?)`).exec(block[1]);
-    if (!found) throw new Error(`vitest.config.ts thresholds has no "${key}" value`);
-    result[key] = Number(found[1]);
-  }
+  for (const key of THRESHOLD_KEYS) result[key] = readCoverageThreshold(vitestConfigText, key);
   return result;
 }
 
@@ -146,4 +149,65 @@ export function findImprovements(ratchet: RatchetValues, current: RatchetValues)
     notes.push(`mutationScoreMin ${ratchet.mutationScoreMin} -> ${current.mutationScoreMin}`);
   }
   return notes;
+}
+
+/** The ref the working tree is compared against: the base of every pull request. */
+export const BASE_REF = 'origin/master';
+
+/** The gate values as they stood at the merge base; a value the base does not have is left out and is not constrained. */
+export interface BaseValues {
+  maxWarnings?: number;
+  crapBaselineMax?: number;
+  crapMax?: number;
+  mutationScoreMin?: number;
+  coverageThresholds: Partial<Record<ThresholdKey, number>>;
+}
+
+/** Reads the files of the merge base through `readAtBase` (the file text, or undefined when the base has no such file); whatever cannot be read is absent. */
+export function readBaseValues(readAtBase: (file: string) => string | undefined): BaseValues {
+  const attempt = <T>(file: string, read: (text: string) => T): T | undefined => {
+    const text = readAtBase(file);
+    if (text === undefined) return undefined;
+    try {
+      return read(text);
+    } catch {
+      return undefined;
+    }
+  };
+  const coverageThresholds: Partial<Record<ThresholdKey, number>> = {};
+  for (const key of THRESHOLD_KEYS) {
+    const value = attempt('vitest.config.ts', (text) => readCoverageThreshold(text, key));
+    if (value !== undefined) coverageThresholds[key] = value;
+  }
+  return {
+    maxWarnings: attempt('package.json', readLintCeiling),
+    crapBaselineMax: attempt('crap-baseline.json', readCrapBaselineSize),
+    crapMax: attempt('scripts/crap/crapScore.ts', readCrapMax),
+    mutationScoreMin: attempt('stryker.config.mjs', readMutationBreak),
+    coverageThresholds,
+  };
+}
+
+/** Returns one message per value that is looser than at the merge base; a value absent at the base is not constrained. */
+export function judgeAgainstBase(base: BaseValues, current: RatchetValues): string[] {
+  const violations: string[] = [];
+  if (base.maxWarnings !== undefined && current.maxWarnings > base.maxWarnings) {
+    violations.push(`lint --max-warnings is ${current.maxWarnings}, looser than ${base.maxWarnings} at the merge base`);
+  }
+  if (base.crapBaselineMax !== undefined && current.crapBaselineMax > base.crapBaselineMax) {
+    violations.push(`crap-baseline.json has ${current.crapBaselineMax} entries, more than the ${base.crapBaselineMax} at the merge base`);
+  }
+  if (base.crapMax !== undefined && current.crapMax > base.crapMax) {
+    violations.push(`CRAP limit DEFAULT_CRAP_MAX is ${current.crapMax}, looser than ${base.crapMax} at the merge base`);
+  }
+  for (const key of THRESHOLD_KEYS) {
+    const atBase = base.coverageThresholds[key];
+    if (atBase !== undefined && current.coverageThresholds[key] < atBase) {
+      violations.push(`coverage threshold ${key} is ${current.coverageThresholds[key]}, below ${atBase} at the merge base`);
+    }
+  }
+  if (base.mutationScoreMin !== undefined && current.mutationScoreMin < base.mutationScoreMin) {
+    violations.push(`mutation thresholds.break is ${current.mutationScoreMin}, below ${base.mutationScoreMin} at the merge base`);
+  }
+  return violations;
 }

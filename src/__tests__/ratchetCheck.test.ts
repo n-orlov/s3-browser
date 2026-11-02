@@ -1,4 +1,4 @@
-// The ratchet: lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), the CRAP limit may only fall (recorded as at most 20), coverage thresholds and the mutation break (recorded as at least 80) may only rise, versus .ratchet.json.
+// The ratchet (versus .ratchet.json and versus the merge base with origin/master): lint --max-warnings and the crap-baseline.json size are fixed at 0 (recorded as 0 in .ratchet.json), the CRAP limit may only fall (recorded as at most 20), coverage thresholds and the mutation break (recorded as at least 80) may only rise, versus .ratchet.json.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -6,8 +6,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   findImprovements,
+  judgeAgainstBase,
   judgeRatchet,
   parseRatchet,
+  readBaseValues,
   readCoverageThresholds,
   readCrapBaselineSize,
   readCrapMax,
@@ -139,6 +141,97 @@ describe('judgeRatchet', () => {
   });
 });
 
+describe('judgeAgainstBase', () => {
+  const atBase = { ...base, coverageThresholds: { ...base.coverageThresholds } };
+  const noneAtBase = { coverageThresholds: {} };
+
+  it('passes when every value equals the base', () => {
+    expect(judgeAgainstBase(atBase, base)).toEqual([]);
+  });
+
+  it('names each loosened value with the base value', () => {
+    expect(judgeAgainstBase(atBase, { ...base, maxWarnings: 1 })).toEqual(['lint --max-warnings is 1, looser than 0 at the merge base']);
+    expect(judgeAgainstBase(atBase, { ...base, crapBaselineMax: 1 })).toEqual(['crap-baseline.json has 1 entries, more than the 0 at the merge base']);
+    expect(judgeAgainstBase(atBase, { ...base, crapMax: 21 })).toEqual(['CRAP limit DEFAULT_CRAP_MAX is 21, looser than 20 at the merge base']);
+    expect(judgeAgainstBase(atBase, { ...base, mutationScoreMin: 79 })).toEqual(['mutation thresholds.break is 79, below 80 at the merge base']);
+    for (const key of ['lines', 'functions', 'branches', 'statements'] as const) {
+      expect(judgeAgainstBase(atBase, withThreshold(key, base.coverageThresholds[key] - 1))).toEqual([
+        `coverage threshold ${key} is ${base.coverageThresholds[key] - 1}, below ${base.coverageThresholds[key]} at the merge base`,
+      ]);
+    }
+  });
+
+  it('accepts tightened values', () => {
+    const tighter = { ...withThreshold('lines', 90), crapMax: 15, mutationScoreMin: 90 };
+    expect(judgeAgainstBase({ ...atBase, maxWarnings: 3, crapBaselineMax: 4 }, tighter)).toEqual([]);
+  });
+
+  it('does not constrain a value absent at the base, however loose', () => {
+    const loose = { maxWarnings: 99, crapBaselineMax: 99, crapMax: 99, mutationScoreMin: 0, coverageThresholds: { lines: 0, functions: 0, branches: 0, statements: 0 } };
+    expect(judgeAgainstBase(noneAtBase, loose)).toEqual([]);
+  });
+
+  it('constrains a value of 0 at the base (zero is a value, not an absence)', () => {
+    const zeros = { maxWarnings: 0, crapBaselineMax: 0, crapMax: 0, mutationScoreMin: 0, coverageThresholds: { lines: 0, functions: 0, branches: 0, statements: 0 } };
+    const atZero = { ...base, crapMax: 0, mutationScoreMin: 0 };
+    expect(judgeAgainstBase(zeros, { ...atZero, crapBaselineMax: 1 })).toHaveLength(1);
+    expect(judgeAgainstBase(zeros, { ...atZero, crapMax: 1 })).toHaveLength(1);
+    expect(judgeAgainstBase(zeros, atZero)).toEqual([]);
+    expect(judgeAgainstBase({ ...zeros, mutationScoreMin: 1 }, atZero)).toHaveLength(1);
+  });
+
+  it('reports every loosened value at once', () => {
+    const loose = { maxWarnings: 1, crapBaselineMax: 1, crapMax: 21, mutationScoreMin: 70, coverageThresholds: { lines: 1, functions: 1, branches: 1, statements: 1 } };
+    expect(judgeAgainstBase(atBase, loose)).toHaveLength(8);
+  });
+});
+
+describe('readBaseValues', () => {
+  const files: Record<string, string> = {
+    'package.json': JSON.stringify({ scripts: { lint: 'eslint . --max-warnings 0' } }),
+    'crap-baseline.json': '{"a":1,"b":2}',
+    'scripts/crap/crapScore.ts': 'export const DEFAULT_CRAP_MAX = 20;\n',
+    'stryker.config.mjs': 'export default { thresholds: { break: 80 } };\n',
+    'vitest.config.ts': 'export default { thresholds: { lines: 91, functions: 88, branches: 82, statements: 90 } };\n',
+  };
+
+  it('reads every value from the files of the base', () => {
+    expect(readBaseValues((file) => files[file])).toEqual({
+      maxWarnings: 0,
+      crapBaselineMax: 2,
+      crapMax: 20,
+      mutationScoreMin: 80,
+      coverageThresholds: { lines: 91, functions: 88, branches: 82, statements: 90 },
+    });
+  });
+
+  it('leaves out what the base lacks: a missing file or a value its reader cannot find', () => {
+    const partial: Record<string, string> = { ...files, 'vitest.config.ts': 'export default { thresholds: { lines: 91 } };\n', 'package.json': '{"scripts":{"lint":"eslint ."}}' };
+    delete partial['scripts/crap/crapScore.ts'];
+    const values = readBaseValues((file) => partial[file]);
+    expect(values.coverageThresholds).toEqual({ lines: 91 });
+    expect(values.maxWarnings).toBeUndefined();
+    expect(values.crapMax).toBeUndefined();
+    expect(values.crapBaselineMax).toBe(2);
+    expect(values.mutationScoreMin).toBe(80);
+  });
+
+  it('leaves out a file that is not parseable', () => {
+    const values = readBaseValues((file) => (file === 'crap-baseline.json' ? '[1' : files[file]));
+    expect(values.crapBaselineMax).toBeUndefined();
+  });
+
+  it('reads nothing from an empty base', () => {
+    expect(readBaseValues(() => undefined)).toEqual({ coverageThresholds: {} });
+  });
+
+  it('asks the base for exactly the five gate files', () => {
+    const asked: string[] = [];
+    readBaseValues((file) => (asked.push(file), undefined));
+    expect([...new Set(asked)].sort()).toEqual(['crap-baseline.json', 'package.json', 'scripts/crap/crapScore.ts', 'stryker.config.mjs', 'vitest.config.ts']);
+  });
+});
+
 describe('readers', () => {
   it('reads --max-warnings from the lint script', () => {
     expect(readLintCeiling(JSON.stringify({ scripts: { lint: 'eslint . --max-warnings 7' } }))).toBe(7);
@@ -239,7 +332,12 @@ describe('readers', () => {
 
 describe('ratchet:check CLI', () => {
   let dir: string;
-  const writeProject = (current: RatchetValues, ratchet: RatchetValues = base) => {
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+    return result.stdout.trim();
+  };
+  const writeFiles = (current: RatchetValues, ratchet: RatchetValues) => {
     const t = current.coverageThresholds;
     writeFileSync(path.join(dir, '.ratchet.json'), JSON.stringify(ratchet));
     const baseline = Object.fromEntries(Array.from({ length: current.crapBaselineMax }, (_, i) => [`src/f${i}.ts:fn${i}`, 31 + i]));
@@ -258,6 +356,15 @@ describe('ratchet:check CLI', () => {
       path.join(dir, 'vitest.config.ts'),
       `export default { test: { coverage: { thresholds: { lines: ${t.lines}, functions: ${t.functions}, branches: ${t.branches}, statements: ${t.statements} } } } };\n`,
     );
+  };
+  /** Commits `atBase` as origin/master (the merge base), then leaves `current` and `ratchet` in the working tree; `atBase` defaults to `current`. */
+  const writeProject = (current: RatchetValues, ratchet: RatchetValues = base, atBase: RatchetValues = current) => {
+    git('init', '-q', '-b', 'work');
+    writeFiles(atBase, ratchet);
+    git('add', '-A');
+    git('commit', '-q', '-m', 'base');
+    git('update-ref', 'refs/remotes/origin/master', 'HEAD');
+    writeFiles(current, ratchet);
   };
   const run = () => {
     const result = spawnSync(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', cli], {
@@ -310,6 +417,88 @@ describe('ratchet:check CLI', () => {
     const { status, out } = run();
     expect(status).toBe(1);
     expect(out).toContain('DEFAULT_CRAP_MAX is 21');
+  });
+
+  it('rejects a lowered lines threshold versus the merge base', () => {
+    const lowered = withThreshold('lines', 79);
+    writeProject(lowered, lowered, base);
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('coverage threshold lines is 79, below 80 at the merge base');
+  });
+
+  it('rejects a CRAP baseline grown by one entry versus the merge base', () => {
+    const grown = { ...base, crapBaselineMax: 1 };
+    writeProject(grown, grown, base);
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('crap-baseline.json has 1 entries, more than the 0 at the merge base');
+  });
+
+  it('rejects a CRAP limit raised from 20 to 21 versus the merge base', () => {
+    const raised = { ...base, crapMax: 21 };
+    writeProject(raised, raised, base);
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('DEFAULT_CRAP_MAX is 21, looser than 20 at the merge base');
+  });
+
+  it('rejects --max-warnings raised from 0 to 1 versus the merge base', () => {
+    const raised = { ...base, maxWarnings: 1 };
+    writeProject(raised, raised, base);
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('lint --max-warnings is 1, looser than 0 at the merge base');
+  });
+
+  it('rejects a lowered Stryker break versus the merge base', () => {
+    const atBase = { ...base, mutationScoreMin: 85 };
+    writeProject(base, base, atBase);
+    const { status, out } = run();
+    expect(status).toBe(1);
+    expect(out).toContain('mutation thresholds.break is 80, below 85 at the merge base');
+  });
+
+  it('accepts a tightened threshold versus the merge base', () => {
+    const tightened = withThreshold('lines', 85);
+    writeProject(tightened, tightened, base);
+    const { status, out } = run();
+    expect(status).toBe(0);
+    expect(out).toContain('ratchet: ok');
+  });
+
+  it('compares against the merge base, not the tip of origin/master', () => {
+    writeProject(base);
+    const mergeBase = git('rev-parse', 'HEAD');
+    git('checkout', '-q', '-b', 'moved');
+    writeFiles(withThreshold('lines', 99), base);
+    git('commit', '-q', '-am', 'master moved on');
+    git('update-ref', 'refs/remotes/origin/master', 'HEAD');
+    git('checkout', '-q', 'work');
+    expect(git('merge-base', 'HEAD', 'origin/master')).toBe(mergeBase);
+    expect(run().status).toBe(0);
+  });
+
+  it('treats a value the merge base does not have as unconstrained', () => {
+    writeProject(base);
+    git('rm', '-q', 'scripts/crap/crapScore.ts');
+    git('commit', '-q', '-m', 'the base has no CRAP limit yet');
+    git('update-ref', 'refs/remotes/origin/master', 'HEAD');
+    writeFiles(base, base);
+    expect(run().status).toBe(0);
+  });
+
+  it('exits non-zero when there is no merge base with origin/master', () => {
+    writeProject(base);
+    git('update-ref', '-d', 'refs/remotes/origin/master');
+    const { status, out } = run();
+    expect(status).toBe(2);
+    expect(out).toContain('no merge base of HEAD and origin/master');
+  });
+
+  it('exits non-zero outside a git work tree', () => {
+    writeFiles(base, base);
+    expect(run().status).toBe(2);
   });
 
   it('exits 2 when crapScore.ts is missing', () => {
