@@ -1,0 +1,101 @@
+# Dispatched by the Jenkins release job (Jenkinsfile.release): build the macOS
+# assets from the release commit and attach them to the DRAFT release Jenkins
+# created. A draft has no tag yet, so the release is addressed by its numeric id.
+name: macos-build
+run-name: macos-build ${{ inputs.tag }} [${{ inputs.correlation_id }}]
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (not created yet; the draft carries it)
+        required: true
+      sha:
+        description: Full commit sha to build
+        required: true
+      release_id:
+        description: Numeric id of the draft release to upload to
+        required: true
+      correlation_id:
+        description: Unique id from the dispatcher, echoed in run-name
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: macos-build-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Validate inputs
+        env:
+          SHA: ${{ inputs.sha }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha is not a full sha" >&2; exit 1; }
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]] || { echo "release_id is not numeric" >&2; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "bad tag" >&2; exit 1; }
+
+      - name: Checkout release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Check the release is a draft for this tag and sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          got=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '[.draft, .tag_name, .target_commitish] | map(tostring) | join("|")')
+          [ "$got" = "true|$TAG|$SHA" ] || { echo "release $RELEASE_ID is [$got], want [true|$TAG|$SHA]" >&2; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$SHA" ]
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package macOS DMG
+        run: |
+          npm run build
+          npx electron-builder --mac -p never
+        env:
+          # Skip code signing for CI builds (no Apple Developer cert)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List release artifacts
+        run: ls -la release/
+
+      - name: Upload the DMGs to the draft release by id
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release/*.dmg)
+          [ "${#files[@]}" -gt 0 ] || { echo "no release/*.dmg was built" >&2; exit 1; }
+          for f in "${files[@]}"; do
+            name=$(basename "$f")
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@$f" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=${name// /%20}" \
+              -o /dev/null -w "uploaded $name: HTTP %{http_code}\n"
+          done
