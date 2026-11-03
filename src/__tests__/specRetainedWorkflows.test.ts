@@ -26,29 +26,48 @@ const sentencesOf = (text: string): string[] =>
 // verb the sentence uses (retainedWorkflowClaims).
 const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|continues?|still (exists?|runs?|present|in place|there|used|scheduled|active)|until (the |all )?(\w+ )?workflows? (are|is) (retired|deleted|removed))\b/i;
 
-// A mention of a workflow the tree does not have is excused only when the leaving statement is about THAT mention:
-// a leaving word directly before it ("moved from the GitHub `X` workflow", "the retired `X` workflow", "previously
-// ran in the `X` workflow") or a leaving predicate directly after it ("`X` workflow was retired", "`a.yml` and
-// `b.yml` were deleted"). A leaving word elsewhere in the sentence ("... alongside the migrated Jenkins checks")
-// says nothing about the named workflow and excuses nothing.
+// A mention of a workflow the tree does not have is excused only by a departure or replacement statement about THAT
+// mention, and only when nothing in the mention's own clause says the workflow is still there or still runs.
+//
+// What counts as a departure or replacement:
+// - a removal word directly before the mention ("the retired `X` workflow", "previously ran in the `X` workflow",
+//   "Jenkins replaces / has taken over from / runs instead of the `X` workflow");
+// - a removal predicate directly after it, in the passive or with no object ("`X` workflow was deleted",
+//   "`a.yml` and `b.yml` were retired", "`X` workflow, removed in R5", "`X` workflow is gone / no longer exists").
+//   "removed / dropped from <something>" is a removal from that something (a schedule, the required checks), not of
+//   the workflow, unless the something is the repository or the workflow directory;
+// - a move of the work, only with Jenkins as the destination: "<work> moved / migrated / ported / transferred from
+//   the `X` workflow to <...> Jenkins <...>", "the `X` workflow was migrated to Jenkins". A move with no destination
+//   ("reports transferred from the `X` workflow after each run") is a source relationship, and a move somewhere
+//   else ("migrated to a new runner") says the workflow still exists. A present passive ("results are moved from
+//   ...") and a data noun as the moved thing ("reports / snapshots / artifacts transferred from ...") describe a
+//   recurring provenance, not a departure, and excuse nothing.
+// A leaving word elsewhere in the sentence ("... alongside the migrated Jenkins checks") says nothing about the named
+// workflow and excuses nothing.
 const FILLER_BEFORE = String.raw`(?:(?:ran|run|lived|was|were|in|on|by|of|the|a|an|its|their|GitHub|Actions|old|former|workflows?|files?)\s+|[\`(,]\s*|[\w.-]+\.ya?ml\b\s*)*`;
-// Only verbs that move the work out of the workflow count ("moved from", "migrated from", "taken over from"). Verbs
-// that take something out of a workflow which stays ("taken from", "split from", "removed from", "copied from") are
-// source relationships, and so is a present passive ("snapshots are moved from ...": a recurring transfer). A
-// replacement counts only in the direction where the named workflow is the one replaced: "replaced by the `X`
-// workflow" says X is the replacement, so X is present.
-const DEPART_FROM = String.raw`(?<!\b(?:is|are|gets?|getting|being)\s+)(?:(?:moved|moves|moving|migrated|migrates|migrating|ported|porting|shifted|transferred|cut over)(?:\s+(?:over|out|away|off))?\s+(?:from|out of)|(?:taken|took|takes|taking) over from)`;
-const LEFT_BEFORE = new RegExp(String.raw`\b(?:${DEPART_FROM}|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
+const MOVE_VERB = String.raw`(?:moved|moves|moving|migrated|migrates|migrating|ported|porting|shifted|transferred|cut over)(?:\s+(?:over|out|away|off))?`;
+const DATA_NOUN = String.raw`(?:reports?|results?|data|artifacts?|snapshots?|logs?|metrics|outputs?|history|histories|records?|numbers|values|scores|baselines?|files)`;
+// "<work> moved from" directly before the mention; the destination is checked after it (TO_JENKINS).
+const MOVED_FROM_BEFORE = new RegExp(String.raw`(?<!\b(?:is|are|gets?|getting|being|${DATA_NOUN})\s+)\b${MOVE_VERB}\s+(?:from|out of)\s+${FILLER_BEFORE}$`, "i");
+const LEFT_BEFORE = new RegExp(String.raw`\b(?:(?:taken|took|takes|taking) over from|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
 const REPLACED_BY_BEFORE = new RegExp(String.raw`\b(?:replaced|superseded|succeeded)\s+(?:by|with)\s+${FILLER_BEFORE}$`, "i");
 const LEFT_AFTER_LEAD = /^(?:[\s`(),]|\band\b|\bor\b|[\w.-]+\.ya?ml\b|`[^`]+`|\b(?:files?|workflows?|GitHub|Actions)\b)*/.source;
 const AUX = String.raw`(?:was|were|is|are|has|have|had|been|being)`;
-// Intransitive leaving words, with or without an auxiliary ("`X` workflow was retired", "`X` workflow, gone since R5").
-const LEFT_AFTER = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:(?:${AUX}|now|since|then|later|all|both|each|fully|also)\s+)*(?:gone|migrated|moved|ported|no longer exists?)\b`, "i");
+const ADV = String.raw`(?:now|since|then|later|all|both|each|fully|also)`;
+// The destination of a move: "to / into" a phrase naming Jenkins, within a few words.
+const TO_JENKINS = String.raw`,?\s*(?:and\s+)?(?:in)?to\s+(?:[\w\`'-]+\s+){0,5}?\`?Jenkins(?:file)?\b`;
+const TO_JENKINS_AFTER_MENTION = new RegExp(String.raw`${LEFT_AFTER_LEAD}${TO_JENKINS}`, "i");
+// "`X` workflow is gone / no longer exists".
+const GONE_AFTER = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:(?:${AUX}|${ADV})\s+)*(?:gone|no longer exists?)\b`, "i");
+// "`X` workflow was migrated to Jenkins": the workflow itself moved, and only Jenkins is a departure.
+const MOVED_AFTER = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:(?:${AUX}|${ADV})\s+)*${MOVE_VERB}${TO_JENKINS}`, "i");
+// What may follow a removal predicate: the end of the clause, a time or agent ("in R5", "when Jenkins took over",
+// "by the Jenkins release job"), or "from" the repository / the workflow directory.
+const AFTER_REMOVAL = String.raw`(?=\s*(?:$|[.;:,)]|\b(?:in|when|by|with|on|at|during|after|as|and|once|but)\b|from\s+(?:the\s+)?(?:repository|repo|tree|\`?\.github\b|workflows? director(?:y|ies)|default branch|\`?master\`?)))`;
 // Transitive ones say the workflow left only in the passive: "`X` workflow was replaced / deleted", or a participle
 // with no object ("`X` workflow, deleted in R5"). "The `X` workflow replaced the cron job" makes X the replacement.
-const LEFT_AFTER_PASSIVE = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:(?:(?:${AUX}|now|since|then|later|all|both|each|fully|also)\s+)*${AUX}\s+(?:(?:now|since|then|later|all|both|each|fully|also)\s+)*(?:deleted|retired|removed|replaced|superseded|dropped)\b|(?:deleted|retired|removed|replaced|superseded|dropped)\b(?=\s*(?:$|[.;:,)]|\b(?:in|when|by|with|on|at|during|after|as|and|once)\b)))`, "i");
-// A recurring relation right after the mention ("taken from the `X` workflow every Tuesday") says the workflow runs.
-const RECURS_AFTER = /^[\s`)]*,?\s*(?:(?:artifacts?|runs?|outputs?|results?|reports?|builds?)\s+)?(?:every|each|weekly|nightly|daily|hourly|monthly|on (?:every|each)|per)\b/i;
+const LEFT_AFTER_PASSIVE = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:(?:${AUX}|${ADV})\s+)*(?:deleted|retired|removed|replaced|superseded|dropped)\b${AFTER_REMOVAL}`, "i");
+const LEFT_AFTER_ACTIVE_GUARD = new RegExp(String.raw`${LEFT_AFTER_LEAD}(?:${ADV}\s+)*(?:deleted|retired|removed|replaced|superseded|dropped)\s+(?:the|a|an|its|their|\`)`, "i");
 
 /** A mention of a workflow (by title or file name) at [start, end) of its sentence. */
 interface Mention { name: string; start: number; end: number }
@@ -68,19 +87,29 @@ function fileMentions(sentence: string): Mention[] {
   return [...sentence.matchAll(/[A-Za-z0-9][\w.-]*\.ya?ml\b/g)].map((m) => ({ name: m[0].toLowerCase(), start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
 }
 
-// A source relationship ("reports come from the `X` workflow", "derived from", "fetched from") is not a departure: a
-// bare "from" excuses nothing, only a departing verb with it ("moved from", "migrated from") does. And a mention that
-// is said to still exist right after it ("`X` workflow, which still runs") is a retention claim whatever else the
-// sentence says about it.
-const PERSISTS_AFTER = /^[\s`)]*,?\s*(?:(?:which|that|and|but|it|they)\s+)*(?:(?:is|are)\s+)?(?:still\b|remains?\b|stays?\b|continues?\b|(?:retained|kept|preserved)\b)/i;
+// The rest of the mention's own clause: up to a semicolon, or up to a conjunction that opens a new subject ("and the
+// README ...", "but `codeql.yml` ..."). A conjunction without a new subject ("... and still runs every Thursday",
+// "..., but it still runs") continues the clause about the named workflow.
+function clauseAfter(after: string): string {
+  const cut = after.search(/;|,?\s+\b(?:and|but|while|whereas|although|though)\s+(?=(?:the|a|an|this|that|these|those|its|their|[A-Z`])\b|`)/);
+  return cut < 0 ? after : after.slice(0, cut);
+}
+// Said to be still there ("still runs", "remains", "is kept") anywhere in the clause after the mention.
+const PERSISTS = /\b(?:still|remains?|stays?|continues?|survives?|retained|kept|preserved)\b/i;
+// A recurrence anywhere in the clause after the mention ("after each run", "every Thursday", "weekly."): the workflow
+// still runs. A frequency word used as an adjective ("the Jenkins nightly lane") is not a recurrence.
+const RECURS = /\bevery\b|\beach\s+(?:run|build|push|commit|tag|release|merge|night|day|week|month|hour|time|cycle|(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?\b|\bper\s+(?:run|build|push|commit|tag|release|night|day|week)\b|\b(?:hourly|daily|nightly|weekly|monthly)\b(?!\s+[a-z])|\bon\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days\b/i;
 
 /** True when the sentence says that this mention's workflow left, in words attached to the mention itself. */
 function saysItLeft(sentence: string, m: Mention): boolean {
   const before = sentence.slice(0, m.start);
   const after = sentence.slice(m.end);
-  if (PERSISTS_AFTER.test(after) || RECURS_AFTER.test(after)) return false;
-  const leftBefore = LEFT_BEFORE.test(before) && !REPLACED_BY_BEFORE.test(before);
-  return leftBefore || LEFT_AFTER.test(after) || LEFT_AFTER_PASSIVE.test(after);
+  const clause = clauseAfter(after);
+  if (PERSISTS.test(clause) || RECURS.test(clause)) return false;
+  if (MOVED_FROM_BEFORE.test(before)) return TO_JENKINS_AFTER_MENTION.test(after);
+  if (LEFT_BEFORE.test(before) && !REPLACED_BY_BEFORE.test(before)) return true;
+  if (LEFT_AFTER_ACTIVE_GUARD.test(after)) return false;
+  return GONE_AFTER.test(after) || MOVED_AFTER.test(after) || LEFT_AFTER_PASSIVE.test(after);
 }
 
 /** The workflow names a tree provides: each file's name and stem, plus its `name:` line. */
@@ -193,6 +222,18 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["the workflow as the active replacer", "The GitHub `Release` workflow replaced the manual upload script."],
     ["the workflow as the active superseder", "The `Mutation` workflow superseded the cron job last spring."],
     ["a retired file as the active remover", `\`${retiredFile("ci")}\` removed the old lint step.`],
+    // The fourth review's probes: a move with no destination is a source relationship, and a move somewhere other
+    // than Jenkins says the workflow still exists; and further cases of the same rule: data provenance, a removal
+    // from something other than the repository, a persistence clause after "but it", a move to another runner.
+    ["the fourth probe: reports transferred from the workflow after each run", "The nightly dashboard imports reports transferred from the GitHub `Mutation` workflow after each run."],
+    ["the fourth probe: migrated to a new runner and still runs", "The GitHub `Mutation` workflow was migrated to a new runner and still runs every Thursday."],
+    ["a workflow moved to another runner, with no persistence word", "The GitHub `Release` workflow was moved to a self-hosted macOS runner."],
+    ["data provenance into Jenkins", `Coverage reports transferred from \`${retiredFile("mutation")}\` to the Jenkins summary page.`],
+    ["history ported from a retired file before every build", `The Allure history was ported from \`${retiredFile("release")}\` before every build.`],
+    ["removed from the required checks, not from the tree", "The GitHub `E2E soak` workflow was removed from the required checks."],
+    ["deleted, but it still runs", `The \`${retiredFile("mutation")}\` file was deleted, but it still runs from a fork.`],
+    ["retired from the gate, runs weekly", "The GitHub `Mutation` workflow was retired from the pull request gate and runs weekly."],
+    ["moved to Jenkins, which still runs it each night", "Mutation testing moved from the GitHub `Mutation` workflow to Jenkins, and it still runs each night."],
   ])("is rejected: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, NONE)).not.toEqual([]);
   });
@@ -219,6 +260,12 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a retired file deleted, then the Jenkins replacement", `The \`${retiredFile("release")}\` file was deleted; Jenkins publishes tags.`],
     ["work transferred out of a retired workflow", "Mutation testing was transferred from the GitHub `Mutation` workflow to the Jenkins nightly lane."],
     ["a retired workflow that has since been dropped", "The GitHub `Release` workflow has since been dropped."],
+    // Departures with Jenkins as the destination, removals from the repository, and a later clause about something else.
+    ["a retired workflow migrated to Jenkins", "The GitHub `Mutation` workflow was migrated to Jenkins."],
+    ["moved into a named Jenkins stage", "Mutation testing moved from the GitHub `Mutation` workflow into the Jenkins `Mutation` stage."],
+    ["a retired file deleted from the repository", `The \`${retiredFile("release")}\` file was deleted from the repository when Jenkins took over.`],
+    ["a deletion, then a clause about another workflow", `The \`${retiredFile("mutation")}\` file was deleted, and the CodeQL workflow still runs weekly.`],
+    ["a retired workflow ported to the Jenkinsfile", `The checks of \`${retiredFile("ci")}\` were ported to the \`Jenkinsfile\` and the file was deleted.`],
   ])("is accepted: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, new Set(["dependabot.yml"]))).toEqual([]);
   });
