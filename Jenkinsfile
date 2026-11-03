@@ -567,8 +567,9 @@ pipeline {
           junit testResults: 'junit/junit.xml, e2e-*/junit/e2e-junit.xml', allowEmptyResults: true,
                 skipMarkingBuildUnstable: true, skipPublishingChecks: true
           // One Allure report from the unit and every shard's e2e results, with the trend history of the previous
-          // build (history.jsonl inside the archived allure-history/) copied in before it is generated.
-          copyArtifacts projectName: env.JOB_NAME, selector: lastCompleted(), filter: 'allure-history/**',
+          // build (history.jsonl inside the archived allure-history/) copied in before it is generated. The same copy
+          // brings the previous build's mutation-badge/score.txt, which the mutation badge shows when Stryker did not run.
+          copyArtifacts projectName: env.JOB_NAME, selector: lastCompleted(), filter: 'allure-history/**, mutation-badge/**',
                         target: 'previous', optional: true, fingerprintArtifacts: false
           catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
             sh '''
@@ -596,7 +597,8 @@ pipeline {
           env.FLAKY_COUNT = fileExists('reports/flaky-count.txt') ? readFile('reports/flaky-count.txt').trim() : 'not measured'
           // README badges, served publicly at https://int21h.mooo.com/jenkins-static/s3-browser/ci/<branch>/<id>.svg
           // (`build` is the plugin's own). Declared on every build, so a build without a report shows "not run" and
-          // never the previous build's numbers; scripts/badges/jenkins.ts computes status and colour from the reports.
+          // never the previous build's numbers, except `mutation`, which carries the last measured score forward
+          // (mutation-badge/score.txt); scripts/badges/jenkins.ts computes status and colour from the reports.
           def badges = [
             tests: addEmbeddableBadgeConfiguration(id: 'tests', subject: 'tests', status: 'not run', color: 'lightgrey'),
             coverage: addEmbeddableBadgeConfiguration(id: 'coverage', subject: 'coverage', status: 'not run', color: 'lightgrey'),
@@ -614,7 +616,7 @@ pipeline {
               }
             }
           }
-          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**, reports/trivy-fresh.txt, reports/flaky-count.txt, reports/stability-junit.xml, stability-out/**, soak-*/junit/**, reports/flaky-count-soak.txt',
+          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**, mutation-badge/**, reports/trivy-fresh.txt, reports/flaky-count.txt, reports/stability-junit.xml, stability-out/**, soak-*/junit/**, reports/flaky-count-soak.txt',
                            allowEmptyArchive: true
         }
       }
