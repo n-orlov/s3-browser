@@ -3,12 +3,13 @@
 // suite more than once, hands every run's JSON report to this script, and the test that failed in one run but passed in
 // another is marked in the JUnit XML instead of failing the build:
 //
-//   node ci/mark-flaky.mjs --junit <junit.xml> --count-file <flaky-count.txt> <report.json> <report.json> [...]
+//   node ci/mark-flaky.mjs --junit <junit.xml> [--junit <junit.xml> ...] --count-file <flaky-count.txt> <report.json> [...]
 //
 // A test that failed in at least one run and passed in at least one other becomes one passing <testcase>: its
 // <failure>/<error> children turn into <rerunFailure> children (one per failed run) and the suite counters drop by the
 // failures that were converted. A test that passed everywhere is untouched. A test that failed in every run stays
-// failed and is not counted. The number of marked tests is written to --count-file.
+// failed and is not counted. The number of marked tests is written to --count-file. Every --junit file is rewritten (a
+// sharded suite has one JUnit and one report per shard, and the repeats of a test can land in different shards).
 //
 // Reports: vitest `json` reporter (jest shape, `testResults`) and Playwright `json` reporter (`suites`). A Playwright
 // report written with `--repeat-each=N` counts as N runs (the soak's repeats), so the soak needs one report only.
@@ -161,9 +162,9 @@ export function markJunit(xml, flakyList) {
 }
 
 function parseArgs(argv) {
-  const args = { reports: [], junit: '', countFile: '' };
+  const args = { reports: [], junits: [], countFile: '' };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--junit') args.junit = argv[++i] ?? '';
+    if (argv[i] === '--junit') args.junits.push(argv[++i] ?? '');
     else if (argv[i] === '--count-file') args.countFile = argv[++i] ?? '';
     else args.reports.push(argv[i]);
   }
@@ -172,15 +173,15 @@ function parseArgs(argv) {
 
 function main(argv) {
   const args = parseArgs(argv);
-  if (!args.junit || !args.countFile || args.reports.length < 1) {
-    console.error('usage: mark-flaky.mjs --junit <junit.xml> --count-file <file> <report.json> <report.json> [...]');
+  if (args.junits.length === 0 || args.junits.includes('') || !args.countFile || args.reports.length < 1) {
+    console.error('usage: mark-flaky.mjs --junit <junit.xml> [--junit <junit.xml> ...] --count-file <file> <report.json> <report.json> [...]');
     return 2;
   }
   let runs;
-  let xml;
+  let xmls;
   try {
     runs = args.reports.flatMap((p) => readRuns(JSON.parse(readFileSync(p, 'utf8'))));
-    xml = readFileSync(args.junit, 'utf8');
+    xmls = args.junits.map((p) => readFileSync(p, 'utf8'));
   } catch (e) {
     console.error(`mark-flaky: ${e.message}`);
     return 2;
@@ -190,8 +191,7 @@ function main(argv) {
     return 2;
   }
   const flaky = findFlaky(runs);
-  const { xml: rewritten } = markJunit(xml, flaky);
-  writeFileSync(args.junit, rewritten);
+  args.junits.forEach((file, i) => writeFileSync(file, markJunit(xmls[i], flaky).xml));
   writeFileSync(args.countFile, `${flaky.length}\n`);
   for (const f of flaky) console.log(`FLAKY ${f.file}: ${f.key} (failed ${f.failed}, passed ${f.passed})`);
   console.log(`${flaky.length} flaky test(s)`);

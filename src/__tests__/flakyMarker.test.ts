@@ -239,4 +239,41 @@ describe("ci/mark-flaky.mjs", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("rewrites every --junit file: the repeats of a test split over shards are one run each in different reports", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "flaky-shards-"));
+    try {
+      const pw = (rows: [string, Status][]) =>
+        JSON.stringify({
+          suites: [
+            {
+              title: "fixture.e2e.ts",
+              file: "fixture.e2e.ts",
+              specs: rows.map(([title, state]) => ({
+                title,
+                file: "fixture.e2e.ts",
+                tests: [{ projectName: "electron", results: [{ status: state === "passed" ? "passed" : "failed" }] }],
+              })),
+            },
+          ],
+        });
+      const junit = (title: string, failed: boolean) =>
+        `<testsuites tests="1" failures="${failed ? 1 : 0}" errors="0"><testsuite name="s" tests="1" failures="${failed ? 1 : 0}" errors="0">` +
+        `<testcase classname="fixture.e2e.ts" name="[electron] › fixture.e2e.ts:3:1 › ${title}">${failed ? '<failure message="boom"></failure>' : ""}</testcase></testsuite></testsuites>`;
+      writeFileSync(path.join(dir, "a.json"), pw([["flaky", "failed"]]));
+      writeFileSync(path.join(dir, "b.json"), pw([["flaky", "passed"]]));
+      writeFileSync(path.join(dir, "a.xml"), junit("flaky", true));
+      writeFileSync(path.join(dir, "b.xml"), junit("flaky", false));
+      const r = spawnSync(process.execPath, [REAL_SCRIPT, "--junit", "a.xml", "--junit", "b.xml", "--count-file", "count.txt", "a.json", "b.json"], { cwd: dir, encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(readFileSync(path.join(dir, "count.txt"), "utf8").trim()).toBe("1");
+      const a = readFileSync(path.join(dir, "a.xml"), "utf8");
+      const b = readFileSync(path.join(dir, "b.xml"), "utf8");
+      expect(a).toContain("<rerunFailure");
+      expect(a).not.toContain("<failure");
+      expect(b).toContain("<rerunFailure");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

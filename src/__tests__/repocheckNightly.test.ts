@@ -197,9 +197,7 @@ function nightlyProblems(jenkinsfile: string): string[] {
   if (!locked) problems.push("the soak shard is not inside the per-node lock");
   if (!/scripts\/e2e-docker\.sh --repeat-each=3 --shard=\$\{index\}\/3/.test(locked)) problems.push("the soak does not run e2e-docker.sh with --repeat-each=3 on its shard");
   if (!/\bgateStage\('Soak'\)/.test(body)) problems.push("the soak shard does not name its stage for the gate");
-  if (!/\bfinally\s*\{[\s\S]*ci\/mark-flaky\.mjs[^\n]*test-results\/results\.json[\s\S]*stash name: "soak-results-\$\{index\}"/.test(locked)) {
-    problems.push("the soak shard does not run the flaky marker over its JSON report and stash the result in a finally");
-  }
+  if (!/\bfinally\s*\{[^}]*stash name: "soak-results-\$\{index\}"[^}]*test-results\/results\.json/.test(locked)) problems.push("the soak shard does not stash its JSON report and JUnit in a finally");
 
   // Stability: three clean-state unit runs, the marker over the three JSON reports, a red stage when a run failed.
   const stability = stageOf(stages, "Stability");
@@ -222,7 +220,10 @@ function nightlyProblems(jenkinsfile: string): string[] {
   for (const name of ["stability-results", "trivy-fresh-results", "soak-results-1", "soak-results-2", "soak-results-3"]) {
     if (!postAlways.includes(`'${name}'`)) problems.push(`post { always } does not unstash ${name}`);
   }
-  if (!/flaky-count-stability\.txt/.test(postAlways) || !/flaky-count-soak-3\.txt/.test(postAlways) || !/writeFile file: 'reports\/flaky-count\.txt'/.test(postAlways)) {
+  if (!/ci\/mark-flaky\.mjs\$\{soakJunit\} --count-file reports\/flaky-count-soak\.txt\$\{soakReports\}/.test(postAlways) || !/soak-\$\{shard\}\/test-results\/results\.json/.test(postAlways)) {
+    problems.push("post { always } does not run the flaky marker over the three soak shards' JSON reports at once");
+  }
+  if (!/flaky-count-stability\.txt/.test(postAlways) || !/flaky-count-soak\.txt/.test(postAlways) || !/writeFile file: 'reports\/flaky-count\.txt'/.test(postAlways)) {
     problems.push("post { always } does not add the Stability and soak flaky counts into reports/flaky-count.txt");
   }
   return problems;
@@ -239,7 +240,7 @@ const NIGHTLY_FIXTURES: Record<string, string> = {
   "Jenkinsfile.mutationUnguarded (Mutation without the nightly guard)": without(/ {10}expression \{ isNightly\(\) \}\n/, ""),
   "Jenkinsfile.soakRepeat2 (soak repeats twice)": without("e2e-docker.sh --repeat-each=3", "e2e-docker.sh --repeat-each=2"),
   "Jenkinsfile.soakNoLock (soak outside the per-node lock)": without(/(def soakShard[\s\S]*?)lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}", skipIfLocked: true\)/, "$1timeout(time: 60, unit: 'MINUTES')"),
-  "Jenkinsfile.soakNoMarker (soak never runs the flaky marker)": without(/ {10}try \{\n {12}nodeSh\("mkdir -p reports && node ci\/mark-flaky\.mjs[\s\S]*?\n {10}\}\n(?= {10}stash name: "soak-results)/, ""),
+  "Jenkinsfile.soakNoMarker (soak reports never reach the flaky marker)": without("node ci/mark-flaky.mjs${soakJunit}", "node ci/other.mjs${soakJunit}"),
   "Jenkinsfile.soakAmd64 (soak shard on amd64)": without(/(def soakShard[\s\S]*?node\("arm64)( && docker)/, "$1_x$2").replace("arm64_x", "amd64"),
   "Jenkinsfile.stabilityTwoRuns (two stability runs)": without("run <= 3; run++", "run <= 2; run++"),
   "Jenkinsfile.stabilityNotClean (stability runs without git clean)": without("sh 'git clean -ffdxq -e stability-out'\n", ""),
@@ -277,7 +278,7 @@ describe("the Jenkinsfile's nightly lane (repocheck)", () => {
     expect(f["Jenkinsfile.mutationUnguarded"]).toContain("Mutation is not guarded by the nightly condition");
     expect(f["Jenkinsfile.soakRepeat2"]).toContain("--repeat-each=3");
     expect(f["Jenkinsfile.soakNoLock"]).toContain("per-node lock");
-    expect(f["Jenkinsfile.soakNoMarker"]).toContain("flaky marker");
+    expect(f["Jenkinsfile.soakNoMarker"]).toContain("flaky marker over the three soak shards");
     expect(f["Jenkinsfile.stabilityTwoRuns"]).toContain("three runs");
     expect(f["Jenkinsfile.stabilityNotClean"]).toContain("clean state");
     expect(f["Jenkinsfile.trivyCached"]).toContain("--fresh");
@@ -290,7 +291,7 @@ describe("SPEC.md section 5 describes the nightly lane", () => {
 
   it.each([
     ["- **Nightly lane (triggers)", ["triggers { cron(env.BRANCH_NAME == 'master'", "`EXTENDED`", "isNightly()", "arm64 && docker && s3-browser", "`Soak`", "`Stability`", "`Trivy fresh DB`", "`Mutation`"]],
-    ["- **Stage `Soak`", ["--repeat-each=3", "--shard=<i>/3", "s3b-e2e-", "ci/mark-flaky.mjs", "retries: 0"]],
+    ["- **Stage `Soak`", ["--repeat-each=3", "--shard=<i>/3", "s3b-e2e-", "ci/mark-flaky.mjs", "flaky-count-soak.txt", "retries: 0"]],
     ["- **Stage `Stability`", ["three", "git clean -ffdxq", "npm ci", "npx vitest run", "ci/mark-flaky.mjs", "flaky-count-stability.txt"]],
     ["- **Stage `Trivy fresh DB`", ["ci/trivy.sh --fresh", "HIGH,CRITICAL", "cached vulnerability DB"]],
     ["- **Nightly reports", ["reports/flaky-count.txt", "not measured"]],

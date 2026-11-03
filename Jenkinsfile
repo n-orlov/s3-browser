@@ -144,9 +144,10 @@ def e2eShard(int index) {
 
 // One soak shard of three: the e2e suite with every test repeated three times (`--repeat-each=3`, as e2e-soak.yml
 // did), on an arm64 phone of its own under the same per-node lock and node-refusal loop as e2eShard. Retries stay 0,
-// so a test that fails in even one repeat fails the shard. Whatever the outcome, ci/mark-flaky.mjs runs over the
-// shard's Playwright JSON report (its repeats count as separate runs) to mark a fail-then-pass test in the JUnit and
-// write the shard's flaky count; both are stashed for the pipeline's post { always }. The node is kept in
+// so a test that fails in even one repeat fails the shard. Whatever the outcome, the
+// shard's results are stashed for the pipeline's post { always }, which runs ci/mark-flaky.mjs over all three shards'
+// JSON reports at once (--shard spreads the repeats of a test over the shards, so one shard's report cannot show a
+// fail-then-pass test). The node is kept in
 // E2E_NODE_<i>, which e2eShardCleanup(i) reads, so the soak stage's post removes its containers like the E2E stage's.
 def soakShard(int index) {
   gateStage('Soak')
@@ -162,13 +163,8 @@ def soakShard(int index) {
         try {
           sh "CI=1 scripts/e2e-docker.sh --repeat-each=3 --shard=${index}/3"
         } finally {
-          try {
-            nodeSh("mkdir -p reports && node ci/mark-flaky.mjs --junit junit/e2e-junit.xml --count-file reports/flaky-count-soak-${index}.txt test-results/results.json")
-          } catch (err) {
-            echo "Flaky marking of soak shard ${index} failed (no report to read?): ${err.message}"
-          }
           stash name: "soak-results-${index}", allowEmpty: true,
-                includes: 'junit/**, reports/**, test-results/results.json, playwright-report/**'
+                includes: 'junit/**, test-results/results.json'
         }
       }
       if (!ran) {
@@ -505,12 +501,27 @@ pipeline {
               echo "No stash ${entry.key} (its stage did not reach the end): ${err.message}"
             }
           }
-          // The nightly lane's flaky count: the sum of what ci/mark-flaky.mjs wrote in Stability and the soak shards.
+          // The soak's flaky marking: one run of ci/mark-flaky.mjs over the JSON reports of all three shards (their JUnit
+          // files are rewritten in place), since --shard spreads a test's repeats over the shards. Skipped when the
+          // soak did not run or a shard left no report.
+          String soakJunit = ''
+          String soakReports = ''
+          for (int shard = 1; shard <= 3; shard++) {
+            if (fileExists("soak-${shard}/test-results/results.json") && fileExists("soak-${shard}/junit/e2e-junit.xml")) {
+              soakJunit += " --junit soak-${shard}/junit/e2e-junit.xml"
+              soakReports += " soak-${shard}/test-results/results.json"
+            }
+          }
+          if (soakReports) {
+            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+              nodeSh("mkdir -p reports && node ci/mark-flaky.mjs${soakJunit} --count-file reports/flaky-count-soak.txt${soakReports}")
+            }
+          }
+          // The nightly lane's flaky count: the sum of what ci/mark-flaky.mjs wrote for Stability and for the soak.
           // Absent when none of them ran, which the summary and the Telegram message read as "not measured".
           int flakyTotal = 0
           boolean flakyMeasured = false
-          for (String counted : ['reports/flaky-count-stability.txt', 'soak-1/reports/flaky-count-soak-1.txt',
-                                 'soak-2/reports/flaky-count-soak-2.txt', 'soak-3/reports/flaky-count-soak-3.txt']) {
+          for (String counted : ['reports/flaky-count-stability.txt', 'reports/flaky-count-soak.txt']) {
             if (fileExists(counted)) {
               flakyMeasured = true
               flakyTotal += readFile(counted).trim().toInteger()
@@ -570,7 +581,7 @@ pipeline {
               }
             }
           }
-          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**, reports/trivy-fresh.txt, reports/flaky-count.txt, reports/stability-junit.xml, stability-out/**, soak-*/junit/**',
+          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**, reports/trivy-fresh.txt, reports/flaky-count.txt, reports/stability-junit.xml, stability-out/**, soak-*/junit/**, reports/flaky-count-soak.txt',
                            allowEmptyArchive: true
         }
       }
