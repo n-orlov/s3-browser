@@ -142,6 +142,45 @@ def e2eShard(int index) {
   }
 }
 
+// One soak shard of three: the e2e suite with every test repeated three times (`--repeat-each=3`, as e2e-soak.yml
+// did), on an arm64 phone of its own under the same per-node lock and node-refusal loop as e2eShard. Retries stay 0,
+// so a test that fails in even one repeat fails the shard. Whatever the outcome, ci/mark-flaky.mjs runs over the
+// shard's Playwright JSON report (its repeats count as separate runs) to mark a fail-then-pass test in the JUnit and
+// write the shard's flaky count; both are stashed for the pipeline's post { always }. The node is kept in
+// E2E_NODE_<i>, which e2eShardCleanup(i) reads, so the soak stage's post removes its containers like the E2E stage's.
+def soakShard(int index) {
+  gateStage('Soak')
+  String exclude = ''
+  boolean ran = false
+  for (int attempt = 0; attempt < 4 && !ran; attempt++) {
+    node("arm64 && docker && s3-browser${exclude}") {
+      lock(resource: "s3b-e2e-${env.NODE_NAME}", skipIfLocked: true) {
+        ran = true
+        env."E2E_NODE_${index}" = env.NODE_NAME
+        checkout scm
+        sh 'git clean -ffdxq'
+        try {
+          sh "CI=1 scripts/e2e-docker.sh --repeat-each=3 --shard=${index}/3"
+        } finally {
+          try {
+            nodeSh("mkdir -p reports && node ci/mark-flaky.mjs --junit junit/e2e-junit.xml --count-file reports/flaky-count-soak-${index}.txt test-results/results.json")
+          } catch (err) {
+            echo "Flaky marking of soak shard ${index} failed (no report to read?): ${err.message}"
+          }
+          stash name: "soak-results-${index}", allowEmpty: true,
+                includes: 'junit/**, reports/**, test-results/results.json, playwright-report/**'
+        }
+      }
+      if (!ran) {
+        exclude += " && !${env.NODE_NAME}"
+      }
+    }
+  }
+  if (!ran) {
+    error "Soak shard ${index}/3 found no free arm64 phone"
+  }
+}
+
 // Removes what a shard left behind when it was aborted or its script could not run its own trap, on the
 // node the shard ran on: the shard's s3b- containers (with their anonymous volumes), any named volume they
 // mounted and its network.
@@ -181,6 +220,17 @@ pipeline {
     // s3-browser/release reads release-candidate.json; this job's own next build
     // reads the Allure history (patterns match the copier's absolute name).
     copyArtifactPermission('/s3-browser/release,/s3-browser/ci/*')
+  }
+
+  // On demand the nightly lane (Soak, Stability, Trivy fresh DB and, with it, Mutation) runs on any branch or PR.
+  parameters {
+    booleanParam(name: 'EXTENDED', defaultValue: false,
+                 description: 'Extended CI: e2e soak (3 repeats), three clean-state unit runs, Trivy with a fresh DB, Stryker mutation')
+  }
+
+  // The nightly cron exists on master only; every other branch gets an empty spec (no trigger).
+  triggers {
+    cron(env.BRANCH_NAME == 'master' ? '17 2 * * *' : '')
   }
 
   stages {
@@ -296,6 +346,109 @@ pipeline {
       }
     }
 
+    // The nightly lane (isNightly(): the cron on master, or EXTENDED ticked), arm64 phones only. Soak is the e2e suite with
+    // every test repeated three times, in three shards on distinct phones under the per-node lock (soakShard).
+    stage('Soak') {
+      when { expression { isNightly() } }
+      parallel {
+        stage('Soak shard 1/3') {
+          options { timeout(time: 60, unit: 'MINUTES') }
+          steps {
+            script { soakShard(1) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(1) }
+            }
+            cleanup {
+              script { e2eShardCleanup(1) }
+            }
+          }
+        }
+        stage('Soak shard 2/3') {
+          options { timeout(time: 60, unit: 'MINUTES') }
+          steps {
+            script { soakShard(2) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(2) }
+            }
+            cleanup {
+              script { e2eShardCleanup(2) }
+            }
+          }
+        }
+        stage('Soak shard 3/3') {
+          options { timeout(time: 60, unit: 'MINUTES') }
+          steps {
+            script { soakShard(3) }
+          }
+          post {
+            aborted {
+              script { e2eShardCleanup(3) }
+            }
+            cleanup {
+              script { e2eShardCleanup(3) }
+            }
+          }
+        }
+      }
+    }
+
+    // Three unit runs, each from a clean state (git clean, then npm ci), retries still 0. A run that fails does not stop the
+    // others: every run's JSON report is kept, ci/mark-flaky.mjs marks the fail-then-pass tests in the last run's JUnit and
+    // writes the flaky count, and only then does the stage fail if any run failed (a flaky test is marked, never hidden).
+    stage('Stability') {
+      when {
+        beforeAgent true
+        expression { isNightly() }
+      }
+      agent { label 'arm64 && docker && s3-browser' }
+      options { timeout(time: 45, unit: 'MINUTES') }
+      steps {
+        script {
+          gateStage('Stability')
+          sh 'git clean -ffdxq && mkdir stability-out'
+          for (int run = 1; run <= 3; run++) {
+            sh 'git clean -ffdxq -e stability-out'
+            nodeSh('npm ci --no-audit --no-fund')
+            nodeSh("npx vitest run || touch stability-out/failed; cp junit/vitest-results.json stability-out/run-${run}.json && cp junit/junit.xml stability-out/junit-${run}.xml")
+          }
+          nodeSh('mkdir -p reports && cp stability-out/junit-3.xml reports/stability-junit.xml && node ci/mark-flaky.mjs --junit reports/stability-junit.xml --count-file reports/flaky-count-stability.txt stability-out/run-1.json stability-out/run-2.json stability-out/run-3.json')
+          if (fileExists('stability-out/failed')) {
+            error 'A stability run failed (retries are 0): see the marked JUnit and the flaky count'
+          }
+        }
+      }
+      post {
+        always {
+          stash name: 'stability-results', allowEmpty: true, includes: 'reports/**, stability-out/**'
+        }
+      }
+    }
+
+    // Trivy with a freshly downloaded vulnerability DB (ci/trivy.sh --fresh drops the agent's cached DB first); the same
+    // blocking gate as Quality's.
+    stage('Trivy fresh DB') {
+      when {
+        beforeAgent true
+        expression { isNightly() }
+      }
+      agent { label 'arm64 && docker && s3-browser' }
+      options { timeout(time: 20, unit: 'MINUTES') }
+      steps {
+        script { gateStage('Trivy fresh DB') }
+        sh 'git clean -ffdxq'
+        sh 'TRIVY_REPORT=reports/trivy-fresh.txt ci/trivy.sh --fresh'
+      }
+      post {
+        always {
+          stash name: 'trivy-fresh-results', allowEmpty: true, includes: 'reports/trivy-fresh.txt'
+        }
+      }
+    }
+
     // Stryker over the eight-module set of stryker.config.mjs (SPEC section 4), weekly: only in the nightly lane
     // (isNightly()) and only when the build day is Monday (BUILD_DAY, set in Quality) or EXTENDED is ticked.
     // `beforeAgent` decides before an executor is taken. `npm run mutation` runs in the memory-capped node:22
@@ -340,7 +493,9 @@ pipeline {
           checkout scm
           sh 'git clean -ffdxq'
           Map stashes = ['quality-results': '.', 'e2e-results-1': 'e2e-1', 'e2e-results-2': 'e2e-2', 'e2e-results-3': 'e2e-3',
-                              'mutation-results': '.']
+                              'mutation-results': '.',
+                              'stability-results': '.', 'trivy-fresh-results': '.',
+                              'soak-results-1': 'soak-1', 'soak-results-2': 'soak-2', 'soak-results-3': 'soak-3']
           for (def entry : stashes.entrySet()) {
             try {
               dir(entry.value) {
@@ -349,6 +504,20 @@ pipeline {
             } catch (err) {
               echo "No stash ${entry.key} (its stage did not reach the end): ${err.message}"
             }
+          }
+          // The nightly lane's flaky count: the sum of what ci/mark-flaky.mjs wrote in Stability and the soak shards.
+          // Absent when none of them ran, which the summary and the Telegram message read as "not measured".
+          int flakyTotal = 0
+          boolean flakyMeasured = false
+          for (String counted : ['reports/flaky-count-stability.txt', 'soak-1/reports/flaky-count-soak-1.txt',
+                                 'soak-2/reports/flaky-count-soak-2.txt', 'soak-3/reports/flaky-count-soak-3.txt']) {
+            if (fileExists(counted)) {
+              flakyMeasured = true
+              flakyTotal += readFile(counted).trim().toInteger()
+            }
+          }
+          if (flakyMeasured) {
+            writeFile file: 'reports/flaky-count.txt', text: "${flakyTotal}\n"
           }
           // Unit JUnit from Quality, e2e JUnit from each shard. skipMarkingBuildUnstable: a failing test already fails its stage.
           junit testResults: 'junit/junit.xml, e2e-*/junit/e2e-junit.xml', allowEmptyResults: true,
@@ -401,7 +570,7 @@ pipeline {
               }
             }
           }
-          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**',
+          archiveArtifacts artifacts: 'coverage/**, reports/eslint.json, sbom/**, reports/trivy.txt, e2e-*/playwright-report/**, allure-history/**, reports/trivy-fresh.txt, reports/flaky-count.txt, reports/stability-junit.xml, stability-out/**, soak-*/junit/**',
                            allowEmptyArchive: true
         }
       }

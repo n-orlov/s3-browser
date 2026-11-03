@@ -10,7 +10,8 @@
 // failures that were converted. A test that passed everywhere is untouched. A test that failed in every run stays
 // failed and is not counted. The number of marked tests is written to --count-file.
 //
-// Reports: vitest `json` reporter (jest shape, `testResults`) and Playwright `json` reporter (`suites`).
+// Reports: vitest `json` reporter (jest shape, `testResults`) and Playwright `json` reporter (`suites`). A Playwright
+// report written with `--repeat-each=N` counts as N runs (the soak's repeats), so the soak needs one report only.
 // Exit codes: 0 done, 2 bad usage or unreadable input.
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -52,6 +53,38 @@ export function readRun(report, cwd = process.cwd()) {
     throw new Error('not a vitest or Playwright JSON report');
   }
   return out;
+}
+
+/**
+ * The runs inside one report. A vitest report is one run. A Playwright report written with `--repeat-each=N` holds
+ * the repeats of a test as N entries of the spec's `tests` list (same project), so entry k belongs to run k and the
+ * soak's three repeats of a test count as three runs of it. A report without repeats is one run.
+ */
+export function readRuns(report, cwd = process.cwd()) {
+  if (!Array.isArray(report.suites)) return [readRun(report, cwd)];
+  const runs = [];
+  const addSpec = (spec, suite, own) => {
+    const seenPerProject = new Map();
+    for (const t of spec.tests ?? []) {
+      const project = t.projectName ?? '';
+      const k = seenPerProject.get(project) ?? 0;
+      seenPerProject.set(project, k + 1);
+      const last = (t.results ?? []).at(-1)?.status;
+      const state = FAILED.has(last) ? 'failed' : last;
+      if (state !== 'passed' && state !== 'failed') continue;
+      while (runs.length <= k) runs.push(new Map());
+      const file = spec.file ?? suite.file ?? '';
+      const key = [...own, spec.title].join(' > ');
+      runs[k].set(`${file}::${key}`, { file, key, state });
+    }
+  };
+  const walk = (suite, titles) => {
+    const own = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
+    for (const spec of suite.specs ?? []) addSpec(spec, suite, own);
+    for (const child of suite.suites ?? []) walk(child, own);
+  };
+  for (const suite of report.suites) walk(suite, []);
+  return runs.length > 0 ? runs : [new Map()];
 }
 
 /** Keys that failed in one run and passed in another, with how many runs failed. */
@@ -139,17 +172,21 @@ function parseArgs(argv) {
 
 function main(argv) {
   const args = parseArgs(argv);
-  if (!args.junit || !args.countFile || args.reports.length < 2) {
+  if (!args.junit || !args.countFile || args.reports.length < 1) {
     console.error('usage: mark-flaky.mjs --junit <junit.xml> --count-file <file> <report.json> <report.json> [...]');
     return 2;
   }
   let runs;
   let xml;
   try {
-    runs = args.reports.map((p) => readRun(JSON.parse(readFileSync(p, 'utf8'))));
+    runs = args.reports.flatMap((p) => readRuns(JSON.parse(readFileSync(p, 'utf8'))));
     xml = readFileSync(args.junit, 'utf8');
   } catch (e) {
     console.error(`mark-flaky: ${e.message}`);
+    return 2;
+  }
+  if (runs.length < 2) {
+    console.error('mark-flaky: need at least two runs (two reports, or one Playwright report written with --repeat-each)');
     return 2;
   }
   const flaky = findFlaky(runs);

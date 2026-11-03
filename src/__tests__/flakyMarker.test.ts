@@ -199,8 +199,44 @@ describe("ci/mark-flaky.mjs", () => {
     }
   });
 
-  it("exits 2 with fewer than two reports", () => {
-    const r = spawnSync(process.execPath, [REAL_SCRIPT, "--junit", "x.xml", "--count-file", "c.txt", "one.json"], { encoding: "utf8" });
-    expect(r.status).toBe(2);
+  it("exits 2 with a single run (one vitest report, or one Playwright report without repeats)", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "flaky-one-"));
+    try {
+      for (const [name, body] of [
+        ["vitest.json", vitestReport(RUN1, dir)],
+        ["pw.json", playwrightReport(RUN1)],
+      ]) {
+        writeFileSync(path.join(dir, name), body);
+        writeFileSync(path.join(dir, "junit.xml"), JUNIT);
+        const r = spawnSync(process.execPath, [REAL_SCRIPT, "--junit", "junit.xml", "--count-file", "c.txt", name], { cwd: dir, encoding: "utf8" });
+        expect(r.status).toBe(2);
+        expect(r.stderr).toContain("at least two runs");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats the repeats of one Playwright report (--repeat-each) as separate runs: the soak's single report per shard", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "flaky-repeat-"));
+    try {
+      const report = JSON.parse(playwrightReport(RUN1));
+      const specs = report.suites[0].suites[0].specs as { title: string; tests: { projectName: string; results: { status: string }[] }[] }[];
+      const second = JSON.parse(playwrightReport(RUN2)).suites[0].suites[0].specs as typeof specs;
+      specs.forEach((spec, i) => spec.tests.push(second[i].tests[0]));
+      writeFileSync(path.join(dir, "repeat.json"), JSON.stringify(report));
+      writeFileSync(
+        path.join(dir, "junit.xml"),
+        JUNIT.replace(/classname="src\/fixture.test.ts" name="fixture &gt;/g, 'classname="fixture.e2e.ts" name="[electron] › fixture.e2e.ts:3:1 › fixture ›'),
+      );
+      const r = spawnSync(process.execPath, [REAL_SCRIPT, "--junit", "junit.xml", "--count-file", "count.txt", "repeat.json"], { cwd: dir, encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(readFileSync(path.join(dir, "count.txt"), "utf8").trim()).toBe("1");
+      const xml = readFileSync(path.join(dir, "junit.xml"), "utf8");
+      expect(/<rerunFailure\b/.test(caseOf(xml, TESTS.flaky))).toBe(true);
+      expect(/<failure\b/.test(caseOf(xml, TESTS.broken))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
