@@ -37,7 +37,7 @@ const QUALITY_ORDER: ReadonlyArray<readonly [string, RegExp]> = [
   ["sbom", /nodeSh\('npm run sbom'\)/],
 ];
 
-// The original GitHub bounds (ci.yml at the base commit): quality 20 min, release dry run 20 min, e2e shard 40 min.
+// The original GitHub bounds (the retired CI workflow at the base commit): quality 20 min, release dry run 20 min, e2e shard 40 min.
 // A migrated stage keeps a timeout no greater than its original; a raised bound or a longer unit is a problem.
 const ORIGINAL_BOUND_MINUTES = { Quality: 20, "Release dry-run": 20, "E2E shard": 40 } as const;
 function timeoutProblem(options: string, name: keyof typeof ORIGINAL_BOUND_MINUTES): string | undefined {
