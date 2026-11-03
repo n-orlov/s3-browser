@@ -26,6 +26,12 @@ def nodeSh(String cmd) {
   }
 }
 
+// The nightly lane: a build started by the cron trigger, or by hand with EXTENDED ticked. The lane's own stages and
+// the Telegram message's sound condition both ask this one question.
+def isNightly() {
+  return currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause').size() > 0 || params.EXTENDED == true
+}
+
 // Paths that can change the packaged app, as shell `case` patterns (`*` also matches `/`). This is ci.yml's `changes`
 // list (RELEASE_PATHS), with the release definition files in place of .github/workflows/release.yml. A change to any of
 // them makes the Release dry-run stage run; `master` runs it unconditionally.
@@ -336,6 +342,8 @@ pipeline {
           }
           publishHTML([reportName: 'CI summary', reportDir: 'ci-summary', reportFiles: 'index.html',
                        keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
+          // The flaky count for the Telegram message in post { cleanup } (ci/mark-flaky.mjs writes it in the nightly lane).
+          env.FLAKY_COUNT = fileExists('reports/flaky-count.txt') ? readFile('reports/flaky-count.txt').trim() : 'not measured'
           // README badges, served publicly at https://int21h.mooo.com/jenkins-static/s3-browser/ci/<branch>/<id>.svg
           // (`build` is the plugin's own). Declared on every build, so a build without a report shows "not run" and
           // never the previous build's numbers; scripts/badges/jenkins.ts computes status and colour from the reports.
@@ -367,6 +375,24 @@ pipeline {
     // FAILURE, ABORTED and UNSTABLE alike: only a succeeded build may leave a green gate.
     unsuccessful {
       script { finishGate('failure', "Build ${currentBuild.currentResult.toLowerCase()} in stage ${env.GATE_STAGE ?: 'startup'}") }
+    }
+    // The Telegram message, one per build, last: cleanup runs after every other post condition, so it carries the
+    // final result. A sound only for a FAILURE or ABORTED build of master or of the nightly lane; everything else
+    // arrives silently. Best-effort: the whole call is inside try/catch, so a Telegram outage (or a missing agent)
+    // is logged and never changes the build result. Nothing may follow it in this block.
+    cleanup {
+      script {
+        String result = currentBuild.currentResult
+        boolean sound = (env.BRANCH_NAME == 'master' || isNightly()) && (result == 'FAILURE' || result == 'ABORTED')
+        try {
+          node('arm64 && docker && s3-browser') {
+            notifyTelegram(notifyOn: 'ALL', silent: !sound,
+                           extra: "Result: ${result} · flaky tests: ${env.FLAKY_COUNT ?: 'not measured'}" + (isNightly() ? ' · nightly (extended lane)' : ''))
+          }
+        } catch (err) {
+          echo "Telegram notification failed (the build result is unchanged): ${err.message}"
+        }
+      }
     }
   }
 }

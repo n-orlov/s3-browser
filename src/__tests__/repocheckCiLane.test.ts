@@ -284,6 +284,50 @@ function reportProblems(jenkinsfile: string): string[] {
   return problems;
 }
 
+/** One problem string per property of the Telegram notification the Jenkinsfile lacks. */
+function notifyProblems(jenkinsfile: string): string[] {
+  const problems: string[] = [];
+  const code = codeOf(jenkinsfile);
+  const post = blockOf(blockOf(code, /^pipeline\s*\{/m), /^ {2}post\s*\{/m);
+  const cleanup = blockOf(post, /\bcleanup\s*\{/);
+  const always = blockOf(post, /\balways\s*\{/);
+  if (/\bnotifyTelegram\(/.test(always)) problems.push("notifyTelegram sits in post { always }, which runs before the other post conditions");
+  if (post.replace(cleanup, "").match(/\bnotifyTelegram\(/)) problems.push("notifyTelegram sits outside post { cleanup }");
+  const call = /\bnotifyTelegram\(/.exec(cleanup);
+  if (!call) {
+    problems.push("post { cleanup } does not call notifyTelegram");
+    return problems;
+  }
+  // Last step: after the call (its closing parenthesis) only the closers of its wrappers and the catch that swallows its error.
+  let depth = 0;
+  let end = call.index + call[0].length - 1;
+  for (; end < cleanup.length; end++) {
+    if (cleanup[end] === "(") depth++;
+    else if (cleanup[end] === ")" && --depth === 0) break;
+  }
+  const after = cleanup.slice(end + 1);
+  if (!/^[\s}]*catch \(\w+\) \{\s*echo [^\n]*\s*\}[\s}]*$/.test(after)) {
+    problems.push("notifyTelegram is not the last step of post { cleanup }");
+  }
+  // Best-effort: the call is inside a try whose catch only logs.
+  const before = cleanup.slice(0, call.index);
+  if (!/\btry \{[^]*$/.test(before) || /\}\s*catch \(\w+\) \{[^]*$/.test(before)) {
+    problems.push("notifyTelegram is not wrapped in try/catch, so its error could change the build result");
+  }
+  if (/\b(error|unstable|currentBuild\.result\s*=)\b/.test(after)) problems.push("the catch around notifyTelegram changes the build result");
+  if (!/\bnotifyOn: 'ALL'/.test(cleanup)) problems.push("notifyTelegram does not notify on every result");
+  if (!/\bResult: \$\{result\}/.test(cleanup)) problems.push("the Telegram message does not carry the result");
+  if (!/flaky tests: \$\{env\.FLAKY_COUNT/.test(cleanup)) problems.push("the Telegram message does not carry the flaky count");
+  // Sound: master or nightly, and FAILURE or ABORTED. Nothing else (silent is the negation of that condition).
+  const sound = /boolean sound = ([^\n]*)/.exec(cleanup)?.[1] ?? "";
+  if (!/\bsilent: !sound\b/.test(cleanup)) problems.push("notifyTelegram's silent flag is not the negation of the sound condition");
+  if (!/^\(env\.BRANCH_NAME == 'master' \|\| isNightly\(\)\) && \(result == 'FAILURE' \|\| result == 'ABORTED'\)$/.test(sound.trim())) {
+    problems.push(`the sound condition is not (master or nightly) and (FAILURE or ABORTED): ${sound.trim() || "missing"}`);
+  }
+  if (!/\bflaky-count\.txt\b/.test(always) || !/env\.FLAKY_COUNT\s*=/.test(always)) problems.push("post { always } does not set FLAKY_COUNT from reports/flaky-count.txt");
+  return problems;
+}
+
 const real = readFileSync(path.join(__dirname, "..", "..", "Jenkinsfile"), "utf8");
 
 /** The real Jenkinsfile with one property removed; throws if the edit did not apply. */
@@ -340,6 +384,19 @@ const REPORT_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noEslintArchive (archive without the ESLint JSON)": without(", reports/eslint.json", ""),
   "Jenkinsfile.noMutationBadge (without the mutation badge)": without(/ {12}mutation: addEmbeddableBadgeConfiguration[^\n]*\n/, ""),
   "Jenkinsfile.badgesNeverSet (badges declared but status and color never set)": without(/ {16}badges\[line\.substring\(0, eq\)\]\.setStatus[^\n]*\n {16}badges\[line\.substring\(0, eq\)\]\.setColor[^\n]*\n/, ""),
+};
+
+const NOTIFY_FIXTURES: Record<string, string> = {
+  "Jenkinsfile.notifyInAlways (call moved to post { always })": without(/\n {4}cleanup \{[\s\S]*?\n {4}\}\n(?= {2}\}\n\}\n$)/, "\n    cleanup {\n      script { echo 'done' }\n    }\n").replace(
+    "    always {\n      script {\n",
+    "    always {\n      script {\n        node('arm64 && docker && s3-browser') { notifyTelegram(notifyOn: 'ALL', silent: true) }\n",
+  ),
+  "Jenkinsfile.stepAfterNotify (a step after the call in cleanup)": without("          echo \"Telegram notification failed (the build result is unchanged): ${err.message}\"\n        }\n", "          echo \"Telegram notification failed (the build result is unchanged): ${err.message}\"\n        }\n        sh 'echo finished'\n"),
+  "Jenkinsfile.stepInsideTry (a step after the call inside the node)": without("(isNightly() ? ' · nightly (extended lane)' : ''))\n", "(isNightly() ? ' · nightly (extended lane)' : ''))\n            sh 'echo finished'\n"),
+  "Jenkinsfile.soundOnPr (sound for every red build)": without("(env.BRANCH_NAME == 'master' || isNightly()) && ", ""),
+  "Jenkinsfile.soundOnUnstable (sound for an UNSTABLE build)": without("result == 'FAILURE' || result == 'ABORTED'", "result != 'SUCCESS'"),
+  "Jenkinsfile.noTry (no try/catch around the call)": without(/ {8}try \{\n( {10}node\([^\n]*\n[^]*? {10}\}\n) {8}\} catch \(err\) \{\n[^\n]*\n {8}\}\n/, "$1"),
+  "Jenkinsfile.noFlaky (message without the flaky count)": without(" · flaky tests: ${env.FLAKY_COUNT ?: 'not measured'}", ""),
 };
 
 describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
@@ -410,7 +467,9 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     const post = blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m);
     expect(blockOf(post, /\bunsuccessful\s*\{/)).toContain("finishGate('failure'");
     expect(blockOf(post, /\bsuccess\s*\{/)).toContain("finishGate('success'");
-    expect(post).not.toMatch(/\b(failure|cleanup)\s*\{/);
+    // post { cleanup } exists only for the Telegram message (covered by the notification tests below).
+    expect(post).not.toMatch(/\bfailure\s*\{/);
+    expect(blockOf(post, /\bcleanup\s*\{/)).not.toContain("Gate(");
     // The reports of post { always } run on every outcome and never decide the gate.
     expect(blockOf(post, /\balways\s*\{/)).not.toContain("Gate(");
   });
@@ -571,5 +630,42 @@ describe("the Jenkinsfile publishes the reports in post { always } (repocheck)",
     expect(publish).toContain("publishHTML");
     expect(playwright).toContain("does not archive playwright-report/");
     expect(eslint).toContain("does not archive reports/eslint.json");
+  });
+});
+
+describe("the Jenkinsfile posts the Telegram message last, in post { cleanup } (repocheck)", () => {
+  it("has no notification problem", () => {
+    expect(notifyProblems(real)).toEqual([]);
+  });
+
+  it("calls notifyTelegram on every result with the result and the flaky count, silent unless master/nightly FAILURE or ABORTED", () => {
+    const cleanup = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m), /\bcleanup\s*\{/);
+    expect(cleanup).toContain("notifyTelegram(notifyOn: 'ALL', silent: !sound");
+    expect(cleanup).toContain("Result: ${result}");
+    expect(cleanup).toContain("flaky tests: ${env.FLAKY_COUNT");
+    expect(cleanup).toContain("boolean sound = (env.BRANCH_NAME == 'master' || isNightly()) && (result == 'FAILURE' || result == 'ABORTED')");
+  });
+
+  it("is best-effort: the call sits in try/catch whose catch only logs, so an outage cannot change the result", () => {
+    const cleanup = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m), /\bcleanup\s*\{/);
+    expect(cleanup.indexOf("try {")).toBeGreaterThan(-1);
+    expect(cleanup.indexOf("try {")).toBeLessThan(cleanup.indexOf("notifyTelegram("));
+    expect(cleanup).toMatch(/catch \(err\) \{\s*echo "Telegram notification failed \(the build result is unchanged\)/);
+    expect(cleanup).not.toMatch(/\b(error|unstable)\b/);
+  });
+
+  it.each(Object.entries(NOTIFY_FIXTURES))("is red for %s", (_name, fixture) => {
+    expect(notifyProblems(fixture).length).toBeGreaterThan(0);
+  });
+
+  it("names the broken property in each red notification fixture", () => {
+    const [inAlways, stepAfter, stepInside, soundOnPr, soundOnUnstable, noTry, noFlaky] = Object.values(NOTIFY_FIXTURES).map((f) => notifyProblems(f).join("; "));
+    expect(inAlways).toContain("sits in post { always }");
+    expect(stepAfter).toContain("not the last step");
+    expect(stepInside).toContain("not the last step");
+    expect(soundOnPr).toContain("sound condition");
+    expect(soundOnUnstable).toContain("sound condition");
+    expect(noTry).toContain("try/catch");
+    expect(noFlaky).toContain("flaky count");
   });
 });
