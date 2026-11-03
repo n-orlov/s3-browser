@@ -81,4 +81,3 @@ describe("parseEslintCounts", () => {
     expect(() => parseEslintCounts("nope")).toThrow();
   });
 });
-
