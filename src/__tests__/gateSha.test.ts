@@ -29,6 +29,9 @@ function gitIn(cwd: string, ...args: string[]): string {
 }
 const git = (...args: string[]): string => gitIn(dev, ...args);
 
+/** The head pinned by the latest simulated build: what the Jenkinsfile hands the script as GATE_PINNED_HEAD. */
+let lastPin: string | undefined;
+
 let counter = 0;
 function commit(msg: string): string {
   writeFileSync(path.join(dev, `f${counter++}.txt`), msg);
@@ -48,6 +51,7 @@ function publish(id: string, prHead: string): void {
  * `git checkout -f` the result. The pins can be older than what the fetch brought in.
  */
 function jenkinsCheckout(id: string, pinnedHead: string, pinnedTarget?: string): void {
+  lastPin = pinnedHead;
   gitIn(ws, "fetch", "-q", "--no-tags", "--force", "origin", `+refs/pull/${id}/head:refs/remotes/origin/PR-${id}`, "+refs/heads/master:refs/remotes/origin/master");
   gitIn(ws, "checkout", "-q", "-f", pinnedHead);
   if (pinnedTarget) gitIn(ws, "merge", "-q", pinnedTarget);
@@ -67,7 +71,15 @@ function gateSha(env: Record<string, string>): string {
     env: { PATH: process.env.PATH ?? "", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", ...env },
   }).trim();
 }
-const prGate = (id: string): string => gateSha({ CHANGE_ID: id, CHANGE_TARGET: "master", BRANCH_NAME: `PR-${id}` });
+const prGate = (id: string, pin: string | null | undefined = lastPin): string =>
+  gateSha({ CHANGE_ID: id, CHANGE_TARGET: "master", BRANCH_NAME: `PR-${id}`, ...(pin == null ? {} : { GATE_PINNED_HEAD: pin }) });
+
+/** Makes a commit that exists only in the workspace (a build's synthetic merge) a published PR head. */
+function publishWorkspaceCommit(id: string, sha: string): void {
+  gitIn(ws, "update-ref", "refs/heads/imported", sha);
+  git("fetch", "-q", ws, "+refs/heads/imported:refs/heads/imported");
+  publish(id, sha);
+}
 const wsHead = (rev = "HEAD"): string => gitIn(ws, "rev-parse", rev);
 
 /**
@@ -299,12 +311,140 @@ describe("ci/gate-sha.sh: the gate status targets the PR head Jenkins selected f
     expect(prGate("95")).toBe(head);
   });
 
-  it("fails rather than guess when the checkout left no HEAD reflog", () => {
+  it("does not depend on the HEAD reflog at all", () => {
     gitIn(ws, "config", "core.logAllRefUpdates", "false");
     const head = detachedMergeHead();
     publish("96", head);
     jenkinsCheckout("96", head, git("rev-parse", "master"));
-    expect(() => prGate("96")).toThrow(/no HEAD reflog/);
+    expect(prGate("96")).toBe(head);
+  });
+
+  describe("selects per build, independently of what earlier builds left in the workspace", () => {
+    it("is the selected merge head itself when it equals the previous build's synthetic merge and the target merge is a no-op", () => {
+      git("checkout", "-q", "-b", "pr");
+      const first = commit("pr work");
+      git("checkout", "-q", "master");
+      const tip = commit("master moved");
+      publish("200", first);
+      jenkinsCheckout("200", first, tip);
+      const synthetic = wsHead();
+      expect(wsHead("HEAD^1")).toBe(first);
+      expect(prGate("200")).toBe(first);
+      // The synthetic merge is pushed to the PR; the next build selects it and merging the target changes nothing.
+      publishWorkspaceCommit("200", synthetic);
+      jenkinsCheckout("200", synthetic, tip);
+      expect(wsHead()).toBe(synthetic);
+      expect(prGate("200")).toBe(synthetic);
+      expect(prGate("200")).not.toBe(first);
+    });
+
+    it("is the new selected head when it equals the target tip an earlier build fast-forwarded to", () => {
+      git("checkout", "-q", "-b", "pr");
+      const first = commit("pr work");
+      git("checkout", "-q", "master");
+      git("merge", "--ff-only", "-q", "pr");
+      const tip = commit("master moved past the PR head");
+      publish("201", first);
+      jenkinsCheckout("201", first, tip);
+      expect(wsHead()).toBe(tip);
+      expect(prGate("201")).toBe(first);
+      // The PR branch is then fast-forwarded to the target tip: the selected head is the tip, not the old head.
+      publish("201", tip);
+      jenkinsCheckout("201", tip, tip);
+      expect(wsHead()).toBe(tip);
+      expect(prGate("201")).toBe(tip);
+    });
+
+    it("is still the original head when that unchanged head is rebuilt against the target", () => {
+      git("checkout", "-q", "-b", "pr");
+      const head = commit("pr work");
+      git("checkout", "-q", "master");
+      const tip = commit("master moved");
+      publish("202", head);
+      jenkinsCheckout("202", head, tip);
+      expect(prGate("202")).toBe(head);
+      jenkinsCheckout("202", head, tip);
+      expect(wsHead("HEAD^1")).toBe(head);
+      expect(prGate("202")).toBe(head);
+    });
+
+    it("is the merge-commit head when an earlier build of another PR head left a merge ending at the same commit", () => {
+      const head = mergeCommitHead();
+      git("checkout", "-q", "master");
+      const tip = commit("master moved again");
+      publish("203", head);
+      jenkinsCheckout("203", head, tip);
+      const synthetic = wsHead();
+      expect(prGate("203")).toBe(head);
+      // A different PR in the same workspace selects that very merge as its head.
+      publishWorkspaceCommit("204", synthetic);
+      jenkinsCheckout("204", synthetic, tip);
+      expect(prGate("204")).toBe(synthetic);
+    });
+
+    it("is the selected head when the previous build's checkout ended at it through a detached-HEAD merge by name", () => {
+      git("checkout", "-q", "-b", "pr");
+      const head = commit("pr work");
+      git("checkout", "-q", "master");
+      commit("master moved");
+      publish("205", head);
+      jenkinsCheckout("205", head);
+      gitIn(ws, "merge", "-q", "origin/master");
+      const merged = wsHead();
+      expect(prGate("205", head)).toBe(head);
+      publishWorkspaceCommit("205", merged);
+      jenkinsCheckout("205", merged, git("rev-parse", "master"));
+      expect(prGate("205")).toBe(merged);
+    });
+  });
+
+  describe("refuses to post on a sha the build did not select", () => {
+    function checkedOut(): { head: string; tip: string } {
+      git("checkout", "-q", "-b", "pr");
+      const head = commit("pr work");
+      git("checkout", "-q", "master");
+      const tip = commit("master moved");
+      publish("97", head);
+      jenkinsCheckout("97", head, tip);
+      return { head, tip };
+    }
+
+    it("fails when the Jenkinsfile handed over no pinned head", () => {
+      checkedOut();
+      expect(() => prGate("97", null)).toThrow(/GATE_PINNED_HEAD is not set/);
+    });
+
+    it.each([["a branch name", "origin/PR-97"], ["an abbreviated id", "abcdef1"], ["an upper-case id", "A".repeat(40)], ["a revision expression", "HEAD^1"]])(
+      "fails when the pinned head is %s, not a full commit id",
+      (_name, pin) => {
+        checkedOut();
+        expect(() => prGate("97", pin)).toThrow(/not a full commit id/);
+      },
+    );
+
+    it("fails when the pinned head is not a commit of this checkout", () => {
+      checkedOut();
+      expect(() => prGate("97", "0".repeat(40))).toThrow(/not a commit in this checkout/);
+    });
+
+    it("fails when the pinned head is neither HEAD nor one of its ancestors", () => {
+      const { head } = checkedOut();
+      git("checkout", "-q", "-b", "unrelated", "master~1");
+      const other = commit("unrelated work");
+      publish("98", other);
+      gitIn(ws, "fetch", "-q", "--no-tags", "origin", "+refs/pull/98/head:refs/remotes/origin/PR-98");
+      expect(wsHead("HEAD^1")).toBe(head);
+      expect(() => prGate("97", other)).toThrow(/not HEAD or an ancestor of HEAD/);
+    });
+
+    it("fails when the pinned head names an annotated tag object rather than a commit id", () => {
+      const { head } = checkedOut();
+      git("tag", "-a", "-m", "t", "v1", head);
+      const tagObject = git("rev-parse", "v1");
+      git("push", "-q", "origin", "v1");
+      gitIn(ws, "fetch", "-q", "origin", "refs/tags/v1:refs/tags/v1");
+      expect(() => prGate("97", tagObject)).toThrow(/does not name a commit/);
+    });
   });
 
   it("is HEAD for a branch build, even when HEAD is a merge commit", () => {

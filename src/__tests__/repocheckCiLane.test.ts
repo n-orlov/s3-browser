@@ -154,6 +154,10 @@ function gateProblems(jenkinsfile: string): string[] {
   const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
   if (!/ci\/gate-sha\.sh/.test(gateSha)) problems.push("gateSha does not resolve the head through ci/gate-sha.sh");
   if (/HEAD\^1/.test(gateSha)) problems.push("gateSha replaces a merge head by its first parent");
+  if (!/GATE_PINNED_HEAD=\$\{pinned\}/.test(gateSha) || !/\bscm\.branches\[0\]\.name/.test(gateSha)) {
+    problems.push("gateSha does not hand the build's own pinned head (scm.branches[0].name) to ci/gate-sha.sh as GATE_PINNED_HEAD");
+  }
+  if (/reflog/.test(gateSha)) problems.push("gateSha reads the workspace reflog instead of the build's pinned head");
   return problems;
 }
 
@@ -379,6 +383,15 @@ GATE_FIXTURES["Jenkinsfile.firstParent (gateSha takes HEAD^1 of any merge)"] = w
   `script: 'if git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi'`,
 );
 
+GATE_FIXTURES["Jenkinsfile.noPin (gateSha does not pass the build's pinned head)"] = without(
+  /\n {2}withEnv\(\["GATE_PINNED_HEAD=\$\{pinned\}"\]\) \{\n {4}return (sh\(returnStdout: true, script: 'sh ci\/gate-sha\.sh'\)\.trim\(\))\n {2}\}/,
+  "\n  return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()",
+);
+GATE_FIXTURES["Jenkinsfile.reflog (gateSha reads the workspace reflog)"] = without(
+  "script: 'sh ci/gate-sha.sh'",
+  "script: 'git reflog -1 --format=%H'",
+);
+
 const E2E_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noLock (shard body without lock)": without(/lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}", skipIfLocked: true\) \{/, "if (true) {"),
   "Jenkinsfile.noCleanup (without post { aborted } and cleanup)": without(/\n {10}post \{\n {12}aborted \{[\s\S]*?\n {10}\}\n(?= {8}\}\n {8}stage\('E2E shard 2)/, "\n"),
@@ -538,6 +551,13 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
     expect(sha).toContain("ci/gate-sha.sh");
     expect(sha).not.toContain("HEAD^1");
+  });
+
+  it("hands the build's own pinned head to ci/gate-sha.sh, never reading the workspace history", () => {
+    const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
+    expect(sha).toContain("scm.branches[0].name");
+    expect(sha).toContain("GATE_PINNED_HEAD");
+    expect(sha).not.toContain("reflog");
   });
 
   it.each(Object.entries(GATE_FIXTURES))("is red for %s", (_name, fixture) => {
