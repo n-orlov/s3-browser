@@ -199,6 +199,8 @@ pipeline {
         // merge checkout may not carry as a ref.
         sh 'git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master'
         script { env.PACKAGING_CHANGED = packagingChanged() }
+        // ISO weekday of the build in UTC (1 = Monday): the Mutation stage's weekly guard reads it in `when`.
+        script { env.BUILD_DAY = sh(returnStdout: true, script: 'date -u +%u').trim() }
         nodeSh('npm ci --no-audit --no-fund')
         nodeSh('npm run typecheck')
         // The ESLint JSON report is written first (a red lint still leaves it) and archived by post { always }.
@@ -293,6 +295,40 @@ pipeline {
         sh 'S3B_SMOKE_DOCKER_ARGS="--memory 3g" scripts/smoke-appimage.sh'
       }
     }
+
+    // Stryker over the eight-module set of stryker.config.mjs (SPEC section 4), weekly: only in the nightly lane
+    // (isNightly()) and only when the build day is Monday (BUILD_DAY, set in Quality) or EXTENDED is ticked.
+    // `beforeAgent` decides before an executor is taken. `npm run mutation` runs in the memory-capped node:22
+    // container (nodeSh), fails the stage on a whole-run or per-module score under the break, and always leaves
+    // reports/mutation/; the stage's post publishes the HTML report and stashes the JSON for the `mutation` badge
+    // that the pipeline's post { always } sets from the score.
+    stage('Mutation') {
+      when {
+        beforeAgent true
+        allOf {
+          expression { isNightly() }
+          anyOf {
+            expression { env.BUILD_DAY == '1' }
+            expression { params.EXTENDED == true }
+          }
+        }
+      }
+      agent { label 'arm64 && docker && s3-browser' }
+      options { timeout(time: 90, unit: 'MINUTES') }
+      steps {
+        script { gateStage('Mutation') }
+        sh 'git clean -ffdxq'
+        nodeSh('npm ci --no-audit --no-fund')
+        nodeSh('npm run mutation')
+      }
+      post {
+        always {
+          publishHTML([reportName: 'Mutation', reportDir: 'reports/mutation', reportFiles: 'mutation.html',
+                       keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true])
+          stash name: 'mutation-results', allowEmpty: true, includes: 'reports/mutation/**'
+        }
+      }
+    }
   }
 
   post {
@@ -303,7 +339,8 @@ pipeline {
         node('arm64 && docker && s3-browser') {
           checkout scm
           sh 'git clean -ffdxq'
-          Map stashes = ['quality-results': '.', 'e2e-results-1': 'e2e-1', 'e2e-results-2': 'e2e-2', 'e2e-results-3': 'e2e-3']
+          Map stashes = ['quality-results': '.', 'e2e-results-1': 'e2e-1', 'e2e-results-2': 'e2e-2', 'e2e-results-3': 'e2e-3',
+                              'mutation-results': '.']
           for (def entry : stashes.entrySet()) {
             try {
               dir(entry.value) {
