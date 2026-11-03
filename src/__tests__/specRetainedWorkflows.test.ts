@@ -46,9 +46,19 @@ const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|conti
 // workflow and excuses nothing.
 const FILLER_BEFORE = String.raw`(?:(?:ran|run|lived|was|were|in|on|by|of|the|a|an|its|their|GitHub|Actions|old|former|workflows?|files?)\s+|[\`(,]\s*|[\w.-]+\.ya?ml\b\s*)*`;
 const MOVE_VERB = String.raw`(?:moved|moves|moving|migrated|migrates|migrating|ported|porting|shifted|transferred|cut over)(?:\s+(?:over|out|away|off))?`;
-const DATA_NOUN = String.raw`(?:reports?|results?|data|artifacts?|snapshots?|logs?|metrics|outputs?|history|histories|records?|numbers|values|scores|baselines?|files)`;
+const DATA_NOUN = String.raw`(?:reports?|results?|data|artifacts?|snapshots?|logs?|metrics|outputs?|history|histories|records?|numbers|values|scores|baselines?|files|telemetry|summar(?:y|ies)|stat(?:s|istics)|trends?|archives?|dashboards?)`;
 // "<work> moved from" directly before the mention; the destination is checked after it (TO_JENKINS).
-const MOVED_FROM_BEFORE = new RegExp(String.raw`(?<!\b(?:is|are|gets?|getting|being|${DATA_NOUN})\s+)\b${MOVE_VERB}\s+(?:from|out of)\s+${FILLER_BEFORE}$`, "i");
+const MOVED_FROM_BEFORE = new RegExp(String.raw`\b${MOVE_VERB}\s+(?:from|out of)\s+${FILLER_BEFORE}$`, "i");
+// What was moved is data (a data noun anywhere in the words before the verb, whatever auxiliary or adverb sits
+// between: "the telemetry records were transferred from ...") or the move recurs (a present or modal passive, with or
+// without an adverb between: "results are / is regularly / will be moved from ..."; a recurrence adverb): that is
+// where the data comes from, not a departure of the workflow.
+const DATA_BEFORE_VERB = new RegExp(String.raw`\b${DATA_NOUN}\b`, "i");
+const PRESENT_PASSIVE_BEFORE_VERB = /\b(?:is|are|gets?|getting|being|(?:will|can|may|should|must|would)\s+be)\s+(?:\w+ly\s+)*$/i;
+const RECURRING_ADVERB = /\b(?:regularly|periodically|routinely|often|repeatedly|always|continually|continuously|frequently|constantly|usually|typically|normally|occasionally|sometimes|automatically)\b/i;
+function movedWorkIsRecurringData(beforeVerb: string): boolean {
+  return DATA_BEFORE_VERB.test(beforeVerb) || PRESENT_PASSIVE_BEFORE_VERB.test(beforeVerb) || RECURRING_ADVERB.test(beforeVerb);
+}
 const LEFT_BEFORE = new RegExp(String.raw`\b(?:(?:taken|took|takes|taking) over from|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
 const REPLACED_BY_BEFORE = new RegExp(String.raw`\b(?:replaced|superseded|succeeded)\s+(?:by|with)\s+${FILLER_BEFORE}$`, "i");
 const LEFT_AFTER_LEAD = /^(?:[\s`(),]|\band\b|\bor\b|[\w.-]+\.ya?ml\b|`[^`]+`|\b(?:files?|workflows?|GitHub|Actions)\b)*/.source;
@@ -91,8 +101,17 @@ function fileMentions(sentence: string): Mention[] {
 // README ...", "but `codeql.yml` ..."). A conjunction without a new subject ("... and still runs every Thursday",
 // "..., but it still runs") continues the clause about the named workflow.
 function clauseAfter(after: string): string {
-  const cut = after.search(/;|,?\s+\b(?:and|but|while|whereas|although|though)\s+(?=(?:the|a|an|this|that|these|those|its|their|[A-Z`])\b|`)/);
-  return cut < 0 ? after : after.slice(0, cut);
+  const cuts = after.matchAll(/;|,?\s+\b(?:and|but|while|whereas|although|though)\s+(?=(?:the|a|an|this|that|these|those|its|their|[A-Z`])\b|`)/g);
+  for (const c of cuts) {
+    const next = after.slice((c.index ?? 0) + c[0].length);
+    if (!refersBack(next)) return after.slice(0, c.index);
+  }
+  return after;
+}
+// A clause that opens with a reference back to the workflow ("that workflow still runs", "the same file ...", "its
+// schedule ..."): it is still about the mention, so the mention's clause continues through it.
+function refersBack(next: string): boolean {
+  return /^\s*(?:(?:this|that|the|these|those)\s+(?:same\s+|said\s+|old\s+|former\s+|retired\s+|original\s+)?(?:GitHub\s+)?(?:Actions\s+)?(?:workflows?|files?|jobs?|pipelines?|schedules?|crons?|triggers?)\b|(?:its|their)\b)/i.test(next);
 }
 // Said to be still there ("still runs", "remains", "is kept") anywhere in the clause after the mention.
 const PERSISTS = /\b(?:still|remains?|stays?|continues?|survives?|retained|kept|preserved)\b/i;
@@ -106,7 +125,8 @@ function saysItLeft(sentence: string, m: Mention): boolean {
   const after = sentence.slice(m.end);
   const clause = clauseAfter(after);
   if (PERSISTS.test(clause) || RECURS.test(clause)) return false;
-  if (MOVED_FROM_BEFORE.test(before)) return TO_JENKINS_AFTER_MENTION.test(after);
+  const movedFrom = MOVED_FROM_BEFORE.exec(before);
+  if (movedFrom) return !movedWorkIsRecurringData(before.slice(0, movedFrom.index)) && TO_JENKINS_AFTER_MENTION.test(after);
   if (LEFT_BEFORE.test(before) && !REPLACED_BY_BEFORE.test(before)) return true;
   if (LEFT_AFTER_ACTIVE_GUARD.test(after)) return false;
   return GONE_AFTER.test(after) || MOVED_AFTER.test(after) || LEFT_AFTER_PASSIVE.test(after);
@@ -234,6 +254,18 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["deleted, but it still runs", `The \`${retiredFile("mutation")}\` file was deleted, but it still runs from a fork.`],
     ["retired from the gate, runs weekly", "The GitHub `Mutation` workflow was retired from the pull request gate and runs weekly."],
     ["moved to Jenkins, which still runs it each night", "Mutation testing moved from the GitHub `Mutation` workflow to Jenkins, and it still runs each night."],
+    // The fifth review's probes: data transfers separated from the verb by an auxiliary or an adverb, and a clause
+    // that opens with a reference back to the workflow; and further cases of the same rule.
+    ["the fifth probe: records were transferred from the workflow to a dashboard", "The telemetry records were transferred from the GitHub `Mutation` workflow to the Jenkins dashboard."],
+    ["the fifth probe: an archive is regularly transferred", "The metrics archive is regularly transferred from the GitHub `Mutation` workflow to Jenkins."],
+    ["the fifth probe: migrated, but that workflow still runs", "The GitHub `Mutation` workflow was migrated to Jenkins, but that workflow still runs on GitHub."],
+    ["a summary that gets moved from the workflow", `The coverage summary gets moved from \`${retiredFile("release")}\` into Jenkins.`],
+    ["history automatically ported from a retired file", `The Allure history is automatically ported from \`${retiredFile("mutation")}\` to Jenkins.`],
+    ["a modal passive transfer of statistics", "Statistics will be moved from the GitHub `E2E soak` workflow to the Jenkins summary page."],
+    ["a recurrence adverb before the verb", "The nightly numbers were routinely migrated from the GitHub `Mutation` workflow to Jenkins."],
+    ["deleted, but its schedule still fires", `The \`${retiredFile("mutation")}\` file was deleted, but its schedule still fires.`],
+    ["migrated, but the same workflow remains enabled", "The GitHub `Release` workflow was migrated to Jenkins, but the same workflow remains enabled on GitHub."],
+    ["replaced; that file still runs on forks", `\`${retiredFile("ci")}\` was replaced by the Jenkins lane; that file still runs on forks.`],
   ])("is rejected: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, NONE)).not.toEqual([]);
   });
@@ -266,6 +298,10 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a retired file deleted from the repository", `The \`${retiredFile("release")}\` file was deleted from the repository when Jenkins took over.`],
     ["a deletion, then a clause about another workflow", `The \`${retiredFile("mutation")}\` file was deleted, and the CodeQL workflow still runs weekly.`],
     ["a retired workflow ported to the Jenkinsfile", `The checks of \`${retiredFile("ci")}\` were ported to the \`Jenkinsfile\` and the file was deleted.`],
+    // A back-reference continues the clause only when it is about the workflow: a clause about another subject does not.
+    ["migrated to Jenkins, then a clause about the Jenkins job", "The GitHub `Mutation` workflow was migrated to Jenkins, and the Jenkins job runs every Monday."],
+    ["migrated, then a clause about the CodeQL workflow", "Mutation testing was migrated from the GitHub `Mutation` workflow to Jenkins, but the CodeQL workflow still runs weekly."],
+    ["a past move of a non-data subject with an adverb", "Mutation testing was previously moved from the GitHub `Mutation` workflow to Jenkins."],
   ])("is accepted: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, new Set(["dependabot.yml"]))).toEqual([]);
   });
