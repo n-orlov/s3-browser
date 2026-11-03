@@ -64,13 +64,30 @@ describe("README badge block", () => {
     expect(blockOf(readme)).not.toContain("n-orlov.github.io/s3-browser/badges");
   });
 
-  it("has the license, Electron and Node static badges and an Allure report link badge", () => {
+  it("has the license, Electron and Node static badges and no Allure report badge (the report lives on Jenkins, not on GitHub Pages)", () => {
     const block = blockOf(readme);
     expect(block).toContain("img.shields.io/badge/license-Apache--2.0-blue");
     const images = [...block.matchAll(/!\[[^\]]*\]\((https:[^)]+)\)/g)].map((m) => m[1]);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/electron-\d+-blue$/.test(url))).toHaveLength(1);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/node-%3E%3D\d+-blue$/.test(url))).toHaveLength(1);
-    expect(block).toContain("[![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)");
+    expect(block).not.toContain("Allure");
+  });
+});
+
+describe("README CI and release text", () => {
+  it("links nothing on n-orlov.github.io and names none of the four deleted workflows or gh-pages", () => {
+    expect(readme).not.toContain("n-orlov.github.io");
+    for (const name of ["ci.yml", "release.yml", "e2e-soak.yml", "mutation.yml"]) {
+      expect(readme, name).not.toContain(name);
+    }
+    expect(readme).not.toContain("gh-pages");
+  });
+
+  it("names the Jenkins jobs, the jenkins/gate check and the macOS dispatch workflow", () => {
+    for (const name of ["s3-browser/ci", "s3-browser/release", "jenkins/gate", "macos-build.yml"]) {
+      expect(readme, name).toContain(name);
+    }
+    expect(existsSync(path.join(root, ".github", "workflows", "macos-build.yml"))).toBe(true);
   });
 });
 

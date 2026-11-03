@@ -10,7 +10,6 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/n-orlov/s3-browser/blob/master/LICENSE)
 [![Electron](https://img.shields.io/badge/electron-44-blue)](https://www.electronjs.org/)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org/)
-[![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)
 <!-- badges:end -->
 
 A lightweight desktop application for viewing and managing files in Amazon S3 buckets. Built with Electron, React, and TypeScript.
@@ -58,7 +57,14 @@ Download the latest release for your platform from the [Releases page](https://g
 
 - **Windows**: `S3.Browser.Setup.x.x.x.exe` (installer) or `S3.Browser.x.x.x.exe` (portable)
 - **Linux**: `S3.Browser-x.x.x.AppImage`
-- **macOS**: Coming soon
+- **macOS**: `S3.Browser-x.x.x.dmg` (Intel) and `S3.Browser-x.x.x-arm64.dmg` (Apple silicon), built unsigned
+
+Releases are cut from the Jenkins job `s3-browser/release`, never from a GitHub workflow. It releases the
+commit that the last green `s3-browser/ci/master` build recorded as the release candidate: it builds the
+Linux and Windows files, creates the GitHub release as a draft, attaches them, and has the
+`.github/workflows/macos-build.yml` workflow (started by `workflow_dispatch`, the only GitHub Actions
+build left for releases) build and attach the two macOS dmgs. Only after the draft's asset list is verified
+is it published, and the published release is immutable.
 
 ### Building from Source
 
@@ -188,6 +194,12 @@ there is no maintenance promise. Ideas, bug reports and links to your remix are 
 Background: [Geoff Huntley's remix model](https://ghuntley.com/remix/).
 
 How the maintainer's own changes reach `master` is in the [Working practice](CLAUDE.md#working-practice) section of `CLAUDE.md`.
+In short: every change goes through a pull request, and `master` is protected by one required status check,
+`jenkins/gate`, which the Jenkins job `s3-browser/ci` posts on the pull request's head commit (type check, lint,
+unit tests with coverage floors, the CRAP and ratchet checks, the e2e shards, the dependency and image scans and
+the release dry run). After a merge, `s3-browser/ci/master` rebuilds `master`, publishes the badges at the top of
+this file and records the release candidate that `s3-browser/release` later publishes. CodeQL is the only
+analysis that still runs on GitHub.
 
 ### Code style (for remixers)
 
