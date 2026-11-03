@@ -1,38 +1,35 @@
 #!/bin/sh
 # Prints the sha the jenkins/gate commit status belongs to: the revision Jenkins selected for this build.
 #   - branch build (no CHANGE_ID): HEAD.
-#   - pull request build: the PR head. Jenkins fetches it as refs/remotes/origin/PR-<CHANGE_ID> and checks out either
-#     that commit itself (the target merge was a fast-forward or a no-op) or a synthetic merge commit whose first
-#     parent is the PR head and whose second parent is the target. The PR head may itself be a merge commit (a
-#     branch that merged the target), so the shape of HEAD alone never tells the two apart: the fetched ref does.
+#   - pull request build: the PR head Jenkins pinned when it scheduled the build. Its checkout runs
+#     `git checkout -f <pinned head>` and then, with the merge strategy, `git merge <pinned target>`. So HEAD is either
+#     the pinned head itself (simple commit, a merge commit the branch pushed, or a target merge that was a no-op or a
+#     fast-forward) or a synthetic merge on top of it whose first parent is the pinned head.
+# The fetched ref refs/remotes/origin/PR-<id> is never consulted: it is mutable and names whatever the PR head was at
+# fetch time, which is newer than the pinned head when the PR moved between scheduling and checkout. The checkout
+# itself is the evidence. A commit is Jenkins' synthetic merge only when all three hold:
+#   1. it has exactly two parents;
+#   2. no remote-tracking ref contains it (origin has never seen it: it was made in this workspace);
+#   3. its subject is the one git writes for a merge made on a detached HEAD ("Merge ... into HEAD"), which is how
+#      Jenkins merges (`git merge <sha>` after `git checkout -f <sha>` gives "Merge commit '<sha>' into HEAD").
+# A PR head that is itself a merge commit fails 2 (it was pushed, so origin/PR-<id> or a newer ref on top of it
+# contains it) and, made on a branch, 3 as well; it is never replaced by its first parent.
 # POSIX sh: the arm64 agents have no bash.
 set -eu
 
-[ -n "${CHANGE_ID:-}" ] || { git rev-parse HEAD; exit 0; }
-
-ref="refs/remotes/origin/PR-$CHANGE_ID"
-pr=$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true)
-if [ -z "$pr" ]; then
-  git fetch --quiet origin "+refs/pull/$CHANGE_ID/head:$ref" >/dev/null 2>&1 || true
-  pr=$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true)
-fi
-
 head=$(git rev-parse HEAD)
-first=$(git rev-parse -q --verify HEAD^1 2>/dev/null || true)
-second=$(git rev-parse -q --verify HEAD^2 2>/dev/null || true)
+[ -n "${CHANGE_ID:-}" ] || { echo "$head"; exit 0; }
 
-if [ -n "$pr" ]; then
-  # The ref names the PR head; trust it only when this checkout is that commit or a merge on top of it.
-  if [ "$pr" = "$head" ]; then echo "$head"; exit 0; fi
-  if [ -n "$second" ] && [ "$pr" = "$first" ]; then echo "$first"; exit 0; fi
-  echo "gate-sha: HEAD $head is neither the PR head $pr nor a merge on top of it" >&2
-  exit 1
+# Unquoted on purpose: the words are HEAD followed by its parents.
+set -- $(git rev-list --parents -n 1 HEAD)
+[ "$#" -eq 3 ] || { echo "$head"; exit 0; }
+
+if [ -n "$(git for-each-ref --count=1 --contains HEAD --format='%(refname)' refs/remotes)" ]; then
+  echo "$head"; exit 0
 fi
 
-# No PR head ref and no way to fetch it. A merge whose second parent is the target tip is Jenkins' synthetic merge
-# (first parent = PR head); anything else is the PR head itself.
-if [ -n "$second" ] && [ -n "${CHANGE_TARGET:-}" ]; then
-  tip=$(git rev-parse -q --verify "refs/remotes/origin/$CHANGE_TARGET^{commit}" 2>/dev/null || true)
-  if [ -n "$tip" ] && [ "$tip" = "$second" ]; then echo "$first"; exit 0; fi
-fi
-echo "$head"
+subject=$(git log -1 --format=%s HEAD)
+case "$subject" in
+  "Merge "*" into HEAD") git rev-parse HEAD^1 ;;
+  *) echo "$head" ;;
+esac
