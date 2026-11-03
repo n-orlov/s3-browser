@@ -136,3 +136,44 @@ describe("README Contributing section", () => {
     expect(contributing).toMatch(/\]\(CLAUDE\.md#working-practice\)/);
   });
 });
+
+const spec = readFileSync(path.join(root, "SPEC.md"), "utf8");
+
+/** One problem per way SPEC.md's working practice disagrees with the Jenkinsfile's `context` and the post-merge check. */
+function specWorkingPracticeProblems(specText: string, context: string | undefined): string[] {
+  if (!context) return ["the Jenkinsfile posts no commit status context"];
+  const bullets = specText.split("\n").filter((l) => /^- \*\*Working practice\b/.test(l));
+  const jenkins = bullets.find((l) => l.startsWith("- **Working practice (Jenkins).**"));
+  const problems: string[] = [];
+  if (!jenkins) return ["SPEC.md has no `Working practice (Jenkins)` bullet"];
+  if (!jenkins.includes(`\`${context}\``)) problems.push(`SPEC.md's Working practice does not name the required check \`${context}\``);
+  if (!jenkins.includes(`\`${POST_MERGE_CHECK}\``)) problems.push(`SPEC.md's Working practice does not name \`${POST_MERGE_CHECK}\` as the post-merge check`);
+  for (const b of bullets.filter((l) => !l.startsWith("- **Working practice (superseded).**"))) {
+    if (/required check is `gate`/.test(b)) problems.push("a SPEC.md Working practice bullet still makes `gate` the required check");
+    if (/final `workflow_dispatch`/.test(b)) problems.push("a SPEC.md Working practice bullet still prescribes a final workflow_dispatch");
+  }
+  return problems;
+}
+
+describe("SPEC.md Working practice matches the Jenkinsfile", () => {
+  it("names the context and the post-merge check, with the ci.yml practice marked superseded", () => {
+    expect(specWorkingPracticeProblems(spec, context)).toEqual([]);
+  });
+
+  it("reports a fixture SPEC.md whose ci.yml working practice is not marked superseded", () => {
+    const stale = spec.replace(
+      /^- \*\*Working practice \(superseded\)\.\*\*.*$/m,
+      "- **Working practice.** One branch per scope of work; the required check is `gate`; the pull request is squash merged; then one final `workflow_dispatch` of `ci.yml` on the merged `master` sha.",
+    );
+    expect(stale).not.toBe(spec);
+    expect(specWorkingPracticeProblems(stale, context)).toEqual([
+      "a SPEC.md Working practice bullet still makes `gate` the required check",
+      "a SPEC.md Working practice bullet still prescribes a final workflow_dispatch",
+    ]);
+  });
+
+  it("reports a fixture SPEC.md whose Jenkins working practice names `gate`", () => {
+    const old = spec.replace(/^(- \*\*Working practice \(Jenkins\)\.\*\*.*)$/m, (l) => l.replace(/`jenkins\/gate`/g, "`gate`"));
+    expect(specWorkingPracticeProblems(old, context)).toEqual(["SPEC.md's Working practice does not name the required check `jenkins/gate`"]);
+  });
+});
