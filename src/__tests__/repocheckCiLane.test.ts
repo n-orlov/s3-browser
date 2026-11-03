@@ -297,6 +297,10 @@ function reportProblems(jenkinsfile: string): string[] {
     problems.push("post { always } does not set the badges' status and color from the build's results");
   }
   const archive = /\barchiveArtifacts\s+artifacts:\s*'([^']*)'/.exec(always)?.[1] ?? "";
+  // The mutation badge's carried score: copied in from the previous build and archived for the next one.
+  const copied = /\bcopyArtifacts\b[^\n]*\bfilter:\s*'([^']*)'/.exec(always)?.[1] ?? "";
+  if (!copied.includes("mutation-badge/**")) problems.push("post { always } does not copy the previous build's carried mutation score (mutation-badge/**)");
+  if (!archive.includes("mutation-badge/**")) problems.push("post { always } does not archive the carried mutation score (mutation-badge/**)");
   if (!archive) problems.push("post { always } archives nothing");
   for (const piece of ["coverage/", "reports/eslint.json", "sbom/", "reports/trivy.txt", "playwright-report/"]) {
     if (archive && !archive.includes(piece)) problems.push(`post { always } does not archive ${piece}`);
@@ -427,6 +431,8 @@ const REPORT_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noEslintArchive (archive without the ESLint JSON)": without(", reports/eslint.json", ""),
   "Jenkinsfile.noMutationBadge (without the mutation badge)": without(/ {12}mutation: addEmbeddableBadgeConfiguration[^\n]*\n/, ""),
   "Jenkinsfile.badgesNeverSet (badges declared but status and color never set)": without(/ {16}badges\[line\.substring\(0, eq\)\]\.setStatus[^\n]*\n {16}badges\[line\.substring\(0, eq\)\]\.setColor[^\n]*\n/, ""),
+  "Jenkinsfile.noMutationCarryCopy (the previous build's mutation score not copied in)": without("filter: 'allure-history/**, mutation-badge/**'", "filter: 'allure-history/**'"),
+  "Jenkinsfile.noMutationCarryArchive (the mutation score not archived for the next build)": without("allure-history/**, mutation-badge/**, reports/trivy-fresh.txt", "allure-history/**, reports/trivy-fresh.txt"),
 };
 
 const NOTIFY_FIXTURES: Record<string, string> = {
@@ -690,7 +696,9 @@ describe("the Jenkinsfile publishes the reports in post { always } (repocheck)",
   });
 
   it("names the broken property in each red report fixture", () => {
-    const [junit, history, publish, summaryPublish, summaryRender, playwright, eslint, mutationBadge, neverSet] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    const [junit, history, publish, summaryPublish, summaryRender, playwright, eslint, mutationBadge, neverSet, carryCopy, carryArchive] = Object.values(REPORT_FIXTURES).map((f) => reportProblems(f).join("; "));
+    expect(carryCopy).toContain("does not copy the previous build's carried mutation score");
+    expect(carryArchive).toContain("does not archive the carried mutation score");
     expect(mutationBadge).toContain("embeddable badge mutation");
     expect(neverSet).toContain("status and color");
     expect(summaryPublish).toContain("does not publish the CI summary page");

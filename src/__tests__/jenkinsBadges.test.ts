@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BadgeInput } from "../../scripts/badges/badges";
-import { jenkinsBadges, renderBadgeLines } from "../../scripts/badges/jenkinsBadges";
+import { jenkinsBadges, mutationScoreToShow, parseCarriedMutation, renderBadgeLines } from "../../scripts/badges/jenkinsBadges";
 
 const root = path.resolve(__dirname, "..", "..");
 const ratchet = { maxWarnings: 0, mutationScoreMin: 80, coverageThresholds: { lines: 90, functions: 90, branches: 80, statements: 90 } };
@@ -32,6 +32,25 @@ describe("jenkinsBadges", () => {
   it("reads 'not run' in grey for every badge whose report is missing", () => {
     const notRun = { status: "not run", color: "lightgrey" };
     expect(jenkinsBadges(empty)).toEqual({ tests: notRun, coverage: notRun, quality: notRun, mutation: notRun });
+  });
+
+  it("shows the carried mutation score, coloured against the floor, when the build has no mutation report", () => {
+    expect(jenkinsBadges(empty, 98.85).mutation).toEqual({ status: "98.85%", color: "brightgreen" });
+    expect(jenkinsBadges(empty, 79).mutation.color).toBe("red");
+    expect(jenkinsBadges(empty, null).mutation).toEqual({ status: "not run", color: "lightgrey" });
+  });
+
+  it("prefers this build's mutation score over a carried one", () => {
+    expect(mutationScoreToShow(91.5, 60)).toBe(91.5);
+    expect(mutationScoreToShow(null, 60)).toBe(60);
+    expect(mutationScoreToShow(null, null)).toBeNull();
+    expect(jenkinsBadges(green, 60).mutation).toEqual({ status: "91.5%", color: "brightgreen" });
+  });
+
+  it("reads a carried score only from a number in 0..100", () => {
+    expect(parseCarriedMutation("98.85\n")).toBe(98.85);
+    expect(parseCarriedMutation("0")).toBe(0);
+    for (const bad of ["", "  \n", "abc", "101", "-1", "NaN"]) expect(parseCarriedMutation(bad)).toBeNull();
   });
 
   it("is red for a failed unit test, an e2e failure or an e2e report error", () => {
@@ -88,6 +107,31 @@ describe("npm run badges:ci", () => {
     expect(readFileSync(path.join(dir, "badges.txt"), "utf8")).toBe(
       "tests=17 passed|brightgreen\ncoverage=91%|yellow\nquality=passing|brightgreen\nmutation=not run|lightgrey\n",
     );
+  });
+
+  it("shows the previous build's carried mutation score and carries it on, writing nothing when there is none", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "jenkins-badges-"));
+    expect(run(dir, ["badges.txt"]).status).toBe(0);
+    expect(existsSync(path.join(dir, "mutation-badge", "score.txt"))).toBe(false);
+    writeFileSync(path.join(dir, ".ratchet.json"), JSON.stringify(ratchet));
+    mkdirSync(path.join(dir, "previous", "mutation-badge"), { recursive: true });
+    writeFileSync(path.join(dir, "previous", "mutation-badge", "score.txt"), "98.85\n");
+    expect(run(dir, ["badges.txt"]).status).toBe(0);
+    expect(readFileSync(path.join(dir, "badges.txt"), "utf8")).toContain("mutation=98.85%|brightgreen\n");
+    expect(readFileSync(path.join(dir, "mutation-badge", "score.txt"), "utf8")).toBe("98.85\n");
+  });
+
+  it("writes this build's own mutation score over the carried one", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "jenkins-badges-"));
+    writeFileSync(path.join(dir, ".ratchet.json"), JSON.stringify(ratchet));
+    mkdirSync(path.join(dir, "previous", "mutation-badge"), { recursive: true });
+    writeFileSync(path.join(dir, "previous", "mutation-badge", "score.txt"), "98.85\n");
+    mkdirSync(path.join(dir, "reports", "mutation"), { recursive: true });
+    const mutants = [{ status: "Killed" }, { status: "Killed" }, { status: "Killed" }, { status: "Survived" }];
+    writeFileSync(path.join(dir, "reports", "mutation", "mutation.json"), JSON.stringify({ files: { "a.ts": { mutants } } }));
+    expect(run(dir, ["badges.txt"]).status).toBe(0);
+    expect(readFileSync(path.join(dir, "badges.txt"), "utf8")).toContain("mutation=75%|red\n");
+    expect(readFileSync(path.join(dir, "mutation-badge", "score.txt"), "utf8")).toBe("75\n");
   });
 
   it("exits 2 without an output file", () => {

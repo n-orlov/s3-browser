@@ -42,14 +42,30 @@ function qualityBadge(input: BadgeInput): JenkinsBadge {
   return clean ? { status: 'passing', color: 'brightgreen' } : { status: 'failing', color: 'red' };
 }
 
-function mutationBadge(input: BadgeInput): JenkinsBadge {
-  if (input.mutation === null) return NOT_RUN;
-  const floor = input.ratchet?.mutationScoreMin;
-  return { status: `${round(input.mutation)}%`, color: floor === undefined ? 'lightgrey' : colorForThreshold(input.mutation, floor) };
+/**
+ * The score the `mutation` badge shows: this build's report, else the score an earlier build carried forward (Stryker
+ * runs only weekly and in the nightly lane, so most builds have no report of their own). Null when neither exists.
+ */
+export function mutationScoreToShow(fresh: number | null, carried: number | null): number | null {
+  return fresh ?? carried;
 }
 
-export function jenkinsBadges(input: BadgeInput): Record<ComputedBadgeId, JenkinsBadge> {
-  return { tests: testsBadge(input), coverage: coverageBadge(input), quality: qualityBadge(input), mutation: mutationBadge(input) };
+function mutationBadge(input: BadgeInput, carried: number | null): JenkinsBadge {
+  const score = mutationScoreToShow(input.mutation, carried);
+  if (score === null) return NOT_RUN;
+  const floor = input.ratchet?.mutationScoreMin;
+  return { status: `${round(score)}%`, color: floor === undefined ? 'lightgrey' : colorForThreshold(score, floor) };
+}
+
+/** `carriedMutation`: the mutation score of the last build that had one (see `mutationScoreToShow`). */
+export function jenkinsBadges(input: BadgeInput, carriedMutation: number | null = null): Record<ComputedBadgeId, JenkinsBadge> {
+  return { tests: testsBadge(input), coverage: coverageBadge(input), quality: qualityBadge(input), mutation: mutationBadge(input, carriedMutation) };
+}
+
+/** The carried score's file body: the number alone. A body that is not a finite number in 0..100 reads as none. */
+export function parseCarriedMutation(text: string): number | null {
+  const value = Number(text.trim());
+  return text.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
 }
 
 /** `id=status|color` lines, one per badge, the format the Jenkinsfile parses. */

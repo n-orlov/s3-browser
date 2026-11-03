@@ -1,11 +1,13 @@
 // `npm run badges:ci -- <out file>`: reads the report files of the build (with the
 // e2e results of every `e2e-<i>/test-results/results.json` shard) and writes `<id>=<status>|<color>` lines for the
 // Jenkins embeddable badges tests, coverage, quality and mutation. A missing report reads as `not run`; never fails
-// for missing input. Run from the repository root.
+// for missing input. Without a mutation report of its own the `mutation` badge shows the score carried from the
+// previous build (`previous/mutation-badge/score.txt`, copied in by the Jenkinsfile), and the score shown is written
+// to `mutation-badge/score.txt` for the next build to carry. Run from the repository root.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { mutationScoreOf, parseEslintCounts, parseRatchetInput } from './badges.ts';
-import { jenkinsBadges, renderBadgeLines } from './jenkinsBadges.ts';
+import { jenkinsBadges, mutationScoreToShow, parseCarriedMutation, renderBadgeLines } from './jenkinsBadges.ts';
 import { parseCoverageSummary, parseCrapSummary, parseJunitTotals, parsePlaywrightCounts, type E2eCounts } from '../summary/jobSummary.ts';
 
 const root = process.cwd();
@@ -33,17 +35,27 @@ function sumE2e(): E2eCounts | null {
 try {
   const out = process.argv[2];
   if (!out) throw new Error('usage: jenkins.ts <out file>');
-  const badges = jenkinsBadges({
-    ratchet: load('.ratchet.json', parseRatchetInput),
-    lint: load('reports/eslint.json', parseEslintCounts),
-    coverage: load('coverage/coverage-summary.json', parseCoverageSummary),
-    crap: load('coverage/crap-summary.json', parseCrapSummary),
-    unit: load('junit/junit.xml', parseJunitTotals),
-    e2e: sumE2e(),
-    mutation: load('reports/mutation/mutation.json', (text) => mutationScoreOf(JSON.parse(text) as Parameters<typeof mutationScoreOf>[0])),
-  });
+  const mutation = load('reports/mutation/mutation.json', (text) => mutationScoreOf(JSON.parse(text) as Parameters<typeof mutationScoreOf>[0]));
+  const carried = load('previous/mutation-badge/score.txt', parseCarriedMutation);
+  const badges = jenkinsBadges(
+    {
+      ratchet: load('.ratchet.json', parseRatchetInput),
+      lint: load('reports/eslint.json', parseEslintCounts),
+      coverage: load('coverage/coverage-summary.json', parseCoverageSummary),
+      crap: load('coverage/crap-summary.json', parseCrapSummary),
+      unit: load('junit/junit.xml', parseJunitTotals),
+      e2e: sumE2e(),
+      mutation,
+    },
+    carried,
+  );
   mkdirSync(path.dirname(path.resolve(root, out)), { recursive: true });
   writeFileSync(path.resolve(root, out), renderBadgeLines(badges));
+  const shown = mutationScoreToShow(mutation, carried);
+  if (shown !== null) {
+    mkdirSync(path.resolve(root, 'mutation-badge'), { recursive: true });
+    writeFileSync(path.resolve(root, 'mutation-badge/score.txt'), `${shown}\n`);
+  }
 } catch (error) {
   console.error(`badges:ci: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(2);
