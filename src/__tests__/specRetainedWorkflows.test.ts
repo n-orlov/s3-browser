@@ -56,7 +56,9 @@ const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|conti
 // Even a matching shape excuses nothing when the sentence says otherwise: a question; a negation, modality, partial
 // or persistence word inside the shape ("not", "will", "partly", "still-running"); or another clause of the sentence
 // with such a word or a recurrence ("every Monday") unless that clause is about Jenkins or a workflow the tree has
-// and does not refer back to the mention ("it", "its schedule", "that workflow", "which"); or a back-reference with
+// and does not refer back to the mention ("it", "its schedule", "that workflow", "which"); or another clause that
+// refers back and is not itself one of the shapes, whatever its subject ("Jenkins runs it on version tags" says the
+// workflow runs; "it was deleted in R5" is a departure); or a back-reference with
 // such a word in a clause of a neighbouring sentence of the paragraph that refers back or speaks of GitHub workflows
 // ("It still runs weekly.", "GitHub still runs a copy."); or a
 // fragment after the statement with no subject of its own ("... and back", "..., in theory").
@@ -118,8 +120,20 @@ function clauseAgrees(clause: string, have: Set<string>, ownSentence = true): bo
   const back = REFERS_BACK.test(c);
   const subject = c.split(/\s+/).slice(0, 5).map((w) => w.replace(/[`'",()]/g, "").toLowerCase());
   const aboutJenkinsOrPresent = subject.some((w) => w.startsWith("jenkins") || have.has(w));
-  if (contradicts(c)) return aboutJenkinsOrPresent && !back;
-  return !back || aboutJenkinsOrPresent || REMOVES_AGAIN.test(c);
+  if (!back) return !contradicts(c) || aboutJenkinsOrPresent;
+  // A clause that refers back to the mention says something about the absent workflow, whatever its subject
+  // ("Jenkins runs it on version tags" says the workflow runs). It leaves the departure standing only when it is
+  // itself a departure statement about the workflow ("it was deleted in R5", "the Jenkins stage replaces it").
+  return REMOVES_AGAIN.test(c) || isDeparture(c.replace(new RegExp(REFERS_BACK.source, "gi"), W));
+}
+
+/** True when the whole of `clause` (the mention written as W) is one departure or replacement statement (SHAPES). */
+function isDeparture(clause: string): boolean {
+  return SHAPES.some((shape) => {
+    shape.lastIndex = 0;
+    const hit = shape.exec(clause);
+    return hit !== null && hit[0].trim().length === clause.trim().length && !contradicts(hit[0].replace(/\bno\s+longer\s+exists?\b/i, ""));
+  });
 }
 
 /**
@@ -355,6 +369,14 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a replacement still in progress", "Jenkins is replacing the GitHub `Mutation` workflow."],
     ["a replacement scoped to pull requests only", "The GitHub `Mutation` workflow was replaced by Jenkins for pull requests only."],
     ["a Jenkins-subject clause that triggers the workflow", "Jenkins took over from the GitHub `Mutation` workflow, and the Jenkins job triggers it every Monday."],
+    // The seventh review's probe: a clause about Jenkins that refers back to the absent workflow says the workflow
+    // still runs ("Jenkins runs it"); and further cases of the same rule in other verbs, back-references and places.
+    ["the seventh probe: Jenkins runs it on version tags", "Jenkins took over from the GitHub `Release` workflow; Jenkins runs it on version tags."],
+    ["a Jenkinsfile replacement, then Jenkins dispatches it", "The Jenkinsfile replaced the GitHub `Release` workflow; Jenkins dispatches it for tagged builds."],
+    ["a deletion, then a Jenkins stage invokes that workflow", `\`${retiredFile("release")}\` was deleted in R5; the Jenkins release stage invokes that workflow for macOS builds.`],
+    ["a takeover, then Jenkins hosts its jobs", "Jenkins has taken over from the GitHub `Mutation` workflow, and Jenkins hosts its jobs."],
+    ["a takeover, then the next sentence says a Jenkins lane starts it", "Jenkins took over from the GitHub `Soak` workflow. The Jenkins nightly lane starts it."],
+    ["a migration, then the Jenkinsfile calls the same workflow", "The GitHub `Mutation` workflow was migrated to Jenkins; the `Jenkinsfile` calls the same workflow."],
   ])("is rejected: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, NONE)).not.toEqual([]);
   });
@@ -401,6 +423,12 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a named Jenkins job replacing a workflow", "The `s3-browser/release` Jenkins job replaces the GitHub `Release` workflow."],
     ["a workflow retired when Jenkins took over", "The GitHub `Release` workflow was retired when Jenkins took over."],
     ["a takeover beside an unrelated sentence of the same paragraph", "Jenkins has taken over from the GitHub `Mutation` workflow. The README shows the Jenkins badges."],
+    // A clause that refers back to the workflow is accepted when it is itself a departure statement about it, and a
+    // clause about Jenkins that does not refer back is accepted as before.
+    ["a replacement, then it was deleted in R5", "The Jenkinsfile replaced the GitHub `Release` workflow; it was deleted in R5."],
+    ["a takeover, then that workflow was removed from the repository", "Jenkins took over from the GitHub `Mutation` workflow; that workflow was removed from the repository."],
+    ["a takeover, then the next sentence says it was superseded", "Jenkins took over from the GitHub `Soak` workflow. It was superseded by the Jenkins nightly lane."],
+    ["a takeover, then a Jenkins clause with no back-reference", "Jenkins took over from the GitHub `Release` workflow; Jenkins runs the release stage on version tags."],
   ])("is accepted: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, new Set(["dependabot.yml"]))).toEqual([]);
   });
