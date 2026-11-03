@@ -63,12 +63,17 @@ def packagingChanged() {
   }
 }
 
-// The PR head sha a status belongs to. A PR build checks out the target merged INTO the PR head;
-// when that merge is not a fast-forward, HEAD is a merge commit whose first parent is the PR head.
+// The sha a status belongs to: the revision Jenkins selected for this build (the PR head for a PR build, the branch
+// revision otherwise). The PR head is the one this build's own SCM pinned when the build was scheduled
+// (scm.branches[0].name); ci/gate-sha.sh checks it against the checkout and prints it. It is never read from the
+// workspace history (the HEAD reflog of a reused workspace holds earlier builds' merges), from the fetched PR ref
+// (which moves when the PR is pushed again before the checkout) or from the commit's shape, so a PR head that is itself
+// a merge commit is never replaced by its first parent.
 def gateSha() {
-  return sh(returnStdout: true, script: '''
-    if [ -n "$CHANGE_ID" ] && git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi
-  ''').trim()
+  String pinned = env.CHANGE_ID ? scm.branches[0].name : ''
+  withEnv(["GATE_PINNED_HEAD=${pinned}"]) {
+    return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()
+  }
 }
 
 // Names the stage a failure post reports. Every stage calls it first.
@@ -245,7 +250,8 @@ pipeline {
   stages {
     stage('Quality') {
       agent { label 'arm64 && docker && s3-browser' }
-      options { timeout(time: 30, unit: 'MINUTES') }
+      // 20 minutes is the original quality job's bound; it is never raised (repocheckCiLane asserts it).
+      options { timeout(time: 20, unit: 'MINUTES') }
       steps {
         script {
           gateStage('Quality')

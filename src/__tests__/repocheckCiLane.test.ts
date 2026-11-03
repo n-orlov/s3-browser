@@ -37,6 +37,17 @@ const QUALITY_ORDER: ReadonlyArray<readonly [string, RegExp]> = [
   ["sbom", /nodeSh\('npm run sbom'\)/],
 ];
 
+// The original GitHub bounds (the retired CI workflow at the base commit): quality 20 min, release dry run 20 min, e2e shard 40 min.
+// A migrated stage keeps a timeout no greater than its original; a raised bound or a longer unit is a problem.
+const ORIGINAL_BOUND_MINUTES = { Quality: 20, "Release dry-run": 20, "E2E shard": 40 } as const;
+function timeoutProblem(options: string, name: keyof typeof ORIGINAL_BOUND_MINUTES): string | undefined {
+  const m = /\btimeout\(time: (\d+), unit: '(SECONDS|MINUTES|HOURS|DAYS)'\)/.exec(options);
+  if (!m) return undefined;
+  const per = { SECONDS: 1 / 60, MINUTES: 1, HOURS: 60, DAYS: 1440 }[m[2] as "SECONDS" | "MINUTES" | "HOURS" | "DAYS"];
+  const minutes = Number(m[1]) * per;
+  return minutes > ORIGINAL_BOUND_MINUTES[name] ? `${name} timeout is ${minutes} minutes, above the original ${ORIGINAL_BOUND_MINUTES[name]}-minute bound` : undefined;
+}
+
 /** One problem string per property of the Jenkins CI lane the Jenkinsfile lacks. */
 function laneProblems(jenkinsfile: string): string[] {
   const problems: string[] = [];
@@ -75,6 +86,8 @@ function laneProblems(jenkinsfile: string): string[] {
   }
   const stageOptions = blockOf(quality, /\boptions\s*\{/);
   if (!/\btimeout\(time: \d+, unit: 'MINUTES'\)/.test(stageOptions)) problems.push("Quality has no stage timeout");
+  const qualityBound = timeoutProblem(stageOptions, "Quality");
+  if (qualityBound) problems.push(qualityBound);
   if (!/\bsh 'git clean -ffdxq'/.test(quality)) problems.push("Quality does not reset with git clean -ffdxq");
 
   // Every Node step goes through nodeSh, which runs a node:22 container with a memory cap.
@@ -139,7 +152,12 @@ function gateProblems(jenkinsfile: string): string[] {
   if (!/\bfinishGate\('failure',/.test(unsuccessful)) problems.push("no failure status in post { unsuccessful } (FAILURE and ABORTED)");
   if (!/GATE_STAGE/.test(unsuccessful)) problems.push("the failure description does not name the failed stage");
   const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
-  if (!/HEAD\^1/.test(gateSha) || !/HEAD\^2/.test(gateSha)) problems.push("gateSha does not take the first parent of a merge commit");
+  if (!/ci\/gate-sha\.sh/.test(gateSha)) problems.push("gateSha does not resolve the head through ci/gate-sha.sh");
+  if (/HEAD\^1/.test(gateSha)) problems.push("gateSha replaces a merge head by its first parent");
+  if (!/GATE_PINNED_HEAD=\$\{pinned\}/.test(gateSha) || !/\bscm\.branches\[0\]\.name/.test(gateSha)) {
+    problems.push("gateSha does not hand the build's own pinned head (scm.branches[0].name) to ci/gate-sha.sh as GATE_PINNED_HEAD");
+  }
+  if (/reflog/.test(gateSha)) problems.push("gateSha reads the workspace reflog instead of the build's pinned head");
   return problems;
 }
 
@@ -157,6 +175,8 @@ function e2eProblems(jenkinsfile: string): string[] {
   shards.forEach((shard, n) => {
     if (!new RegExp(`\\be2eShard\\(${n + 1}\\)`).test(shard)) problems.push(`shard ${n + 1} does not call e2eShard(${n + 1})`);
     if (!/\btimeout\(time: \d+, unit: 'MINUTES'\)/.test(blockOf(shard, /\boptions\s*\{/))) problems.push(`shard ${n + 1} has no stage timeout`);
+    const shardBound = timeoutProblem(blockOf(shard, /\boptions\s*\{/), "E2E shard");
+    if (shardBound) problems.push(`shard ${n + 1}: ${shardBound}`);
     const post = blockOf(shard, /\bpost\s*\{/);
     for (const cond of ["aborted", "cleanup"]) {
       if (!new RegExp(`\\be2eShardCleanup\\(${n + 1}\\)`).test(blockOf(post, new RegExp(`\\b${cond}\\s*\\{`)))) {
@@ -204,6 +224,8 @@ function releaseProblems(jenkinsfile: string): string[] {
     problems.push(`Release dry-run label is ${label ?? "unset"}, expected amd64 && docker && s3-browser`);
   }
   if (!/\btimeout\(time: \d+, unit: 'MINUTES'\)/.test(blockOf(stage, /\boptions\s*\{/))) problems.push("Release dry-run has no stage timeout");
+  const dryRunBound = timeoutProblem(blockOf(stage, /\boptions\s*\{/), "Release dry-run");
+  if (dryRunBound) problems.push(dryRunBound);
 
   const when = blockOf(stage, /\bwhen\s*\{/);
   if (!/\bbeforeAgent true\b/.test(when)) problems.push("Release dry-run does not decide before taking an agent (beforeAgent true)");
@@ -356,6 +378,20 @@ const GATE_FIXTURES: Record<string, string> = {
   "Jenkinsfile.tokenOutside (token used outside withCredentials)": without("        sh 'git clean -ffdxq'\n", "        sh 'git clean -ffdxq'\n        sh 'curl -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/user'\n"),
 };
 
+GATE_FIXTURES["Jenkinsfile.firstParent (gateSha takes HEAD^1 of any merge)"] = without(
+  "script: 'sh ci/gate-sha.sh'",
+  `script: 'if git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi'`,
+);
+
+GATE_FIXTURES["Jenkinsfile.noPin (gateSha does not pass the build's pinned head)"] = without(
+  /\n {2}withEnv\(\["GATE_PINNED_HEAD=\$\{pinned\}"\]\) \{\n {4}return (sh\(returnStdout: true, script: 'sh ci\/gate-sha\.sh'\)\.trim\(\))\n {2}\}/,
+  "\n  return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()",
+);
+GATE_FIXTURES["Jenkinsfile.reflog (gateSha reads the workspace reflog)"] = without(
+  "script: 'sh ci/gate-sha.sh'",
+  "script: 'git reflog -1 --format=%H'",
+);
+
 const E2E_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noLock (shard body without lock)": without(/lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}", skipIfLocked: true\) \{/, "if (true) {"),
   "Jenkinsfile.noCleanup (without post { aborted } and cleanup)": without(/\n {10}post \{\n {12}aborted \{[\s\S]*?\n {10}\}\n(?= {8}\}\n {8}stage\('E2E shard 2)/, "\n"),
@@ -447,7 +483,29 @@ describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
   it("is red for a copy with the wrong label, no reset or no stage timeout", () => {
     expect(laneProblems(without("label 'arm64 && docker && s3-browser'", "label 'linux'")).join()).toContain("Quality label");
     expect(laneProblems(without("        sh 'git clean -ffdxq'\n        // ratchet", "        echo skip\n        // ratchet")).join()).toContain("git clean");
-    expect(laneProblems(without("options { timeout(time: 30, unit: 'MINUTES') }", "")).join()).toContain("stage timeout");
+    expect(laneProblems(without("options { timeout(time: 20, unit: 'MINUTES') }\n      steps {\n        script {\n          gateStage('Quality')", "steps {\n        script {\n          gateStage('Quality')")).join()).toContain("stage timeout");
+  });
+
+  it("keeps Quality's timeout at or below the original 20-minute quality-job bound, with no retry or threshold loosened", () => {
+    const quality = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /\bstages\s*\{/), /\bstage\('Quality'\)\s*\{/);
+    const minutes = Number(/\btimeout\(time: (\d+), unit: 'MINUTES'\)/.exec(blockOf(quality, /\boptions\s*\{/))?.[1]);
+    expect(minutes).toBeGreaterThan(0);
+    expect(minutes).toBeLessThanOrEqual(20);
+    expect(quality).not.toMatch(/\bretry\s*\(/);
+    expect(laneProblems(real).filter((p) => p.includes("timeout"))).toEqual([]);
+  });
+
+  it("is red when a stage timeout is raised above its original bound (Quality, Release dry-run, an e2e shard, a longer unit)", () => {
+    const quality = "options { timeout(time: 20, unit: 'MINUTES') }\n      steps {\n        script {\n          gateStage('Quality')";
+    expect(real).toContain(quality);
+    const raise = (to: string) => laneProblems(without(quality, quality.replace("timeout(time: 20, unit: 'MINUTES')", to))).join("; ");
+    expect(raise("timeout(time: 21, unit: 'MINUTES')")).toContain("above the original 20-minute bound");
+    expect(raise("timeout(time: 30, unit: 'MINUTES')")).toContain("above the original 20-minute bound");
+    expect(raise("timeout(time: 1, unit: 'HOURS')")).toContain("Quality timeout is 60 minutes");
+    const dry = without("agent { label 'amd64 && docker && s3-browser' }\n      options { timeout(time: 20, unit: 'MINUTES') }", "agent { label 'amd64 && docker && s3-browser' }\n      options { timeout(time: 25, unit: 'MINUTES') }");
+    expect(releaseProblems(dry).join("; ")).toContain("Release dry-run timeout is 25 minutes");
+    const shard = without("stage('E2E shard 1/3') {\n          options { timeout(time: 20, unit: 'MINUTES') }", "stage('E2E shard 1/3') {\n          options { timeout(time: 41, unit: 'MINUTES') }");
+    expect(e2eProblems(shard).join("; ")).toContain("shard 1: E2E shard timeout is 41 minutes");
   });
 });
 
@@ -489,10 +547,17 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     expect(code).toContain("credentialsId: 'github-n-orlov'");
   });
 
-  it("posts on the first parent when the PR build is a merge commit", () => {
+  it("resolves the gate sha through ci/gate-sha.sh, never by taking a merge's first parent blindly", () => {
     const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
-    expect(sha).toContain("HEAD^2");
-    expect(sha).toContain("git rev-parse HEAD^1");
+    expect(sha).toContain("ci/gate-sha.sh");
+    expect(sha).not.toContain("HEAD^1");
+  });
+
+  it("hands the build's own pinned head to ci/gate-sha.sh, never reading the workspace history", () => {
+    const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
+    expect(sha).toContain("scm.branches[0].name");
+    expect(sha).toContain("GATE_PINNED_HEAD");
+    expect(sha).not.toContain("reflog");
   });
 
   it.each(Object.entries(GATE_FIXTURES))("is red for %s", (_name, fixture) => {
