@@ -55,19 +55,19 @@ case "$method $url" in
 esac
 `;
 
-type Run = { status: number; stderr: string; stdout: string; calls: string[]; dispatchBody: string; createBody: string; patchBody: string };
+type Run = { dir: string; status: number; stderr: string; stdout: string; calls: string[]; dispatchBody: string; createBody: string; patchBody: string };
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 /** Runs a copy of the script against the stub client; the package.json version and the stub answers come from env. */
-function run(script: string, env: Record<string, string> = {}, pkgVersion = "0.20.0"): Run {
-  const dir = mkdtempSync(path.join(tmpdir(), "release-stage-"));
-  dirs.push(dir);
+function run(script: string, env: Record<string, string> = {}, pkgVersion = "0.20.0", opts: { args?: string[]; dir?: string } = {}): Run {
+  const dir = opts.dir ?? mkdtempSync(path.join(tmpdir(), "release-stage-"));
+  if (!opts.dir) dirs.push(dir);
   const bin = path.join(dir, "bin");
   const dist = path.join(dir, "dist");
   const src = path.join(dir, "src");
-  for (const d of [bin, dist, src]) mkdirSync(d);
+  for (const d of [bin, dist, src]) mkdirSync(d, { recursive: true });
   writeFileSync(path.join(bin, "curl"), STUB_CURL);
   chmodSync(path.join(bin, "curl"), 0o755);
   writeFileSync(path.join(src, "package.json"), JSON.stringify({ name: "s3-browser", version: pkgVersion }));
@@ -76,7 +76,7 @@ function run(script: string, env: Record<string, string> = {}, pkgVersion = "0.2
   }
   const scriptPath = path.join(dir, "release-stage.sh");
   writeFileSync(scriptPath, script);
-  const r = spawnSync("bash", [scriptPath], {
+  const r = spawnSync("bash", [scriptPath, ...(opts.args ?? [])], {
     encoding: "utf8",
     timeout: 60_000,
     env: {
@@ -104,6 +104,7 @@ function run(script: string, env: Record<string, string> = {}, pkgVersion = "0.2
     }
   };
   return {
+    dir,
     status: r.status ?? -1,
     stderr: r.stderr,
     stdout: r.stdout,
@@ -301,6 +302,78 @@ describe("ci/release-stage.sh pre-publish steps", () => {
 
     it("rejects a DRY_RUN that is neither true nor false before creating anything", () => {
       expect(refusalProblems(run(REAL, { DRY_RUN: "yes" }))).toEqual([]);
+    });
+  });
+  describe("stage by stage (the phases Jenkinsfile.release runs), sharing STATE_DIR", () => {
+    const phases = ["check", "draft", "macos", "verify", "publish"] as const;
+    const cleanup = (dir: string, env: Record<string, string> = {}) => run(REAL, { STATE_DIR: path.join(dir, "state"), ...env }, "0.20.0", { args: ["cleanup"], dir });
+
+        /** Runs the phases in order in one scratch dir; stops at the first non-zero one, like the pipeline does. */
+    function pipeline(env: Record<string, string> = {}, only: readonly string[] = phases): { runs: Run[]; dir: string } {
+      const dir = mkdtempSync(path.join(tmpdir(), "release-stage-"));
+      dirs.push(dir);
+      const runs: Run[] = [];
+      for (const phase of only) {
+        const r = run(REAL, { STATE_DIR: path.join(dir, "state"), DRY_RUN: "false", ...env }, "0.20.0", { args: [phase], dir });
+        runs.push(r);
+        if (r.status !== 0) break;
+      }
+      return { runs, dir };
+    }
+
+    it("check, draft, macos, verify and publish together do what the single run does", () => {
+      const { runs, dir } = pipeline();
+      expect(runs.map((r) => r.status)).toEqual([0, 0, 0, 0, 0]);
+      const calls = runs[runs.length - 1].calls;
+      expect(count(calls, DRAFT_CREATE)).toBe(1);
+      expect(count(calls, `PATCH ${API}/releases/4242 `)).toBe(1);
+      expect(count(calls, "DELETE ")).toBe(0);
+      expect(runs[2].stdout).toContain("draft-id=4242");
+      expect(cleanup(dir).stderr).toContain("not touching it"); // published: cleanup leaves it alone
+      expect(count(cleanup(dir).calls, "DELETE ")).toBe(0);
+    });
+
+    it("each phase alone refuses to run without STATE_DIR, and publish refuses without an explicit DRY_RUN", () => {
+      const r = run(REAL, { VERSION: "v0.20.0" }, "0.20.0", { args: ["check"] });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("STATE_DIR is required");
+      const dir = mkdtempSync(path.join(tmpdir(), "release-stage-"));
+      dirs.push(dir);
+      const p = run(REAL, { STATE_DIR: path.join(dir, "state"), DRY_RUN: "" }, "0.20.0", { args: ["publish"], dir });
+      expect(p.status).not.toBe(0);
+      expect(count(p.calls, "PATCH ")).toBe(0);
+      expect(count(p.calls, "DELETE ")).toBe(0);
+    });
+
+    it("a failed macOS stage leaves the draft for the pipeline's cleanup, which deletes it by id", () => {
+      const { runs, dir } = pipeline({ STUB_CONCLUSION: "failure" }, ["check", "draft", "macos"]);
+      expect(runs.map((r) => r.status === 0)).toEqual([true, true, false]);
+      expect(count(runs[2].calls, "DELETE ")).toBe(0);
+      const c = cleanup(dir, { STUB_CONCLUSION: "failure" });
+      expect(c.status).toBe(0);
+      expect(count(c.calls, DRAFT_DELETE)).toBe(1);
+    });
+
+    it("cleanup before any draft exists deletes nothing", () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "release-stage-"));
+      dirs.push(dir);
+      const c = cleanup(dir);
+      expect(c.status).toBe(0);
+      expect(count(c.calls, "DELETE ")).toBe(0);
+    });
+
+    it("cleanup after a dry-run publish (draft already deleted) does not delete again", () => {
+      const { runs, dir } = pipeline({ DRY_RUN: "true" });
+      expect(runs.map((r) => r.status)).toEqual([0, 0, 0, 0, 0]);
+      expect(count(runs[4].calls, DRAFT_DELETE)).toBe(1);
+      expect(count(runs[4].calls, `PATCH ${API}/releases/4242 `)).toBe(0);
+      expect(count(cleanup(dir, { DRY_RUN: "true" }).calls, DRAFT_DELETE)).toBe(1);
+    });
+
+    it("an immutable-false publish fails the stage but cleanup never deletes the published release", () => {
+      const { runs, dir } = pipeline({ STUB_IMMUTABLE_AFTER: "false" });
+      expect(runs.map((r) => r.status === 0)).toEqual([true, true, true, true, false]);
+      expect(count(cleanup(dir).calls, "DELETE ")).toBe(0);
     });
   });
 });

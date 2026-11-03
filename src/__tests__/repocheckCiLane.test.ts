@@ -610,7 +610,8 @@ describe("the Jenkinsfile publishes the reports in post { always } (repocheck)",
   });
 
   it("archives coverage, the ESLint JSON, the SBOM, the Trivy report and the Playwright report", () => {
-    const archive = /archiveArtifacts artifacts: '([^']*)'/.exec(codeOf(real))?.[1].split(/,\s*/);
+    const always = blockOf(blockOf(blockOf(codeOf(real), /^pipeline\s*\{/m), /^ {2}post\s*\{/m), /\balways\s*\{/);
+    const archive = /archiveArtifacts artifacts: '([^']*)'/.exec(always)?.[1].split(/,\s*/);
     expect(archive).toEqual(expect.arrayContaining(["coverage/**", "reports/eslint.json", "sbom/**", "reports/trivy.txt", "e2e-*/playwright-report/**"]));
   });
 

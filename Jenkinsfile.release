@@ -1,0 +1,204 @@
+// s3-browser releases on the homelab Jenkins: pipeline job s3-browser/release, started by hand,
+// running this file from master (see SPEC.md section 5, "Release").
+//
+// It releases exactly the commit that a green s3-browser/ci/master build recorded in
+// release-candidate.json (the last successful build, or CI_BUILD):
+// Candidate -> Checkout -> Version check -> Build -> Draft -> macOS -> Verify -> Publish.
+// The release is created as a DRAFT, every asset is attached to it (the macOS dmgs by a
+// workflow_dispatch of .github/workflows/macos-build.yml, the only part left on GitHub), the draft's
+// asset set is verified, and only then it is published: GitHub's immutable-releases setting freezes a
+// release at publication, so it must never see a half-populated one. The tag is created by GitHub at
+// the candidate sha when the draft is published; nothing is ever pushed from the agent. Publish then
+// reads the tag and "immutable: true" back. DRY_RUN stops short of publishing: the verified draft is
+// deleted. A failed or aborted build deletes its draft (post). Every result posts a Telegram message
+// (notifyTelegram, best-effort).
+//
+// The GitHub steps are phases of ci/release-stage.sh; the build is ci/release-build.sh. The agent is
+// the amd64 host (the x64 AppImage, its smoke run and the wine-built Windows exes need it).
+@Library('homelab') _
+
+pipeline {
+  agent { label 'amd64 && docker && s3-browser' }
+
+  options {
+    ansiColor('xterm')
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '50', artifactNumToKeepStr: '5'))
+    disableConcurrentBuilds()
+    timeout(time: 120, unit: 'MINUTES')   // ceiling; the build and the macOS leg carry their own
+    skipDefaultCheckout()                 // the Checkout stage, once the commit is known
+  }
+
+  parameters {
+    string(name: 'VERSION', defaultValue: '', trim: true,
+           description: 'Release version, e.g. v0.20.0 or v0.21.0-rc.1 (required; the tag must not exist yet)')
+    string(name: 'CI_BUILD', defaultValue: '', trim: true,
+           description: 's3-browser/ci/master build number to release; empty = the last successful one')
+    booleanParam(name: 'DRY_RUN', defaultValue: false,
+                 description: 'Build, draft, run the macOS leg and verify, but do not publish: the verified draft is deleted')
+  }
+
+  environment {
+    REPO = 'n-orlov/s3-browser'
+    DIST = 'dist'
+    CANDIDATE = 'candidate/release-candidate.json'
+    // The draft id the phases share; the Candidate stage clears it, a failed or aborted build deletes the draft it names.
+    STATE_DIR = '.release-state'
+  }
+
+  stages {
+    // Which commit: the release candidate of a green master build. Only post { success } of s3-browser/ci/master
+    // archives release-candidate.json, so a build that was not green has none and the copy fails.
+    stage('Candidate') {
+      steps {
+        // The workspace persists between builds: a stale draft id or candidate must not leak into this one.
+        sh 'rm -rf candidate dist "$STATE_DIR"'
+        script {
+          if (!(params.VERSION ==~ /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/)) {
+            error('VERSION "' + params.VERSION + '" is not vMAJOR.MINOR.PATCH[-pre]')
+          }
+          if (params.CI_BUILD && !(params.CI_BUILD ==~ /^[0-9]+$/)) {
+            error('CI_BUILD "' + params.CI_BUILD + '" is not a build number')
+          }
+          currentBuild.displayName = params.VERSION + (params.DRY_RUN ? ' (dry run)' : '')
+        }
+        script {
+          try {
+            copyArtifacts projectName: '/s3-browser/ci/master', filter: 'release-candidate.json',
+                          target: 'candidate', fingerprintArtifacts: true,
+                          selector: params.CI_BUILD ? specific(params.CI_BUILD) : lastSuccessful(stable: true)
+          } catch (err) {
+            error('no release candidate in s3-browser/ci/master ' + (params.CI_BUILD ? '#' + params.CI_BUILD : 'last successful build') +
+                  ': only a fully green master build is releasable (' + err.getMessage() + ')')
+          }
+          env.RELEASE_SHA = sh(returnStdout: true, script: '''
+            python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha"])' "$CANDIDATE"
+          ''').trim()
+          env.CI_BUILD_NUMBER = sh(returnStdout: true, script: '''
+            python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["build"])' "$CANDIDATE"
+          ''').trim()
+          if (!(env.RELEASE_SHA ==~ /^[0-9a-f]{40}$/)) {
+            error('release candidate sha "' + env.RELEASE_SHA + '" is not a full sha')
+          }
+          env.CI_BUILD_URL = "${env.JENKINS_URL}job/s3-browser/job/ci/job/master/${env.CI_BUILD_NUMBER}/"
+          echo 'Releasing ' + env.RELEASE_SHA + ' from s3-browser/ci/master #' + env.CI_BUILD_NUMBER
+        }
+      }
+    }
+
+    // The candidate sha is on master (s3-browser/ci/master built it); this checkout of master has it in its
+    // history. The tree is then detached at that sha, never master's tip, so a later merge cannot slip in.
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh '''
+          git clean -ffdxq
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD || {
+            echo "$RELEASE_SHA is not on master" >&2; exit 1; }
+          git checkout --quiet --detach "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+        '''
+      }
+    }
+
+    // Everything that can be refused before anything exists on GitHub: the version shape, package.json's version,
+    // an existing tag or release for it, and immutable releases being off.
+    stage('Version check') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+          sh 'ci/release-stage.sh check'
+        }
+      }
+    }
+
+    // The x64 AppImage with its headless smoke run, the Windows exes through the wine builder image and the SBOM,
+    // from the candidate sha, in memory-capped containers.
+    stage('Build') {
+      options { timeout(time: 40, unit: 'MINUTES') }
+      steps {
+        sh 'ci/release-build.sh --sha "$RELEASE_SHA" --out "$DIST"'
+      }
+    }
+
+    // The draft by REST (its id is kept), then the uploads by that id.
+    stage('Draft') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+          sh 'ci/release-stage.sh draft'
+        }
+      }
+    }
+
+    // The macOS dmgs: the one thing built on GitHub. Dispatched with the draft's id, correlated by run id and
+    // waited for with a deadline (MAC_TIMEOUT_MIN, 45 by default).
+    stage('macOS') {
+      options { timeout(time: 60, unit: 'MINUTES') }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+          sh 'ci/release-stage.sh macos'
+        }
+      }
+    }
+
+    // The draft holds exactly the six expected assets, each uploaded.
+    stage('Verify') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+          sh 'ci/release-stage.sh verify'
+        }
+      }
+    }
+
+    // Publish the draft, check the tag is at the candidate sha, then read "immutable: true" back. With DRY_RUN the
+    // script deletes the verified draft instead and publishes nothing; it refuses to run when DRY_RUN is not set.
+    stage('Publish') {
+      environment { DRY_RUN = "${params.DRY_RUN}" }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+          sh 'ci/release-stage.sh publish'
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'dist/*', allowEmptyArchive: true, fingerprint: true
+      script {
+        if (env.RELEASE_SHA) {
+          String ci = env.CI_BUILD_URL ? ' (<a href="' + env.CI_BUILD_URL + '">ci/master #' + env.CI_BUILD_NUMBER + '</a>)' : ''
+          String text = params.VERSION + ' from ' + env.RELEASE_SHA + ci + ': ' +
+                        (params.DRY_RUN ? 'dry run, nothing published' : 'https://github.com/n-orlov/s3-browser/releases/tag/' + params.VERSION)
+          currentBuild.description = text.replaceAll('<[^>]*>', '')
+          addSummary(icon: currentBuild.currentResult == 'SUCCESS' ? 'symbol-checkmark-circle-outline plugin-ionicons-api'
+                                                                   : 'symbol-close-circle-outline plugin-ionicons-api',
+                     text: text)
+        }
+      }
+    }
+    // A draft that was never published must not outlive a failed or aborted build.
+    failure {
+      withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+        sh 'ci/release-stage.sh cleanup'
+      }
+    }
+    aborted {
+      withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+        sh 'ci/release-stage.sh cleanup'
+      }
+    }
+    // The Telegram message, last, with a sound: a release is always worth hearing. Best-effort: a Telegram outage
+    // is logged and never changes the build result.
+    cleanup {
+      script {
+        try {
+          notifyTelegram(notifyOn: 'ALL', silent: false, title: 's3-browser release ' + params.VERSION,
+                         commit: env.RELEASE_SHA,
+                         extra: params.DRY_RUN ? 'dry run, not published' : 'Result: ' + currentBuild.currentResult)
+        } catch (err) {
+          echo "Telegram notification failed (the build result is unchanged): ${err.message}"
+        }
+      }
+    }
+  }
+}

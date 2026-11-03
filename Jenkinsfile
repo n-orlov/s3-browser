@@ -106,6 +106,21 @@ def finishGate(String state, String desc) {
   }
 }
 
+// The release candidate of a green master build: which job, which build number, which sha. s3-browser/release copies
+// it (copyArtifacts, lastSuccessful or CI_BUILD) and releases that sha, never master's tip. Only post { success } of a
+// master build calls it. The pipeline agent is none, so it takes a node; the sha is the one the gate status names.
+def archiveReleaseCandidate() {
+  node('arm64 && docker && s3-browser') {
+    if (!env.GATE_SHA) {
+      checkout scm
+      env.GATE_SHA = gateSha()
+    }
+    writeFile file: 'release-candidate.json',
+              text: "{\"job\": \"${env.JOB_NAME}\", \"build\": ${env.BUILD_NUMBER}, \"sha\": \"${env.GATE_SHA}\"}\n"
+    archiveArtifacts artifacts: 'release-candidate.json', fingerprint: true
+  }
+}
+
 // One e2e shard of three, on an arm64 phone of its own. The phones are small (delta 2 executors / 7.5 GB,
 // hotel 8 GB, bravo 6 GB) and a shard wants ~3 GB for Playwright plus 1 GB for LocalStack, so the lock admits
 // one shard per agent at a time. Waiting for that lock on a node would hold an executor and serialise two
@@ -586,8 +601,15 @@ pipeline {
         }
       }
     }
+    // The candidate is archived before the gate turns green, so a green master sha always has one; an archive that
+    // fails leaves the build failed and the gate red. Only master builds are candidates.
     success {
-      script { finishGate('success', 'All stages passed') }
+      script {
+        if (env.BRANCH_NAME == 'master') {
+          archiveReleaseCandidate()
+        }
+        finishGate('success', 'All stages passed')
+      }
     }
     // FAILURE, ABORTED and UNSTABLE alike: only a succeeded build may leave a green gate.
     unsuccessful {
