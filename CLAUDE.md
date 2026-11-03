@@ -73,8 +73,8 @@ This file provides context for Claude (or any AI assistant) working on this proj
 - Scripts: `npm run package:win:docker`, `npm run package:all:docker`
 
 ### Phase 9: CI/CD
-- Set up GitHub Actions for build and test on push/PR
-- Release workflow for creating releases with artifacts (Linux AppImage, Windows NSIS + portable)
+- Originally GitHub Actions for build and test on push/PR; now the homelab Jenkins (see Quality Gates & CI)
+- Release job for creating releases with artifacts (Linux AppImage, Windows NSIS + portable)
 - Repository: https://github.com/n-orlov/s3-browser
 
 ### Phase 10: Testing
@@ -128,14 +128,14 @@ src/
 - Multi-select and batch operations
 - State persistence
 - Docker-based packaging
-- CI/CD with GitHub Actions
+- CI/CD on the homelab Jenkins (`s3-browser/ci`, `s3-browser/release`)
 
 ### In Progress / Pending
 - Nothing planned. E2E tests (Playwright against LocalStack, with reports) and macOS builds are shipped.
 
 ## Quality Gates & CI
 
-CI (`.github/workflows/ci.yml`) runs on the owner's self-hosted runners (label `s3-browser` on `int21h-ws`) for PRs **from this repo opened by the owner only** (fork PRs never run there; the runners have docker access), and for pushes to `master`. Every push to `master` is the squash merge of a pull request (see Working practice below); nothing is committed to `master` directly. Draft PRs do not run CI. Release/packaging (`release.yml`) stays on GitHub-hosted runners (incl. macOS).
+CI runs on the owner's homelab Jenkins: the multibranch job `s3-browser/ci` builds the `Jenkinsfile` at the repository root for every branch and every same-repository pull request (fork pull requests are never discovered). Its Quality stage runs on an arm64 agent and the release dry-run on the amd64 workstation agent. The required check is the commit status **`jenkins/gate`**, which the `Jenkinsfile` posts itself on the pull request head (pending while the build runs, success only when every stage passed, failure for any other result). Every push to `master` is the squash merge of a pull request (see Working practice below); nothing is committed to `master` directly. Jenkins builds a draft pull request like any other, so a draft gets a real `jenkins/gate` result too. Releases are cut from the separate Jenkins job `s3-browser/release` (`Jenkinsfile.release`, started by hand with `VERSION`, `CI_BUILD` and `DRY_RUN`), which releases the sha of a green `s3-browser/ci/master` build; nothing is released from GitHub Actions. The GitHub workflows that remain are `codeql.yml` and the dispatch-only `macos-build.yml` that the release job calls for the macOS packages.
 
 Gates, all runnable locally: `npm run typecheck` (src + e2e + configs, tests included), `npm run lint` (ESLint; `--max-warnings 0` - the lint script allows no warnings, never raise it), `npm run test:coverage` (thresholds in `vitest.config.ts`; only raise them), `npm run audit:prod` (high+), `npm run build`, and `npm run test:e2e:docker` (Playwright + Electron + LocalStack entirely in containers - use this instead of `npm run test:e2e`, which opens windows on the host).
 
@@ -146,10 +146,11 @@ Tests that call real AWS (`s3.integration`, `e2e-ui-flow`, `editor-integration`)
 How changes reach `master` (the owner is the only committer; the same rules apply to an assistant working here):
 
 - **One branch per scope.** Each piece of work gets its own branch cut from `master`; nothing is committed to `master` directly.
-- **Open the pull request only when the scope is complete.** Until then the work is either unpushed or a **draft** PR. CI does not run on a draft (the draft guard in `ci.yml`, `codeql.yml` and `mutation.yml`), so a draft's `gate` check fails closed rather than reading as passing. Mark it ready for review only when the scope is done.
-- **Required check:** `gate (quality, both e2e shards and, when it runs, release-dryrun succeeded)` - the `name:` of the `gate` job in `.github/workflows/ci.yml`. It must be green on the PR head before merging. If the job is renamed, the branch protection setting and this line change in the same PR (`src/__tests__/workingPracticeDocs.test.ts` enforces the match).
+- **Open the pull request only when the scope is complete.** Until then the work is either unpushed or a **draft** PR. Jenkins builds a draft like any other PR and posts `jenkins/gate` on it, so a draft's checks are real; the draft state only says the scope is not done. Mark it ready for review only when the scope is done.
+- **Required check:** `jenkins/gate` - the commit status context the `Jenkinsfile` posts. It must be green on the PR head before merging. If the context is renamed, the branch protection setting and this line change in the same PR (`src/__tests__/workingPracticeDocs.test.ts` enforces the match).
 - **Squash merge** the pull request, so each scope lands on `master` as one commit.
-- **Final check on the merged sha:** after the merge, run `gh workflow run ci.yml --ref master` (`workflow_dispatch`) on the merged sha and wait for it to go green. Nothing lands on `master` after that dispatch; a cure needs a fresh branch, a PR, a green `gate`, a squash merge and a new dispatch.
+- **Final check on the merged sha:** after the merge, wait for the `s3-browser/ci/master` Jenkins build of the merged sha to go green; no extra run is started by hand. Nothing lands on `master` after that build starts; a cure needs a fresh branch, a PR, a green `jenkins/gate`, a squash merge and a new green `s3-browser/ci/master` build.
+- **Releases** are cut from `s3-browser/release` (never from a workstation or a GitHub workflow): run it with `DRY_RUN=true` first, then with `DRY_RUN=false`.
 
 ## Testing Philosophy
 
