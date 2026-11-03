@@ -1,6 +1,7 @@
-// Pure ratchet logic: the lint warning ceiling and the CRAP baseline size are fixed at 0 (and must be recorded as 0), the coverage thresholds and the mutation break only go up (the break is recorded as at least 80).
+// Pure ratchet logic: the lint warning ceiling and the CRAP baseline size are fixed at 0 (and must be recorded as 0), the CRAP limit may only go down (it is recorded as at most 20), the coverage thresholds and the mutation break only go up (the break is recorded as at least 80).
 export const REQUIRED_MAX_WARNINGS = 0;
 export const REQUIRED_CRAP_BASELINE_MAX = 0;
+export const REQUIRED_CRAP_MAX_CEILING = 20;
 export const REQUIRED_MUTATION_SCORE_MIN = 80;
 export const THRESHOLD_KEYS = ['lines', 'functions', 'branches', 'statements'] as const;
 export type ThresholdKey = (typeof THRESHOLD_KEYS)[number];
@@ -9,6 +10,8 @@ export interface RatchetValues {
   maxWarnings: number;
   /** In .ratchet.json: the allowed number of crap-baseline.json entries. In the current values: the actual number of entries. */
   crapBaselineMax: number;
+  /** In .ratchet.json: the CRAP limit ceiling. In the current values: `DEFAULT_CRAP_MAX` of scripts/crap/crapScore.ts. */
+  crapMax: number;
   coverageThresholds: Record<ThresholdKey, number>;
   /** In .ratchet.json: the mutation score floor. In the current values: `thresholds.break` of stryker.config.mjs. */
   mutationScoreMin: number;
@@ -33,16 +36,26 @@ export function readCrapBaselineSize(crapBaselineText: string): number {
   return Object.keys(parsed).length;
 }
 
-/** Reads the four coverage thresholds out of the text of vitest.config.ts. */
-export function readCoverageThresholds(vitestConfigText: string): Record<ThresholdKey, number> {
+/** Reads `DEFAULT_CRAP_MAX` out of the text of scripts/crap/crapScore.ts. */
+export function readCrapMax(crapScoreText: string): number {
+  const found = /\bDEFAULT_CRAP_MAX\s*=\s*(\d+(?:\.\d+)?)/.exec(crapScoreText);
+  if (!found) throw new Error('scripts/crap/crapScore.ts has no DEFAULT_CRAP_MAX value');
+  return Number(found[1]);
+}
+
+/** Reads one coverage threshold out of the text of vitest.config.ts. */
+export function readCoverageThreshold(vitestConfigText: string, key: ThresholdKey): number {
   const block = /\bthresholds\s*:\s*\{([^}]*)\}/.exec(vitestConfigText);
   if (!block) throw new Error('vitest.config.ts has no coverage "thresholds" block');
+  const found = new RegExp(`\\b${key}\\s*:\\s*(\\d+(?:\\.\\d+)?)`).exec(block[1]);
+  if (!found) throw new Error(`vitest.config.ts thresholds has no "${key}" value`);
+  return Number(found[1]);
+}
+
+/** Reads the four coverage thresholds out of the text of vitest.config.ts. */
+export function readCoverageThresholds(vitestConfigText: string): Record<ThresholdKey, number> {
   const result = {} as Record<ThresholdKey, number>;
-  for (const key of THRESHOLD_KEYS) {
-    const found = new RegExp(`\\b${key}\\s*:\\s*(\\d+(?:\\.\\d+)?)`).exec(block[1]);
-    if (!found) throw new Error(`vitest.config.ts thresholds has no "${key}" value`);
-    result[key] = Number(found[1]);
-  }
+  for (const key of THRESHOLD_KEYS) result[key] = readCoverageThreshold(vitestConfigText, key);
   return result;
 }
 
@@ -61,6 +74,7 @@ export function parseRatchet(text: string): RatchetValues {
   const isNumber = (value: unknown): value is number => Number.isFinite(value);
   if (!isNumber(raw.maxWarnings)) throw new Error('.ratchet.json needs a numeric "maxWarnings"');
   if (!isNumber(raw.crapBaselineMax)) throw new Error('.ratchet.json needs a numeric "crapBaselineMax"');
+  if (!isNumber(raw.crapMax)) throw new Error('.ratchet.json needs a numeric "crapMax"');
   if (!isNumber(raw.mutationScoreMin)) throw new Error('.ratchet.json needs a numeric "mutationScoreMin"');
   const thresholds = raw.coverageThresholds;
   if (typeof thresholds !== 'object' || thresholds === null) throw new Error('.ratchet.json needs "coverageThresholds"');
@@ -70,7 +84,7 @@ export function parseRatchet(text: string): RatchetValues {
     if (!isNumber(value)) throw new Error(`.ratchet.json coverageThresholds needs a numeric "${key}"`);
     coverageThresholds[key] = value;
   }
-  return { maxWarnings: raw.maxWarnings, crapBaselineMax: raw.crapBaselineMax, coverageThresholds, mutationScoreMin: raw.mutationScoreMin };
+  return { maxWarnings: raw.maxWarnings, crapBaselineMax: raw.crapBaselineMax, crapMax: raw.crapMax, coverageThresholds, mutationScoreMin: raw.mutationScoreMin };
 }
 
 /** Returns one message per regression; an empty list means the ratchet holds. */
@@ -89,6 +103,14 @@ export function judgeRatchet(ratchet: RatchetValues, current: RatchetValues): st
   }
   if (current.crapBaselineMax > ratchet.crapBaselineMax) {
     violations.push(`crap-baseline.json has ${current.crapBaselineMax} entries, above the ratchet ceiling ${ratchet.crapBaselineMax}`);
+  }
+  if (ratchet.crapMax > REQUIRED_CRAP_MAX_CEILING) {
+    violations.push(
+      `.ratchet.json records crapMax ${ratchet.crapMax}; the CRAP gate requires at most ${REQUIRED_CRAP_MAX_CEILING}`,
+    );
+  }
+  if (current.crapMax > ratchet.crapMax) {
+    violations.push(`CRAP limit DEFAULT_CRAP_MAX is ${current.crapMax}, above the ratchet ceiling ${ratchet.crapMax}`);
   }
   for (const key of THRESHOLD_KEYS) {
     if (current.coverageThresholds[key] < ratchet.coverageThresholds[key]) {
@@ -117,6 +139,7 @@ export function findImprovements(ratchet: RatchetValues, current: RatchetValues)
   if (current.crapBaselineMax < ratchet.crapBaselineMax) {
     notes.push(`crapBaselineMax ${ratchet.crapBaselineMax} -> ${current.crapBaselineMax}`);
   }
+  if (current.crapMax < ratchet.crapMax) notes.push(`crapMax ${ratchet.crapMax} -> ${current.crapMax}`);
   for (const key of THRESHOLD_KEYS) {
     if (current.coverageThresholds[key] > ratchet.coverageThresholds[key]) {
       notes.push(`${key} ${ratchet.coverageThresholds[key]} -> ${current.coverageThresholds[key]}`);
@@ -126,4 +149,65 @@ export function findImprovements(ratchet: RatchetValues, current: RatchetValues)
     notes.push(`mutationScoreMin ${ratchet.mutationScoreMin} -> ${current.mutationScoreMin}`);
   }
   return notes;
+}
+
+/** The ref the working tree is compared against: the base of every pull request. */
+export const BASE_REF = 'origin/master';
+
+/** The gate values as they stood at the merge base; a value the base does not have is left out and is not constrained. */
+export interface BaseValues {
+  maxWarnings?: number;
+  crapBaselineMax?: number;
+  crapMax?: number;
+  mutationScoreMin?: number;
+  coverageThresholds: Partial<Record<ThresholdKey, number>>;
+}
+
+/** Reads the files of the merge base through `readAtBase` (the file text, or undefined when the base has no such file); whatever cannot be read is absent. */
+export function readBaseValues(readAtBase: (file: string) => string | undefined): BaseValues {
+  const attempt = <T>(file: string, read: (text: string) => T): T | undefined => {
+    const text = readAtBase(file);
+    if (text === undefined) return undefined;
+    try {
+      return read(text);
+    } catch {
+      return undefined;
+    }
+  };
+  const coverageThresholds: Partial<Record<ThresholdKey, number>> = {};
+  for (const key of THRESHOLD_KEYS) {
+    const value = attempt('vitest.config.ts', (text) => readCoverageThreshold(text, key));
+    if (value !== undefined) coverageThresholds[key] = value;
+  }
+  return {
+    maxWarnings: attempt('package.json', readLintCeiling),
+    crapBaselineMax: attempt('crap-baseline.json', readCrapBaselineSize),
+    crapMax: attempt('scripts/crap/crapScore.ts', readCrapMax),
+    mutationScoreMin: attempt('stryker.config.mjs', readMutationBreak),
+    coverageThresholds,
+  };
+}
+
+/** Returns one message per value that is looser than at the merge base; a value absent at the base is not constrained. */
+export function judgeAgainstBase(base: BaseValues, current: RatchetValues): string[] {
+  const violations: string[] = [];
+  if (base.maxWarnings !== undefined && current.maxWarnings > base.maxWarnings) {
+    violations.push(`lint --max-warnings is ${current.maxWarnings}, looser than ${base.maxWarnings} at the merge base`);
+  }
+  if (base.crapBaselineMax !== undefined && current.crapBaselineMax > base.crapBaselineMax) {
+    violations.push(`crap-baseline.json has ${current.crapBaselineMax} entries, more than the ${base.crapBaselineMax} at the merge base`);
+  }
+  if (base.crapMax !== undefined && current.crapMax > base.crapMax) {
+    violations.push(`CRAP limit DEFAULT_CRAP_MAX is ${current.crapMax}, looser than ${base.crapMax} at the merge base`);
+  }
+  for (const key of THRESHOLD_KEYS) {
+    const atBase = base.coverageThresholds[key];
+    if (atBase !== undefined && current.coverageThresholds[key] < atBase) {
+      violations.push(`coverage threshold ${key} is ${current.coverageThresholds[key]}, below ${atBase} at the merge base`);
+    }
+  }
+  if (base.mutationScoreMin !== undefined && current.mutationScoreMin < base.mutationScoreMin) {
+    violations.push(`mutation thresholds.break is ${current.mutationScoreMin}, below ${base.mutationScoreMin} at the merge base`);
+  }
+  return violations;
 }

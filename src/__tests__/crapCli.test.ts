@@ -77,7 +77,7 @@ describe('crap CLI', () => {
   it('writes coverage/crap-summary.json with the count of functions over CRAP_MAX, even when the gate fails', () => {
     const summaryFile = path.join(dir, 'coverage/crap-summary.json');
     expect(run().status).toBe(1);
-    expect(JSON.parse(readFileSync(summaryFile, 'utf8'))).toEqual({ max: 30, functions: 2, over: 1 });
+    expect(JSON.parse(readFileSync(summaryFile, 'utf8'))).toEqual({ max: 20, functions: 2, over: 1 });
     expect(run([], { CRAP_MAX: '0.5' }).status).toBe(1);
     expect(JSON.parse(readFileSync(summaryFile, 'utf8'))).toEqual({ max: 0.5, functions: 2, over: 2 });
   }, 60_000);

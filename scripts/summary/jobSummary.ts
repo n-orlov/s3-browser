@@ -1,5 +1,5 @@
-// Pure rendering of the GitHub job summaries (no I/O). `summary.ts` reads the report files, parses them
-// with the functions below and appends the rendered markdown to $GITHUB_STEP_SUMMARY.
+// Pure parsers for the CI report files (no I/O) and the helpers the CI summary page shares. `summary.ts` reads the
+// files, parses them with the functions below and `summaryPage.ts` renders the page.
 
 export const COVERAGE_KEYS = ['statements', 'branches', 'functions', 'lines'] as const;
 export type CoverageKey = (typeof COVERAGE_KEYS)[number];
@@ -45,7 +45,6 @@ export interface E2eInput {
 }
 
 const num = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0);
-const MISSING = '_no data: the report file was not produced_';
 
 /** Reads the root `<testsuites tests=".." failures=".." errors=".." skipped="..">` element of a JUnit file. */
 export function parseJunitTotals(xml: string): UnitTotals {
@@ -90,47 +89,5 @@ export function parsePlaywrightCounts(text: string): E2eCounts {
 /** True when the counts hold any failure: a failed test or a report-level error. */
 export const e2eHasFailure = (counts: E2eCounts): boolean => counts.failed > 0 || counts.errors > 0;
 
-const mark = (ok: boolean): string => (ok ? '✅' : '❌');
-const pct = (value: number): string => `${Math.round(value * 100) / 100}%`;
-
-export function renderQualitySummary(input: QualityInput): string {
-  const lines: string[] = ['## Quality', '', '### Unit tests', ''];
-  if (input.unit) {
-    const { total, failed, skipped } = input.unit;
-    lines.push(`${mark(failed === 0)} ${total} tests: ${total - failed - skipped} passed, ${failed} failed, ${skipped} skipped`);
-  } else {
-    lines.push(MISSING);
-  }
-  lines.push('', '### Coverage', '');
-  if (input.coverage) {
-    lines.push('| Metric | Coverage | Threshold | |', '| --- | ---: | ---: | --- |');
-    for (const key of COVERAGE_KEYS) {
-      const value = input.coverage.pct[key];
-      const threshold = input.thresholds[key];
-      const ok = value >= threshold;
-      lines.push(`| ${key} | ${pct(value)} | ${threshold}% | ${ok ? '✅ met' : `❌ miss (${pct(threshold - value)} below)`} |`);
-    }
-  } else {
-    lines.push(MISSING);
-  }
-  lines.push('', '### CRAP', '');
-  if (input.crap) {
-    const { over, max, functions } = input.crap;
-    lines.push(`${mark(over === 0)} ${over} function${over === 1 ? '' : 's'} over CRAP_MAX (${max}) of ${functions} scored`);
-  } else {
-    lines.push(MISSING);
-  }
-  return `${lines.join('\n')}\n`;
-}
-
-export function renderE2eSummary(input: E2eInput): string {
-  const lines: string[] = [`## e2e shard ${input.shard}`, ''];
-  if (input.counts) {
-    const { passed, failed, skipped, errors } = input.counts;
-    const reportErrors = errors > 0 ? `, ${errors} report error${errors === 1 ? '' : 's'}` : '';
-    lines.push(`${mark(!e2eHasFailure(input.counts))} ${passed} passed, ${failed} failed, ${skipped} skipped${reportErrors}`);
-  } else {
-    lines.push(MISSING);
-  }
-  return `${lines.join('\n')}\n`;
-}
+export const mark = (ok: boolean): string => (ok ? '✅' : '❌');
+export const pct = (value: number): string => `${Math.round(value * 100) / 100}%`;

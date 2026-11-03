@@ -482,6 +482,64 @@ describe('FileList', () => {
       });
     });
 
+    describe('loading the next page on scroll', () => {
+      const page = (token: string | undefined, key: string) => ({
+        success: true,
+        result: {
+          objects: [{ key, size: 100, isPrefix: false }],
+          prefixes: [],
+          continuationToken: token,
+          isTruncated: token !== undefined,
+          prefix: '',
+          keyCount: 1,
+        },
+      });
+
+      async function renderTruncated() {
+        mockElectronAPI.s3.listObjects.mockImplementation(async ({ continuationToken }: { continuationToken?: string }) =>
+          continuationToken === undefined ? page('page2-token', 'first.txt') : page(undefined, 'second.txt'),
+        );
+        const view = render(<FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />);
+        await screen.findByText('first.txt');
+        return view.container.querySelector('.file-list-table-wrapper') as HTMLElement;
+      }
+
+      const geometry = (el: HTMLElement, scrollTop: number) => {
+        Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
+        Object.defineProperty(el, 'clientHeight', { value: 400, configurable: true });
+        Object.defineProperty(el, 'scrollTop', { value: scrollTop, configurable: true });
+      };
+
+      it('loads the next page when scrolled within 100px of the bottom', async () => {
+        const wrapper = await renderTruncated();
+        geometry(wrapper, 550); // 1000 - 550 - 400 = 50 < 100
+        fireEvent.scroll(wrapper);
+        expect(await screen.findByText('second.txt')).toBeInTheDocument();
+        expect(mockElectronAPI.s3.listObjects).toHaveBeenCalledTimes(2);
+        expect(mockElectronAPI.s3.listObjects).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'my-bucket', continuationToken: 'page2-token' }));
+      });
+
+      it('does not load another page while still far from the bottom', async () => {
+        const wrapper = await renderTruncated();
+        geometry(wrapper, 100); // 1000 - 100 - 400 = 500 >= 100
+        fireEvent.scroll(wrapper);
+        expect(mockElectronAPI.s3.listObjects).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText('second.txt')).not.toBeInTheDocument();
+      });
+
+      it('does not request a page when the listing has no more pages', async () => {
+        mockElectronAPI.s3.listObjects.mockImplementation(async () => page(undefined, 'only.txt'));
+        const { container } = render(
+          <FileList {...createDefaultProps({ currentProfile: 'test-profile', selectedBucket: 'my-bucket' })} />,
+        );
+        await screen.findByText('only.txt');
+        const wrapper = container.querySelector('.file-list-table-wrapper') as HTMLElement;
+        geometry(wrapper, 600);
+        fireEvent.scroll(wrapper);
+        expect(mockElectronAPI.s3.listObjects).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('includes prefixes from subsequent pages during pagination', async () => {
       // First page: returns some prefixes and objects
       mockElectronAPI.s3.listObjects.mockResolvedValueOnce({

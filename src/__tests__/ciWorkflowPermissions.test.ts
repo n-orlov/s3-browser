@@ -120,100 +120,14 @@ function permissionProblems(workflow: Workflow): string[] {
   return problems;
 }
 
-/** A step that renders, copies or pushes badge files: its `run` mentions `badges` (the CLI, the directory or a path). */
-const BADGE_STEP = /badges/;
-
-/** Jobs holding a badge step that a pull_request event can reach (a badge push must be unreachable from one). */
-function badgeReachabilityProblems(workflow: Workflow): string[] {
-  const problems: string[] = [];
-  const pullEvents = triggers(workflow).filter(
-    (e) => e === "pull_request" || e === "pull_request_target",
-  );
-  for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
-    if (!(job.steps ?? []).some((s) => BADGE_STEP.test(s.run ?? ""))) continue;
-    try {
-      for (const event of pullEvents) {
-        if (canRunFor(job.if, event)) {
-          problems.push(
-            `${name}: writes or pushes badge files and is reachable from ${event}`,
-          );
-        }
-      }
-    } catch (e) {
-      problems.push(`${name}: ${(e as Error).message}`);
-    }
-  }
-  return problems;
-}
-
-/** What ci.yml's publish job must do for the badges: render them and restore the previous mutation badge. */
-function publishBadgeProblems(workflow: Workflow): string[] {
-  const steps = workflow.jobs?.publish?.steps;
-  if (!steps) return ["ci.yml has no publish job"];
-  const problems: string[] = [];
-  if (!steps.some((s) => /\bnpm run\b[^\n]*\bbadges\b(?!:)/.test(s.run ?? ""))) {
-    problems.push("publish has no step whose run invokes npm run badges");
-  }
-  const shards = (workflow.jobs?.e2e as { strategy?: { matrix?: { shard?: unknown[] } } } | undefined)?.strategy?.matrix?.shard ?? [];
-  const render = steps.find((s) => /\bnpm run\b[^\n]*\bbadges\b(?!:)/.test(s.run ?? ""));
-  if (render && shards.length > 0) {
-    const run = render.run ?? "";
-    for (const shard of shards) {
-      if (!run.includes(`--e2e e2e-results/e2e-test-results-${String(shard)}/results.json`)) {
-        problems.push(`publish's badge step does not name the e2e shard ${String(shard)} results file explicitly`);
-      }
-    }
-    if (/\bfor\b[^\n]*\bin\b[^\n]*results\.json|\[\s+-[fe]\s/.test(run)) {
-      problems.push("publish's badge step selects e2e results by existence, so a missing shard is silently dropped");
-    }
-  }
-  if (
-    !steps.some((s) =>
-      /\bgit (?:show|checkout)\b[^\n]*:badges\/mutation\.json/.test(s.run ?? "") ||
-      (/\bgit (?:show|checkout)\b/.test(s.run ?? "") &&
-        /\bgh-pages\b/.test(s.run ?? "") &&
-        /badges\/mutation\.json/.test(s.run ?? "")),
-    )
-  ) {
-    problems.push(
-      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
-    );
-  }
-  return problems;
-}
-
-/**
- * The lint badge shows ESLint's own count, so `quality` must write `eslint --format json` to reports/eslint.json and
- * upload it as `eslint-result`, and `publish` must download that artifact into `reports/` for the renderer.
- */
-function eslintResultProblems(workflow: Workflow): string[] {
-  const problems: string[] = [];
-  const quality = workflow.jobs?.quality?.steps ?? [];
-  const publish = workflow.jobs?.publish?.steps ?? [];
-  const isArtifact = (step: Step, action: string): boolean =>
-    (step.uses ?? "").startsWith(`actions/${action}-artifact@`) && step.with?.name === "eslint-result";
-  if (!quality.some((s) => /\beslint\b/.test(s.run ?? "") && /--format[ =]json/.test(s.run ?? "") && /reports\/eslint\.json/.test(s.run ?? ""))) {
-    problems.push("quality has no step writing eslint --format json to reports/eslint.json");
-  }
-  if (!quality.some((s) => isArtifact(s, "upload") && s.with?.path === "reports/eslint.json")) {
-    problems.push("quality does not upload reports/eslint.json as artifact eslint-result");
-  }
-  if (!publish.some((s) => isArtifact(s, "download") && s.with?.path === "reports")) {
-    problems.push("publish does not download artifact eslint-result into reports/");
-  }
-  return problems;
-}
-
 const WORKFLOWS_DIR = path.resolve(__dirname, "../../.github/workflows");
 const WORKFLOWS = readdirSync(WORKFLOWS_DIR)
   .filter((f) => /\.ya?ml$/.test(f))
   .sort();
 
 describe("workflow listing", () => {
-  it("covers every workflow file in .github/workflows, including ci, release and codeql", () => {
-    expect(WORKFLOWS).toEqual(
-      expect.arrayContaining(["ci.yml", "release.yml", "codeql.yml"]),
-    );
+  it("holds exactly codeql.yml and macos-build.yml", () => {
+    expect(WORKFLOWS).toEqual(["codeql.yml", "macos-build.yml"]);
   });
 });
 
@@ -226,125 +140,26 @@ describe.each(WORKFLOWS)("%s workflow permissions", (file) => {
   });
 });
 
-describe.each(WORKFLOWS)("%s badge steps", (file) => {
-  it("keeps every step that writes or pushes badge files in a job a pull_request cannot reach", () => {
-    const workflow = parse(
-      readFileSync(path.join(WORKFLOWS_DIR, file), "utf8"),
-    ) as Workflow;
-    expect(badgeReachabilityProblems(workflow)).toEqual([]);
+describe("macos-build.yml permissions", () => {
+  const workflow = parse(readFileSync(path.join(WORKFLOWS_DIR, "macos-build.yml"), "utf8")) as Workflow;
+
+  it("is dispatch-only, so no job is reachable from a pull request", () => {
+    expect(triggers(workflow)).toEqual(["workflow_dispatch"]);
+  });
+
+  it("holds its one write permission on the build-macos job, not at top level", () => {
+    expect(holdsWrite(workflow.permissions)).toBe(false);
+    expect(Object.entries(workflow.jobs ?? {}).filter(([, job]) => holdsWrite(job.permissions)).map(([name]) => name)).toEqual(["build-macos"]);
   });
 });
 
-describe("ci.yml publish job badges", () => {
-  const ciText = readFileSync(path.join(WORKFLOWS_DIR, "ci.yml"), "utf8");
-  const ci = (): Workflow => parse(ciText) as Workflow;
+describe("codeql.yml permissions", () => {
+  const workflow = parse(readFileSync(path.join(WORKFLOWS_DIR, "codeql.yml"), "utf8")) as Workflow;
 
-  it("renders the badges with npm run badges and restores badges/mutation.json from the previous gh-pages commit", () => {
-    expect(publishBadgeProblems(ci())).toEqual([]);
-    expect(badgeReachabilityProblems(ci())).toEqual([]);
-    expect(Object.keys(ci().jobs ?? {})).toContain("publish");
-  });
-
-  it("names every e2e shard's results file explicitly, so a missing shard makes the e2e badge n/a", () => {
-    expect(publishBadgeProblems(ci())).toEqual([]);
-    const shardsOf = (shards: unknown[], run: string): Workflow => {
-      const wf = ci();
-      wf.jobs!.e2e = { ...(wf.jobs!.e2e as object), strategy: { matrix: { shard: shards } } } as never;
-      wf.jobs!.publish.steps = [{ run }, { run: "git show FETCH_HEAD:badges/mutation.json" }];
-      return wf;
-    };
-    const both = "npm run --silent badges -- --out b --e2e e2e-results/e2e-test-results-1/results.json --e2e e2e-results/e2e-test-results-2/results.json";
-    expect(publishBadgeProblems(shardsOf([1, 2], both))).toEqual([]);
-    // shard 2 omitted from the command
-    expect(publishBadgeProblems(shardsOf([1, 2], both.replace(" --e2e e2e-results/e2e-test-results-2/results.json", "")))).toEqual([
-      "publish's badge step does not name the e2e shard 2 results file explicitly",
-    ]);
-    // a third shard added to the matrix must be named too
-    expect(publishBadgeProblems(shardsOf([1, 2, 3], both))).toEqual([
-      "publish's badge step does not name the e2e shard 3 results file explicitly",
-    ]);
-    // the old existence-filtering loop
-    const loop = 'for results in e2e-results/*/results.json; do if [ -f "$results" ]; then a+=(--e2e "$results"); fi; done; npm run badges -- --out b "${a[@]}"';
-    expect(publishBadgeProblems(shardsOf([1, 2], loop)).length).toBeGreaterThan(0);
-  });
-
-  it("feeds the lint badge from an ESLint JSON result: quality writes and uploads it, publish downloads it", () => {
-    expect(eslintResultProblems(ci())).toEqual([]);
-    const text = ciText.slice(ciText.indexOf("  publish:"));
-    expect(text).not.toMatch(/maxWarnings/);
-  });
-
-  it("flags a ci.yml copy without the ESLint JSON step, its upload or its download", () => {
-    const noRun = ci();
-    noRun.jobs!.quality.steps = noRun.jobs!.quality.steps!.filter((s) => !/--format json/.test(s.run ?? ""));
-    expect(eslintResultProblems(noRun)).toEqual(["quality has no step writing eslint --format json to reports/eslint.json"]);
-    const noUpload = ci();
-    noUpload.jobs!.quality.steps = noUpload.jobs!.quality.steps!.filter((s) => s.with?.name !== "eslint-result");
-    expect(eslintResultProblems(noUpload)).toEqual(["quality does not upload reports/eslint.json as artifact eslint-result"]);
-    const noDownload = ci();
-    noDownload.jobs!.publish.steps = noDownload.jobs!.publish.steps!.filter((s) => s.with?.name !== "eslint-result");
-    expect(eslintResultProblems(noDownload)).toEqual(["publish does not download artifact eslint-result into reports/"]);
-  });
-
-  it("flags a ci.yml copy whose publish job lacks the badge step", () => {
-    const wf = ci();
-    wf.jobs!.publish.steps = wf.jobs!.publish.steps!.filter(
-      (s) => !/npm run[^\n]*badges/.test(s.run ?? ""),
-    );
-    expect(publishBadgeProblems(wf)).toEqual([
-      "publish has no step whose run invokes npm run badges",
-    ]);
-  });
-
-  it("flags a ci.yml copy whose publish job lacks the restore step", () => {
-    const wf = ci();
-    wf.jobs!.publish.steps = wf.jobs!.publish.steps!.filter(
-      (s) => !/git show/.test(s.run ?? ""),
-    );
-    expect(publishBadgeProblems(wf)).toEqual([
-      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
-    ]);
-  });
-
-  it("flags a restore that reads a different file than badges/mutation.json", () => {
-    const wf = ci();
-    for (const step of wf.jobs!.publish.steps!) {
-      if (step.run) step.run = step.run.replaceAll("mutation.json", "other.json");
-    }
-    expect(publishBadgeProblems(wf)).toContain(
-      "publish has no step restoring badges/mutation.json from the previous gh-pages commit",
-    );
-  });
-
-  it("flags a badge push in a job a pull_request can reach", () => {
-    const wf = ci();
-    delete wf.jobs!.publish.if;
-    expect(badgeReachabilityProblems(wf)).toEqual([
-      "publish: writes or pushes badge files and is reachable from pull_request",
-    ]);
-    const other: Workflow = {
-      on: ["push", "pull_request"],
-      jobs: {
-        badge: {
-          if: "github.event_name != 'push'",
-          steps: [{ run: "npm run badges -- --out b && git push origin gh-pages" }],
-        },
-      },
-    };
-    expect(badgeReachabilityProblems(other)).toHaveLength(1);
-  });
-
-  it("accepts a badge push in a push-only job", () => {
-    const other: Workflow = {
-      on: ["push", "pull_request"],
-      jobs: {
-        badge: {
-          if: "github.event_name == 'push'",
-          steps: [{ run: "git push origin gh-pages # badges/" }],
-        },
-      },
-    };
-    expect(badgeReachabilityProblems(other)).toEqual([]);
+  it("keeps the one job with a write permission away from pull_request", () => {
+    const writers = Object.entries(workflow.jobs ?? {}).filter(([, job]) => holdsWrite(job.permissions));
+    expect(writers.length).toBeGreaterThan(0);
+    for (const [, job] of writers) expect(canRunFor(job.if, "pull_request")).toBe(false);
   });
 });
 

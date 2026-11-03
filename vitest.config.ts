@@ -12,6 +12,8 @@ export default defineConfig({
       'default',
       ['allure-vitest/reporter', { resultsDir: 'allure-results-unit' }],
       ['junit', { outputFile: 'junit/junit.xml' }],
+      // Read by ci/mark-flaky.mjs, which compares the reports of repeated runs. Retries stay 0.
+      ['json', { outputFile: 'junit/vitest-results.json' }],
     ],
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     coverage: {
@@ -30,10 +32,10 @@ export default defineConfig({
         'src/preload/index.ts',
       ],
       thresholds: {
-        lines: 84,
-        functions: 83,
-        branches: 74,
-        statements: 83,
+        lines: 92,
+        functions: 89,
+        branches: 83,
+        statements: 90,
       },
     },
   },

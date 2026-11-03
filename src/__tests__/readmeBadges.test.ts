@@ -3,12 +3,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BADGE_NAMES } from "../../scripts/badges/badges";
+import { JENKINS_BADGE_IDS } from "../../scripts/badges/jenkinsBadges";
 import {
   BLOCK_END,
   BLOCK_START,
   WORKFLOW_BADGES,
-  metricJsonUrl,
+  jenkinsBadgeUrl,
   readmeBadgeBlock,
   replaceBadgeBlock,
 } from "../../scripts/badges/readmeBlock";
@@ -38,8 +38,8 @@ describe("README badge block", () => {
     expect(readme.split("\n")[0]).toBe("# S3 Browser");
   });
 
-  it("has a workflow badge (branch=master, linking to its workflow page) for ci, codeql, mutation and e2e-soak", () => {
-    expect(WORKFLOW_BADGES.map((w) => w.file)).toEqual(["ci.yml", "codeql.yml", "mutation.yml", "e2e-soak.yml"]);
+  it("has a CodeQL workflow badge (branch=master, linking to its workflow page) whose file exists", () => {
+    expect(WORKFLOW_BADGES.map((w) => w.file)).toEqual(["codeql.yml"]);
     const block = blockOf(readme);
     const badges = [...block.matchAll(/\]\(https:\/\/github\.com\/n-orlov\/s3-browser\/actions\/workflows\/([\w.-]+)\/badge\.svg\?branch=master\)\]\(([^)]+)\)/g)];
     expect(badges.map((m) => m[1])).toEqual(WORKFLOW_BADGES.map((w) => w.file));
@@ -49,35 +49,53 @@ describe("README badge block", () => {
     }
   });
 
-  it("has an endpoint badge for each of the 10 metric files the renderer emits, and no other", () => {
-    const urls = [...blockOf(readme).matchAll(/img\.shields\.io\/endpoint\?url=([^)]+)\)/g)].map((m) =>
-      decodeURIComponent(m[1]),
-    );
-    const names = urls.map((url) => {
-      const found = /^https:\/\/n-orlov\.github\.io\/s3-browser\/badges\/([\w-]+)\.json$/.exec(url);
-      expect(found, url).not.toBeNull();
-      return found![1];
-    });
-    expect(names).toHaveLength(10);
-    for (const name of names) expect(BADGE_NAMES as readonly string[], name).toContain(name);
-    expect([...names].sort()).toEqual([...BADGE_NAMES].sort());
-    expect(urls).toEqual(BADGE_NAMES.map(metricJsonUrl));
+  it("has the five Jenkins badges build, tests, coverage, quality and mutation, served from jenkins-static for ci/master", () => {
+    const ids = ["build", "tests", "coverage", "quality", "mutation"];
+    expect([...JENKINS_BADGE_IDS]).toEqual(ids);
+    const urls = [...blockOf(readme).matchAll(/!\[[^\]]*\]\((https:\/\/int21h\.mooo\.com\/[^)]+)\)/g)].map((m) => m[1]);
+    expect(urls).toEqual(ids.map((id) => `https://int21h.mooo.com/jenkins-static/s3-browser/ci/master/${id}.svg`));
+    expect(urls).toEqual(ids.map(jenkinsBadgeUrl));
+    const links = [...blockOf(readme).matchAll(/\]\(https:\/\/int21h\.mooo\.com\/[^)]+\)\]\(([^)]+)\)/g)].map((m) => m[1]);
+    expect(links).toEqual(ids.map(() => "https://github.com/n-orlov/s3-browser/commits/master"));
   });
 
-  it("has the license, Electron and Node static badges and an Allure report link badge", () => {
+  it("has no shields endpoint badge on the old GitHub Pages metric files", () => {
+    expect(blockOf(readme)).not.toContain("img.shields.io/endpoint");
+    expect(blockOf(readme)).not.toContain("n-orlov.github.io/s3-browser/badges");
+  });
+
+  it("has the license, Electron and Node static badges and no Allure report badge (the report lives on Jenkins, not on GitHub Pages)", () => {
     const block = blockOf(readme);
     expect(block).toContain("img.shields.io/badge/license-Apache--2.0-blue");
     const images = [...block.matchAll(/!\[[^\]]*\]\((https:[^)]+)\)/g)].map((m) => m[1]);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/electron-\d+-blue$/.test(url))).toHaveLength(1);
     expect(images.filter((url) => /^https:\/\/img\.shields\.io\/badge\/node-%3E%3D\d+-blue$/.test(url))).toHaveLength(1);
-    expect(block).toContain("[![Allure report](https://img.shields.io/badge/Allure-report-blue)](https://n-orlov.github.io/s3-browser/)");
+    expect(block).not.toContain("Allure");
+  });
+});
+
+describe("README CI and release text", () => {
+  it("links nothing on n-orlov.github.io and names none of the four deleted workflows or gh-pages", () => {
+    expect(readme).not.toContain("n-orlov.github.io");
+    // Assembled from parts so this file does not itself name the workflows deletedWorkflowRefs forbids.
+    for (const name of ["ci", "release", "e2e-soak", "mutation"].map((stem) => [stem, "yml"].join("."))) {
+      expect(readme, name).not.toContain(name);
+    }
+    expect(readme).not.toContain("gh-pages");
+  });
+
+  it("names the Jenkins jobs, the jenkins/gate check and the macOS dispatch workflow", () => {
+    for (const name of ["s3-browser/ci", "s3-browser/release", "jenkins/gate", "macos-build.yml"]) {
+      expect(readme, name).toContain(name);
+    }
+    expect(existsSync(path.join(root, ".github", "workflows", "macos-build.yml"))).toBe(true);
   });
 });
 
 describe("README badge drift check", () => {
   it("fails for a README whose block was edited by hand", () => {
     expect(isInSync(readme.replace("badge.svg?branch=master", "badge.svg?branch=main"))).toBe(false);
-    expect(isInSync(readme.replace("badges/crap.json", "badges/crapp.json").replace("badges%2Fcrap.json", "badges%2Fcrapp.json"))).toBe(false);
+    expect(isInSync(readme.replace("/ci/master/coverage.svg", "/ci/main/coverage.svg"))).toBe(false);
     expect(isInSync(readme.replace(/\[!\[Node\][^\n]*\n/, ""))).toBe(false);
   });
 

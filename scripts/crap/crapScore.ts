@@ -1,7 +1,7 @@
 // Pure CRAP (Change Risk Anti-Patterns) scoring. No I/O: the CLI feeds it
 // per-function complexity and coverage and acts on the verdict.
 
-export const DEFAULT_CRAP_MAX = 30;
+export const DEFAULT_CRAP_MAX = 20;
 
 /** Scores are compared with this slack so a baseline written from a rounded score still passes. */
 const SCORE_EPSILON = 1e-6;

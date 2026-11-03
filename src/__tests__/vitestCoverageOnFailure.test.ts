@@ -2,56 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { execFile } from "child_process";
 import path from "path";
-import { parse } from "yaml";
 import vitestConfig from "../../vitest.config";
 
-type Step = { name?: string; if?: string; run?: string };
 const root = path.resolve(__dirname, "../..");
-const ci = parse(readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8"));
-
-/** True when a step's condition lets it run after an earlier step of the job failed. */
-function runsAfterFailure(step: Step | undefined): boolean {
-  const condition = (step?.if ?? "").replace(/\$\{\{|\}\}/g, "").trim();
-  return condition === "always()" || condition === "!cancelled()";
-}
-
-/** The quality-job steps whose output the failure-path summary and uploads are built from. */
-const EVIDENCE_STEPS = ["npm run test:coverage", "npm run crap"];
-
-function evidenceStepProblems(workflow: unknown): string[] {
-  const steps = (workflow as { jobs?: { quality?: { steps?: Step[] } } })?.jobs?.quality?.steps ?? [];
-  return EVIDENCE_STEPS.flatMap((command) => {
-    const step = steps.find((s) => s.run?.trim() === command);
-    if (!step) return [`quality has no step running ${command}`];
-    return runsAfterFailure(step) ? [] : [`${command} must run after an earlier red step, got if: ${step.if}`];
-  });
-}
-
-describe("ci.yml quality evidence steps on the failure path", () => {
-  it("runs the unit tests and the CRAP score even when an earlier step failed", () => {
-    expect(evidenceStepProblems(ci)).toEqual([]);
-  });
-
-  it("flags a tests or CRAP step that only runs after success (negative cases)", () => {
-    const wf = (conditions: (string | undefined)[]) => ({
-      jobs: { quality: { steps: EVIDENCE_STEPS.map((run, i) => ({ run, if: conditions[i] })) } },
-    });
-    expect(evidenceStepProblems(wf(["${{ !cancelled() }}", "always()"]))).toEqual([]);
-    expect(evidenceStepProblems(wf([undefined, "always()"]))).toHaveLength(1);
-    expect(evidenceStepProblems(wf(["always()", undefined]))).toHaveLength(1);
-    expect(evidenceStepProblems(wf(["success()", "failure()"]))).toHaveLength(2);
-    expect(evidenceStepProblems({ jobs: { quality: { steps: [] } } })).toHaveLength(2);
-  });
-
-  it("keeps typecheck and lint before the unit tests, so a red gate still reaches them", () => {
-    const steps = (ci as { jobs: { quality: { steps: Step[] } } }).jobs.quality.steps;
-    const index = (command: string) => steps.findIndex((s) => s.run?.trim() === command);
-    expect(index("npm run typecheck")).toBeGreaterThan(-1);
-    expect(index("npm run lint")).toBeGreaterThan(index("npm run typecheck"));
-    expect(index("npm run test:coverage")).toBeGreaterThan(index("npm run lint"));
-    expect(index("npm run crap")).toBeGreaterThan(index("npm run test:coverage"));
-  });
-});
 
 describe("vitest coverage on a failing run", () => {
   it("is configured to report coverage on failure", () => {
