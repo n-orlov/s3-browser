@@ -1,4 +1,4 @@
-// `npm run badges:ci -- <out file>`: reads the report files of the build (the same ones `render.ts` reads, with the
+// `npm run badges:ci -- <out file>`: reads the report files of the build (with the
 // e2e results of every `e2e-<i>/test-results/results.json` shard) and writes `<id>=<status>|<color>` lines for the
 // Jenkins embeddable badges tests, coverage, quality and mutation. A missing report reads as `not run`; never fails
 // for missing input. Run from the repository root.
@@ -41,7 +41,6 @@ try {
     unit: load('junit/junit.xml', parseJunitTotals),
     e2e: sumE2e(),
     mutation: load('reports/mutation/mutation.json', (text) => mutationScoreOf(JSON.parse(text) as Parameters<typeof mutationScoreOf>[0])),
-    audit: null,
   });
   mkdirSync(path.dirname(path.resolve(root, out)), { recursive: true });
   writeFileSync(path.resolve(root, out), renderBadgeLines(badges));

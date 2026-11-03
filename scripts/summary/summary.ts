@@ -1,9 +1,7 @@
 // `node scripts/summary/summary.ts html [dir]` writes the CI summary page (`<dir>/index.html`, default
 // `ci-summary`) from the unit, coverage, CRAP and flaky-count files and every `e2e-<i>/test-results/results.json`.
-// `node scripts/summary/summary.ts quality` or `... e2e <i>/<n>`: reads the report files of the job that
-// just ran and appends the markdown from jobSummary.ts to $GITHUB_STEP_SUMMARY (stdout when unset).
-// Always exits 0 when the reports are missing: it runs in an `if: always()` step after a failed gate.
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+// Always exits 0 when the reports are missing: it runs in a post step after a failed gate.
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { readCoverageThresholds } from '../ratchet/ratchetCheck.ts';
 import {
@@ -11,8 +9,6 @@ import {
   parseCrapSummary,
   parseJunitTotals,
   parsePlaywrightCounts,
-  renderE2eSummary,
-  renderQualitySummary,
 } from './jobSummary.ts';
 import { parseFlakyCount, renderSummaryPage } from './summaryPage.ts';
 
@@ -30,7 +26,7 @@ function load<T>(file: string, parse: (text: string) => T): T | null {
   }
 }
 
-/** Quality-job inputs shared by the markdown summary and the HTML page. */
+/** Quality-job inputs of the HTML page. */
 function readQuality() {
   const thresholds = load('vitest.config.ts', readCoverageThresholds);
   if (!thresholds) throw new Error('vitest.config.ts thresholds are unreadable');
@@ -54,25 +50,12 @@ function writePage(dir: string): void {
   writeFileSync(path.join(root, dir, 'index.html'), html);
 }
 
-function render(kind: string | undefined, shard: string | undefined): string {
-  if (kind === 'quality') {
-    return renderQualitySummary(readQuality());
-  }
-  if (kind === 'e2e' && shard) {
-    return renderE2eSummary({ shard, counts: load('test-results/results.json', parsePlaywrightCounts) });
-  }
-  throw new Error('usage: summary.ts quality | summary.ts e2e <shard> | summary.ts html [dir]');
-}
-
 try {
   if (process.argv[2] === 'html') {
     writePage(process.argv[3] ?? 'ci-summary');
     process.exit(0);
   }
-  const markdown = render(process.argv[2], process.argv[3]);
-  const target = process.env.GITHUB_STEP_SUMMARY;
-  if (target) appendFileSync(target, markdown);
-  else process.stdout.write(markdown);
+  throw new Error('usage: summary.ts html [dir]');
 } catch (error) {
   console.error(`summary: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(2);

@@ -16,9 +16,8 @@ const green: BadgeInput = {
   unit: { total: 110, failed: 0, skipped: 10 },
   e2e: { passed: 50, failed: 0, skipped: 0, errors: 0 },
   mutation: 91.5,
-  audit: null,
 };
-const empty: BadgeInput = { ratchet, lint: null, coverage: null, crap: null, unit: null, e2e: null, mutation: null, audit: null };
+const empty: BadgeInput = { ratchet, lint: null, coverage: null, crap: null, unit: null, e2e: null, mutation: null };
 
 describe("jenkinsBadges", () => {
   it("is green for a clean build, summing the passed unit and e2e tests", () => {

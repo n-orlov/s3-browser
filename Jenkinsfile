@@ -32,9 +32,8 @@ def isNightly() {
   return currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause').size() > 0 || params.EXTENDED == true
 }
 
-// Paths that can change the packaged app, as shell `case` patterns (`*` also matches `/`). This is ci.yml's `changes`
-// list (RELEASE_PATHS), with the release definition files in place of .github/workflows/release.yml. A change to any of
-// them makes the Release dry-run stage run; `master` runs it unconditionally.
+// Paths that can change the packaged app, as shell `case` patterns (`*` also matches `/`). The packaging inputs and
+// the release definition files; a change to any of them makes the Release dry-run stage run; `master` runs it unconditionally.
 def releasePaths() {
   return [
     'package.json',
@@ -157,8 +156,7 @@ def e2eShard(int index) {
   }
 }
 
-// One soak shard of three: the e2e suite with every test repeated three times (`--repeat-each=3`, as e2e-soak.yml
-// did), on an arm64 phone of its own under the same per-node lock and node-refusal loop as e2eShard. Retries stay 0,
+// One soak shard of three: the e2e suite with every test repeated three times (`--repeat-each=3`), on an arm64 phone of its own under the same per-node lock and node-refusal loop as e2eShard. Retries stay 0,
 // so a test that fails in even one repeat fails the shard. Whatever the outcome, the
 // shard's results are stashed for the pipeline's post { always }, which runs ci/mark-flaky.mjs over all three shards'
 // JSON reports at once (--shard spreads the repeats of a test over the shards, so one shard's report cannot show a

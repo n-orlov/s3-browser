@@ -30,10 +30,8 @@ const WORKFLOWS = readdirSync(WORKFLOWS_DIR)
   .sort();
 
 describe("workflow listing", () => {
-  it("covers every workflow file in .github/workflows, including ci, release and codeql", () => {
-    expect(WORKFLOWS).toEqual(
-      expect.arrayContaining(["ci.yml", "release.yml", "codeql.yml"]),
-    );
+  it("covers every workflow file in .github/workflows: codeql.yml and macos-build.yml", () => {
+    expect(WORKFLOWS).toEqual(["codeql.yml", "macos-build.yml"]);
   });
 });
 

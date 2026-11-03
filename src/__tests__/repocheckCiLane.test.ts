@@ -180,7 +180,7 @@ function e2eProblems(jenkinsfile: string): string[] {
   return problems;
 }
 
-/** The packaging paths ci.yml's `changes` job lists, with the release definition files in place of release.yml. */
+/** The paths whose change makes the Release dry-run stage run: the packaging inputs and the release definition files. */
 const RELEASE_PATHS = [
   "package.json",
   "build/**",
@@ -224,7 +224,7 @@ function releaseProblems(jenkinsfile: string): string[] {
   for (const p of RELEASE_PATHS) {
     if (!listed.includes(p)) problems.push(`the packaging path list lacks ${p}`);
   }
-  if (listed.includes(".github/workflows/release.yml")) problems.push("the packaging path list still names release.yml");
+  if (listed.some((p) => p.startsWith(".github/workflows/"))) problems.push("the packaging path list names a GitHub workflow file");
 
   const quality = blockOf(stages, /\bstage\('Quality'\)\s*\{/);
   if (!/env\.PACKAGING_CHANGED = packagingChanged\(\)/.test(quality)) problems.push("Quality does not compute PACKAGING_CHANGED from the path list");
@@ -369,6 +369,7 @@ const RELEASE_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noSmoke (without the smoke call)": without(/ {8}sh 'S3B_SMOKE_DOCKER_ARGS[^\n]*\n/, ""),
   "Jenkinsfile.wrongLabel (Release dry-run on arm64)": without("agent { label 'amd64 && docker && s3-browser' }", "agent { label 'arm64 && docker && s3-browser' }"),
   "Jenkinsfile.noPackageJson (path list without package.json)": without("    'package.json',\n", ""),
+  "Jenkinsfile.workflowPath (path list names a GitHub workflow)": without("    'package.json',\n", "    'package.json',\n    '.github/workflows/macos-build.yml',\n"),
 };
 
 const REPORT_FIXTURES: Record<string, string> = {
@@ -569,14 +570,8 @@ describe("the Jenkinsfile runs the release dry run on the amd64 agent (repocheck
     expect(steps.indexOf("scripts/smoke-appimage.sh")).toBeGreaterThan(steps.indexOf("electron-builder"));
   });
 
-  it("lists ci.yml's packaging paths with the release definition files in place of release.yml", () => {
-    const ci = readFileSync(path.join(__dirname, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
-    const block = /RELEASE_PATHS: \|\n((?: {12}\S.*\n)+)/.exec(ci)?.[1] ?? "";
-    const ciPaths = block.split("\n").map((l) => l.trim()).filter(Boolean);
-    expect(ciPaths.length).toBeGreaterThan(0);
-    const expected = ciPaths.filter((p) => p !== ".github/workflows/release.yml");
-    for (const p of expected) expect(RELEASE_PATHS).toContain(p);
-    expect(RELEASE_PATHS).toEqual(expect.arrayContaining(["Jenkinsfile.release", "ci/release-build.sh", "ci/release-stage.sh"]));
+  it("lists the packaging inputs and the release definition files, in this order", () => {
+    expect(RELEASE_PATHS).toEqual(expect.arrayContaining(["package.json", "Jenkinsfile.release", "ci/release-build.sh", "ci/release-stage.sh"]));
     const listed = [...blockOf(codeOf(real), /^def releasePaths\(\)\s*\{/m).matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(listed).toEqual(RELEASE_PATHS);
   });
@@ -586,12 +581,13 @@ describe("the Jenkinsfile runs the release dry run on the amd64 agent (repocheck
   });
 
   it("names the broken property in each red release fixture", () => {
-    const [x64, master, smoke, label, paths] = Object.values(RELEASE_FIXTURES).map((f) => releaseProblems(f).join("; "));
+    const [x64, master, smoke, label, paths, workflow] = Object.values(RELEASE_FIXTURES).map((f) => releaseProblems(f).join("; "));
     expect(x64).toContain("--x64");
     expect(master).toContain("branch 'master'");
     expect(smoke).toContain("scripts/smoke-appimage.sh");
     expect(label).toContain("label is arm64");
     expect(paths).toContain("lacks package.json");
+    expect(workflow).toContain("names a GitHub workflow file");
   });
 });
 

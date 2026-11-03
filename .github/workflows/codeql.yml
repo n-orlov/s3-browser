@@ -4,7 +4,7 @@ name: CodeQL
 #   * `push` to master and a weekly `schedule` analyse and upload to code scanning (job `analyze`).
 #   * `pull_request` analyses the PR head (job `analyze-pr`) but never uploads (`upload: never`) and holds no write
 #     permission, so code reachable from a pull request never runs next to `security-events: write`.
-#     Like ci.yml it runs only for same-repo PRs opened by the owner, and not for a draft (`ready_for_review` starts it).
+#     It runs only for same-repo PRs opened by the owner, and not for a draft (`ready_for_review` starts it).
 # Needs the repository's CodeQL "default setup" to stay not-configured; an advanced workflow conflicts with it.
 
 on:

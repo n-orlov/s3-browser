@@ -89,7 +89,7 @@ describe("CLAUDE.md Working practice section", () => {
   });
 
   it("reports a problem for a fixture that prescribes a workflow_dispatch as the final check", () => {
-    const dispatching = claudeMd.replace(/wait for the `s3-browser\/ci\/master` Jenkins build/, "run `gh workflow run ci.yml --ref master` (`workflow_dispatch`) and wait for `s3-browser/ci/master`");
+    const dispatching = claudeMd.replace(/wait for the `s3-browser\/ci\/master` Jenkins build/, "run `gh workflow run ci --ref master` (`workflow_dispatch`) and wait for `s3-browser/ci/master`");
     expect(dispatching).not.toBe(claudeMd);
     expect(workingPracticeProblems(dispatching, context)).toEqual(["the Working practice section prescribes a workflow_dispatch for the final check"]);
   });
@@ -148,7 +148,7 @@ function specWorkingPracticeProblems(specText: string, context: string | undefin
   if (!jenkins) return ["SPEC.md has no `Working practice (Jenkins)` bullet"];
   if (!jenkins.includes(`\`${context}\``)) problems.push(`SPEC.md's Working practice does not name the required check \`${context}\``);
   if (!jenkins.includes(`\`${POST_MERGE_CHECK}\``)) problems.push(`SPEC.md's Working practice does not name \`${POST_MERGE_CHECK}\` as the post-merge check`);
-  for (const b of bullets.filter((l) => !l.startsWith("- **Working practice (superseded).**"))) {
+  for (const b of bullets.filter((l) => l !== jenkins)) {
     if (/required check is `gate`/.test(b)) problems.push("a SPEC.md Working practice bullet still makes `gate` the required check");
     if (/final `workflow_dispatch`/.test(b)) problems.push("a SPEC.md Working practice bullet still prescribes a final workflow_dispatch");
   }
@@ -156,16 +156,12 @@ function specWorkingPracticeProblems(specText: string, context: string | undefin
 }
 
 describe("SPEC.md Working practice matches the Jenkinsfile", () => {
-  it("names the context and the post-merge check, with the ci.yml practice marked superseded", () => {
+  it("names the context and the post-merge check, with no other working-practice bullet", () => {
     expect(specWorkingPracticeProblems(spec, context)).toEqual([]);
   });
 
-  it("reports a fixture SPEC.md whose ci.yml working practice is not marked superseded", () => {
-    const stale = spec.replace(
-      /^- \*\*Working practice \(superseded\)\.\*\*.*$/m,
-      "- **Working practice.** One branch per scope of work; the required check is `gate`; the pull request is squash merged; then one final `workflow_dispatch` of `ci.yml` on the merged `master` sha.",
-    );
-    expect(stale).not.toBe(spec);
+  it("reports a fixture SPEC.md that still carries a GitHub-workflow working practice bullet", () => {
+    const stale = `${spec}\n- **Working practice.** One branch per scope of work; the required check is \`gate\`; the pull request is squash merged; then one final \`workflow_dispatch\` of the CI workflow on the merged \`master\` sha.\n`;
     expect(specWorkingPracticeProblems(stale, context)).toEqual([
       "a SPEC.md Working practice bullet still makes `gate` the required check",
       "a SPEC.md Working practice bullet still prescribes a final workflow_dispatch",
