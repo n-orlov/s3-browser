@@ -22,19 +22,40 @@ const sentencesOf = (text: string): string[] =>
   text.split(/\n|(?<=[.;:])\s+(?=[A-Z`*])/).map((s) => s.trim()).filter(Boolean);
 
 // A sentence that says a workflow is still around ("still" alone is too common: "the README still links ...").
-// Used for the unnamed case ("the GitHub Actions workflow remains ...") and to stop a deletion word elsewhere in the
-// sentence from excusing a claim; a NAMED workflow is checked whatever verb the sentence uses (retainedWorkflowClaims).
+// Used only for the unnamed case ("the GitHub Actions workflow remains ..."): a NAMED workflow is checked whatever
+// verb the sentence uses (retainedWorkflowClaims).
 const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|continues?|still (exists?|runs?|present|in place|there|used|scheduled|active)|until (the |all )?(\w+ )?workflows? (are|is) (retired|deleted|removed))\b/i;
-// A sentence that says a workflow left. It exempts a sentence only when the sentence makes no retention claim too.
-const LEAVING = /\b(deleted|retired|removed|gone|no longer|replaced|moved|migrated|superseded|formerly|previously|never from)\b/i;
+
+// A mention of a workflow the tree does not have is excused only when the leaving statement is about THAT mention:
+// a leaving word directly before it ("moved from the GitHub `X` workflow", "the retired `X` workflow", "previously
+// ran in the `X` workflow") or a leaving predicate directly after it ("`X` workflow was retired", "`a.yml` and
+// `b.yml` were deleted"). A leaving word elsewhere in the sentence ("... alongside the migrated Jenkins checks")
+// says nothing about the named workflow and excuses nothing.
+const FILLER_BEFORE = String.raw`(?:(?:ran|run|lived|was|were|in|on|by|of|the|a|an|its|their|GitHub|Actions|old|former|workflows?|files?)\s+|[\`(,]\s*|[\w.-]+\.ya?ml\b\s*)*`;
+const LEFT_BEFORE = new RegExp(String.raw`\b(?:from|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
+const LEFT_AFTER = /^(?:[\s`(),]|\band\b|\bor\b|[\w.-]+\.ya?ml\b|`[^`]+`|\b(?:files?|workflows?|GitHub|Actions)\b)*(?:(?:was|were|is|are|has|have|had|been|now|since|then|later|all|both|each|fully|also)\s+)*(?:deleted|retired|removed|gone|replaced|superseded|migrated|moved|ported|dropped|no longer exists?)\b/i;
+
+/** A mention of a workflow (by title or file name) at [start, end) of its sentence. */
+interface Mention { name: string; start: number; end: number }
 
 /** Workflow titles a sentence refers to: "GitHub `X` workflow", "the `X` workflow", "GitHub Actions X workflow", "workflow `X`". */
-function titlesIn(sentence: string): string[] {
-  const out: string[] = [];
-  for (const m of sentence.matchAll(/`([^`]+)`\s+(?:GitHub\s+)?(?:Actions\s+)?workflow\b/gi)) out.push(m[1]);
-  for (const m of sentence.matchAll(/\b(?:GitHub|Actions)\s+(?!Actions\b|workflows?\b)([A-Za-z0-9][\w-]*(?:\s+[A-Z0-9][\w-]*)*)\s+workflow\b/g)) out.push(m[1]);
-  for (const m of sentence.matchAll(/\bworkflow\s+`([^`]+)`/gi)) out.push(m[1]);
-  return out.map((t) => t.trim().toLowerCase()).filter((t) => !/^\.?github\/|\.ya?ml$/.test(t));
+function titleMentions(sentence: string): Mention[] {
+  const out: Mention[] = [];
+  const add = (m: RegExpMatchArray): void => { out.push({ name: m[1].trim().toLowerCase(), start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }); };
+  for (const m of sentence.matchAll(/`([^`]+)`\s+(?:GitHub\s+)?(?:Actions\s+)?workflow\b/gi)) add(m);
+  for (const m of sentence.matchAll(/\b(?:GitHub|Actions)\s+(?!Actions\b|workflows?\b)([A-Za-z0-9][\w-]*(?:\s+[A-Z0-9][\w-]*)*)\s+workflow\b/g)) add(m);
+  for (const m of sentence.matchAll(/\bworkflow\s+`([^`]+)`/gi)) add(m);
+  return out.filter((t) => !/^\.?github\/|\.ya?ml$/.test(t.name));
+}
+
+/** `*.yml` / `*.yaml` file names a sentence mentions. */
+function fileMentions(sentence: string): Mention[] {
+  return [...sentence.matchAll(/[A-Za-z0-9][\w.-]*\.ya?ml\b/g)].map((m) => ({ name: m[0].toLowerCase(), start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+}
+
+/** True when the sentence says that this mention's workflow left, in words attached to the mention itself. */
+function saysItLeft(sentence: string, m: Mention): boolean {
+  return LEFT_BEFORE.test(sentence.slice(0, m.start)) || LEFT_AFTER.test(sentence.slice(m.end));
 }
 
 /** The workflow names a tree provides: each file's name and stem, plus its `name:` line. */
@@ -51,27 +72,24 @@ function workflowNames(files: Record<string, string>): Set<string> {
 
 /**
  * One problem per claim in `section` that a workflow is retained although it is not in `workflows` (file name ->
- * text of `.github/workflows/`) or, for a `*.yml` named outside that directory, not in `otherFiles`.
+ * text of `.github/workflows/`) or, for a `*.yml` named outside that directory, not in `otherFiles`. Any mention of
+ * an absent workflow counts as such a claim ("the GitHub `Mutation` workflow is retained / runs weekly / stays ..."),
+ * whatever the verb, unless the mention itself is said to have left (saysItLeft).
  */
 function retainedWorkflowClaims(section: string, workflows: Record<string, string>, otherFiles: Set<string>): string[] {
   const have = workflowNames(workflows);
   const problems: string[] = [];
   for (const sentence of sentencesOf(section)) {
-    const retained = RETENTION.test(sentence);
-    const leaving = LEAVING.test(sentence) && !retained;
-    const named = [...sentence.matchAll(/[A-Za-z0-9][\w.-]*\.ya?ml\b/g)].map((m) => m[0]);
-    if (!leaving) {
-      for (const file of named) {
-        if (!have.has(file.toLowerCase()) && !otherFiles.has(file.toLowerCase())) problems.push(`names ${file}, which does not exist: ${sentence.slice(0, 80)}`);
-      }
+    const files = fileMentions(sentence);
+    const titles = titleMentions(sentence);
+    for (const m of files) {
+      if (!have.has(m.name) && !otherFiles.has(m.name) && !saysItLeft(sentence, m)) problems.push(`names ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
     }
-    // A workflow named by its title must be one the tree has, unless the sentence only says it left: "the GitHub
-    // `Mutation` workflow is retained / runs weekly / stays ..." is rejected whatever the verb.
-    if (!leaving) {
-      for (const t of titlesIn(sentence)) if (!have.has(t)) problems.push(`names workflow ${t}, which does not exist: ${sentence.slice(0, 80)}`);
+    for (const m of titles) {
+      if (!have.has(m.name) && !saysItLeft(sentence, m)) problems.push(`names workflow ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
     }
     // A retained workflow with no name at all cannot be checked against the tree, so it is rejected outright.
-    if (retained && named.length === 0 && titlesIn(sentence).length === 0 && /\b(GitHub|Actions)\b[^.`]{0,20}\bworkflows?\b/i.test(sentence)) {
+    if (RETENTION.test(sentence) && files.length === 0 && titles.length === 0 && /\b(GitHub|Actions)\b[^.`]{0,20}\bworkflows?\b/i.test(sentence)) {
       problems.push(`claims a retained workflow without naming it: ${sentence.slice(0, 80)}`);
     }
   }
@@ -121,6 +139,14 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a retired workflow by `workflow X`", "Scheduled mutation testing belongs to workflow `Mutation` on GitHub."],
     ["a retained claim beside a deletion statement", "The soak workflow file was deleted, but the GitHub `Mutation` workflow is retained."],
     ["a retired file said to be preserved", `\`${retiredFile("mutation")}\` is preserved for scheduled mutation testing.`],
+    // The verifier's probe: a leaving word elsewhere in the sentence ("migrated") is about something else, and further
+    // cases of the same rule where a leaving word sits in the sentence but is not attached to the named workflow.
+    ["the verifier's probe: a leaving word about other checks", "The GitHub `Mutation` workflow runs every Monday alongside the migrated Jenkins checks."],
+    ["a leaving word after the claim, about another stage", `\`${retiredFile("mutation")}\` runs weekly next to the replaced lint stage.`],
+    ["a leaving verb before the mention, about other checks", "Nightly checks moved to Jenkins and the GitHub `E2E soak` workflow repeats the suite."],
+    ["a leaving adjective on another job", "The retired Trivy job aside, the GitHub `Release` workflow publishes tagged builds."],
+    ["a deleted file beside a retained one", `The deleted \`${retiredFile("ci")}\` aside, \`${retiredFile("release")}\` still publishes tags.`],
+    ["a past-tense aside that does not say the workflow left", "The `Mutation` workflow, previously weekly, now runs nightly."],
   ])("is rejected: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, NONE)).not.toEqual([]);
   });
@@ -134,6 +160,9 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a present workflow running, by title", "The `macos-build` workflow is dispatched by the Jenkins release job."],
     ["a retired workflow said to have moved", "Mutation testing moved from the GitHub `Mutation` workflow to the Jenkins nightly lane."],
     ["a retired workflow said to be retired", "The GitHub `Mutation` workflow was retired; the Jenkins `Mutation` stage replaces it."],
+    ["a retired workflow said to have run there previously", "Mutation testing previously ran in the GitHub `Mutation` workflow and now runs in the Jenkins nightly lane."],
+    ["a list of retired files said to be deleted", `The \`${retiredFile("ci")}\`, \`${retiredFile("e2e-soak")}\` and \`${retiredFile("release")}\` files were deleted when Jenkins took over.`],
+    ["a retired workflow replaced by a Jenkins stage", "The Jenkins `Mutation` stage replaces the retired GitHub `Mutation` workflow."],
   ])("is accepted: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, new Set(["dependabot.yml"]))).toEqual([]);
   });
