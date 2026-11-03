@@ -33,6 +33,19 @@ case "$method $url" in
     printf '%s' "$body" > "$STUB_DIR/dispatch-body.json"
     python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inputs"]["correlation_id"])' "$STUB_DIR/dispatch-body.json" > "$STUB_DIR/corr"
     echo '{"workflow_run_id": 777}' ;;
+  "GET $STUB_API_ROOT/releases/4242")
+    v=\${STUB_VERSION:-0.20.0}
+    names="S3.Browser-$v.AppImage S3.Browser.Setup.$v.exe S3.Browser.$v.exe S3.Browser-$v.dmg S3.Browser-$v-arm64.dmg sbom.cdx.json"
+    out=; sep=
+    for n in $names; do
+      [ "$n" = "\${STUB_OMIT:-}" ] && continue
+      out="$out$sep{\\"name\\": \\"$n\\", \\"state\\": \\"\${STUB_ASSET_STATE:-uploaded}\\"}"; sep=,
+    done
+    if [ -f "$STUB_DIR/published" ]; then imm=\${STUB_IMMUTABLE_AFTER:-true}; else imm=false; fi
+    echo "{\\"id\\": 4242, \\"assets\\": [$out], \\"immutable\\": $imm}" ;;
+  "PATCH $STUB_API_ROOT/releases/4242") printf '%s' "$body" > "$STUB_DIR/patch-body.json"; touch "$STUB_DIR/published"; echo '{"id": 4242}' ;;
+  "GET $STUB_API_ROOT/git/ref/tags/"*)
+    echo "{\\"object\\": {\\"sha\\": \\"\${STUB_TAG_SHA:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}\\", \\"type\\": \\"commit\\"}}" ;;
   "GET $STUB_API_ROOT/actions/runs/777")
     corr=$(cat "$STUB_DIR/corr")
     st=\${STUB_RUN_STATUS:-completed}
@@ -42,7 +55,7 @@ case "$method $url" in
 esac
 `;
 
-type Run = { status: number; stderr: string; stdout: string; calls: string[]; dispatchBody: string; createBody: string };
+type Run = { status: number; stderr: string; stdout: string; calls: string[]; dispatchBody: string; createBody: string; patchBody: string };
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -97,6 +110,7 @@ function run(script: string, env: Record<string, string> = {}, pkgVersion = "0.2
     calls: read("calls.log").split("\n").filter(Boolean),
     dispatchBody: read("dispatch-body.json"),
     createBody: read("create-body.json"),
+    patchBody: read("patch-body.json"),
   };
 }
 
@@ -156,9 +170,10 @@ describe("ci/release-stage.sh pre-publish steps", () => {
   });
 
   it("marks a -pre version as a prerelease draft", () => {
-    const r = run(REAL, { VERSION: "v0.20.0-rc.1", STUB_API_ROOT: API }, "0.20.0-rc.1");
+    const r = run(REAL, { VERSION: "v0.20.0-rc.1", STUB_API_ROOT: API, STUB_VERSION: "0.20.0-rc.1" }, "0.20.0-rc.1");
     expect(r.status).toBe(0);
     expect(JSON.parse(r.createBody)).toMatchObject({ tag_name: "v0.20.0-rc.1", draft: true, prerelease: true });
+    expect(JSON.parse(r.patchBody)).toEqual({ draft: false, prerelease: true, make_latest: "false" });
   });
 
   describe("refuses before creating a draft", () => {
@@ -205,6 +220,87 @@ describe("ci/release-stage.sh pre-publish steps", () => {
       const r = run(noTrap, { STUB_CONCLUSION: "failure" });
       expect(r.status).not.toBe(0);
       expect(macFailureProblems(r)).toEqual(["the draft id was not deleted"]);
+    });
+  });
+
+  describe("verify, publish and the immutable check", () => {
+    const releaseGet = `GET ${API}/releases/4242 `;
+    const publish = `PATCH ${API}/releases/4242 `;
+    const indexOf = (calls: string[], prefix: string, from = 0) => calls.findIndex((c, i) => i >= from && c.startsWith(prefix));
+    /** The release is published: one draft=false PATCH, and no DELETE. */
+    const publishedProblems = (r: Run): string[] => {
+      const p: string[] = [];
+      if (count(r.calls, publish) !== 1) p.push("not exactly one publish PATCH");
+      if (count(r.calls, "DELETE ") !== 0) p.push("a DELETE was issued");
+      return p;
+    };
+
+    it("publishes a verified draft with PATCH draft=false and make_latest, then reads tag and immutable", () => {
+      const r = run(REAL);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain("is immutable");
+      expect(publishedProblems(r)).toEqual([]);
+      expect(JSON.parse(r.patchBody)).toEqual({ draft: false, prerelease: false, make_latest: "true" });
+      const patch = indexOf(r.calls, publish);
+      const verify = indexOf(r.calls, releaseGet);
+      expect(verify).toBeGreaterThan(-1);
+      expect(verify).toBeLessThan(patch);
+      expect(indexOf(r.calls, `GET ${API}/git/ref/tags/v0.20.0 `, patch)).toBeGreaterThan(patch);
+      expect(indexOf(r.calls, releaseGet, patch)).toBeGreaterThan(patch); // immutable is read after the publish
+    });
+
+    it("expects the six assets of 0.20.0 (the verify accepts exactly that set)", () => {
+      expect(REAL).toContain('S3.Browser-$V.AppImage S3.Browser.Setup.$V.exe S3.Browser.$V.exe S3.Browser-$V.dmg S3.Browser-$V-arm64.dmg sbom.cdx.json');
+      expect(run(REAL).status).toBe(0);
+    });
+
+    it("DRY_RUN=true deletes the verified draft: zero draft=false PATCHes, one DELETE, exit 0", () => {
+      const r = run(REAL, { DRY_RUN: "true" });
+      expect(r.status).toBe(0);
+      expect(count(r.calls, publish)).toBe(0);
+      expect(count(r.calls, DRAFT_DELETE)).toBe(1);
+      expect(count(r.calls, "DELETE ")).toBe(1);
+      expect(r.patchBody).toBe("");
+    });
+
+    it("DRY_RUN case is red with the DRY_RUN guard removed", () => {
+      const noGuard = REAL.replace('if [ "$DRY_RUN" = true ]; then', "if false; then");
+      expect(noGuard).not.toBe(REAL);
+      const r = run(noGuard, { DRY_RUN: "true" });
+      expect(count(r.calls, publish)).toBe(1);
+      expect(count(r.calls, DRAFT_DELETE)).toBe(0);
+    });
+
+    it("a draft missing S3.Browser-0.20.0-arm64.dmg fails the verify and is deleted, never published", () => {
+      const r = run(REAL, { STUB_OMIT: "S3.Browser-0.20.0-arm64.dmg" });
+      expect(macFailureProblems(r)).toEqual([]);
+      expect(count(r.calls, publish)).toBe(0);
+      expect(r.stderr).toContain("missing S3.Browser-0.20.0-arm64.dmg");
+    });
+
+    it("a draft with an asset not in state uploaded fails the verify and is deleted", () => {
+      const r = run(REAL, { STUB_ASSET_STATE: "starter" });
+      expect(macFailureProblems(r)).toEqual([]);
+      expect(count(r.calls, publish)).toBe(0);
+      expect(r.stderr).toContain("not uploaded");
+    });
+
+    it("a release reading immutable: false after the publish exits non-zero and is not deleted", () => {
+      const r = run(REAL, { STUB_IMMUTABLE_AFTER: "false" });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("immutable: false");
+      expect(publishedProblems(r)).toEqual([]);
+    });
+
+    it("a tag that does not point at the candidate sha exits non-zero and is not deleted", () => {
+      const r = run(REAL, { STUB_TAG_SHA: "b".repeat(40) });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("not " + SHA);
+      expect(publishedProblems(r)).toEqual([]);
+    });
+
+    it("rejects a DRY_RUN that is neither true nor false before creating anything", () => {
+      expect(refusalProblems(run(REAL, { DRY_RUN: "yes" }))).toEqual([]);
     });
   });
 });

@@ -8,6 +8,11 @@
 #   4. dispatch .github/workflows/macos-build.yml with return_run_details=true, correlate the run
 #      (run-name carries the correlation id) and wait for it with a deadline
 #
+#   5. verify the draft holds exactly the expected asset set (GitHub's dotted names), each in state
+#      "uploaded"; then publish with PATCH draft=false (a -pre VERSION as a prerelease, make_latest=false),
+#      check the tag points at RELEASE_SHA and that the release reads "immutable": true. With
+#      DRY_RUN=true the verified draft is deleted instead of published.
+#
 # A trap deletes the draft when any step fails before the release is published. The draft id is printed
 # on stdout as "draft-id=<id>" when the macOS leg has succeeded.
 #
@@ -20,6 +25,7 @@
 #   SOURCE_DIR    checkout whose package.json is compared with VERSION (default: the current directory)
 #   GH_TOKEN      GitHub token (required)
 #   DISPATCH_REF  branch whose macos-build.yml runs (default: master)
+#   DRY_RUN       true: delete the verified draft instead of publishing it (default false)
 #   MAC_TIMEOUT_MIN  minutes to wait for the macOS run before cancelling it (default 45)
 #   POLL_SECONDS / RETRY_SECONDS  wait between status polls (default 15) / between lookups (default 5)
 #   GITHUB_API / GITHUB_UPLOADS   API roots (default https://api.github.com / https://uploads.github.com)
@@ -37,6 +43,7 @@ die() { echo "$*" >&2; exit 1; }
 SBOM="${SBOM:-$DIST/sbom.cdx.json}"
 SOURCE_DIR="${SOURCE_DIR:-.}"
 DISPATCH_REF="${DISPATCH_REF:-master}"
+DRY_RUN="${DRY_RUN:-false}"
 MAC_TIMEOUT_MIN="${MAC_TIMEOUT_MIN:-45}"
 POLL_SECONDS="${POLL_SECONDS:-15}"
 RETRY_SECONDS="${RETRY_SECONDS:-5}"
@@ -69,6 +76,7 @@ print("true" if v is True else "false" if v is False else "" if v is None else v
 [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "VERSION $VERSION is not vMAJOR.MINOR.PATCH[-pre]"
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || die "RELEASE_SHA is not a full sha"
 [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "REPO $REPO is not owner/name"
+[[ "$DRY_RUN" =~ ^(true|false)$ ]] || die "DRY_RUN $DRY_RUN is not true or false"
 [[ "$MAC_TIMEOUT_MIN" =~ ^[0-9]+$ ]] || die "MAC_TIMEOUT_MIN $MAC_TIMEOUT_MIN is not a number"
 
 pkg_version=$(pyget 'd["version"]' < "$SOURCE_DIR/package.json")
@@ -170,3 +178,48 @@ done
 log "macOS run $RUN_ID succeeded"
 
 echo "draft-id=$RELEASE_ID"
+
+# --- 5. verify, then publish (or, for a dry run, delete) the draft
+# GitHub turns the spaces of electron-builder's file names into dots
+V=${VERSION#v}
+expected="S3.Browser-$V.AppImage S3.Browser.Setup.$V.exe S3.Browser.$V.exe S3.Browser-$V.dmg S3.Browser-$V-arm64.dmg sbom.cdx.json"
+problems=$(api GET "repos/$REPO/releases/$RELEASE_ID" | pyget '
+(lambda have, want: "; ".join(
+    (["missing " + ", ".join(sorted(set(want) - set(have)))] if set(want) - set(have) else [])
+    + (["unexpected " + ", ".join(sorted(set(have) - set(want)))] if set(have) - set(want) else [])
+    + (["duplicate assets"] if len(have) != len(set(have)) else [])
+    + ["%s is %s, not uploaded" % (x["name"], x.get("state")) for x in d.get("assets", []) if x.get("state") != "uploaded"]
+))([x["name"] for x in d.get("assets", [])], a[0].split())' "$expected")
+[ -z "$problems" ] || die "draft $RELEASE_ID does not hold the expected assets: $problems"
+log "draft $RELEASE_ID holds the expected assets"
+
+if [ "$DRY_RUN" = true ]; then
+  api DELETE "repos/$REPO/releases/$RELEASE_ID" >/dev/null || die "DRY_RUN: draft $RELEASE_ID could NOT be deleted; delete it by hand"
+  published=true # deleted on purpose: the trap has nothing left to do
+  log "DRY_RUN: draft $RELEASE_ID verified and deleted, nothing published"
+  exit 0
+fi
+
+case "$VERSION" in *-*) latest=false ;; *) latest=true ;; esac
+api PATCH "repos/$REPO/releases/$RELEASE_ID" \
+  "{\"draft\":false,\"prerelease\":$prerelease,\"make_latest\":\"$latest\"}" >/dev/null
+published=true # from here on the release is public: the trap must never delete it
+log "release $RELEASE_ID published"
+
+# the tag exists only after the publish: it must point at the candidate sha (a tag object is peeled)
+tag_ref=$(api GET "repos/$REPO/git/ref/tags/$VERSION")
+tag_sha=$(pyget 'd["object"]["sha"]' <<<"$tag_ref")
+if [ "$(pyget 'd["object"]["type"]' <<<"$tag_ref")" = tag ]; then
+  tag_sha=$(api GET "repos/$REPO/git/tags/$tag_sha" | pyget 'd["object"]["sha"]')
+fi
+[ "$tag_sha" = "$RELEASE_SHA" ] || die "PUBLISHED but tag $VERSION points at $tag_sha, not $RELEASE_SHA"
+
+# the immutable flag is read after the publish; GitHub seals the release a moment later
+immutable=
+for _ in $(seq 1 12); do
+  immutable=$(api GET "repos/$REPO/releases/$RELEASE_ID" | pyget 'd.get("immutable")') || immutable=
+  [ "$immutable" = true ] && break
+  sleep "$RETRY_SECONDS"
+done
+[ "$immutable" = true ] || die "PUBLISHED but release $RELEASE_ID reads immutable: ${immutable:-unknown}"
+log "release $RELEASE_ID is immutable, tag $VERSION at $RELEASE_SHA"
