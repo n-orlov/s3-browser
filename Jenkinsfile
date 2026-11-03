@@ -246,7 +246,8 @@ pipeline {
   stages {
     stage('Quality') {
       agent { label 'arm64 && docker && s3-browser' }
-      options { timeout(time: 30, unit: 'MINUTES') }
+      // 20 minutes is the original quality job's bound; it is never raised (repocheckCiLane asserts it).
+      options { timeout(time: 20, unit: 'MINUTES') }
       steps {
         script {
           gateStage('Quality')
