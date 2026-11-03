@@ -64,9 +64,10 @@ def packagingChanged() {
 }
 
 // The sha a status belongs to: the revision Jenkins selected for this build (the PR head for a PR build, the branch
-// revision otherwise). ci/gate-sha.sh resolves it from the checkout itself, never from the fetched PR ref (which moves
-// when the PR is pushed again before the checkout): HEAD^1 only for the synthetic merge Jenkins made in this
-// workspace, HEAD otherwise, so a PR head that is itself a merge commit is never replaced by its first parent.
+// revision otherwise). ci/gate-sha.sh resolves it from the HEAD reflog of this checkout, never from the fetched PR ref
+// (which moves when the PR is pushed again before the checkout) or from the commit's shape: when the last entry that
+// moved HEAD is Jenkins' target merge it is the commit that merge started from (the pinned head), otherwise HEAD, so a
+// PR head that is itself a merge commit is never replaced by its first parent.
 def gateSha() {
   return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()
 }
