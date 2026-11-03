@@ -11,6 +11,32 @@ describe('NavigationBar', () => {
     vi.clearAllMocks();
   });
 
+  describe('blur reset timer', () => {
+    it('leaves no timer pending when the bar unmounts right after a blur', () => {
+      vi.useFakeTimers();
+      try {
+        const { unmount } = render(
+          <NavigationBar
+            currentBucket="b"
+            currentPrefix=""
+            onNavigate={mockOnNavigate}
+          />
+        );
+        const input = screen.getByRole('textbox', { name: /s3 url/i });
+        fireEvent.focus(input);
+        const before = vi.getTimerCount();
+        fireEvent.blur(input);
+        expect(vi.getTimerCount()).toBe(before + 1);
+
+        unmount();
+
+        expect(vi.getTimerCount()).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('rendering', () => {
     it('renders the navigation bar with input field', () => {
       render(
