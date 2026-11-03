@@ -139,7 +139,8 @@ function gateProblems(jenkinsfile: string): string[] {
   if (!/\bfinishGate\('failure',/.test(unsuccessful)) problems.push("no failure status in post { unsuccessful } (FAILURE and ABORTED)");
   if (!/GATE_STAGE/.test(unsuccessful)) problems.push("the failure description does not name the failed stage");
   const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
-  if (!/HEAD\^1/.test(gateSha) || !/HEAD\^2/.test(gateSha)) problems.push("gateSha does not take the first parent of a merge commit");
+  if (!/ci\/gate-sha\.sh/.test(gateSha)) problems.push("gateSha does not resolve the head through ci/gate-sha.sh");
+  if (/HEAD\^1/.test(gateSha)) problems.push("gateSha replaces a merge head by its first parent");
   return problems;
 }
 
@@ -356,6 +357,11 @@ const GATE_FIXTURES: Record<string, string> = {
   "Jenkinsfile.tokenOutside (token used outside withCredentials)": without("        sh 'git clean -ffdxq'\n", "        sh 'git clean -ffdxq'\n        sh 'curl -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/user'\n"),
 };
 
+GATE_FIXTURES["Jenkinsfile.firstParent (gateSha takes HEAD^1 of any merge)"] = without(
+  "script: 'sh ci/gate-sha.sh'",
+  `script: 'if git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi'`,
+);
+
 const E2E_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noLock (shard body without lock)": without(/lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}", skipIfLocked: true\) \{/, "if (true) {"),
   "Jenkinsfile.noCleanup (without post { aborted } and cleanup)": without(/\n {10}post \{\n {12}aborted \{[\s\S]*?\n {10}\}\n(?= {8}\}\n {8}stage\('E2E shard 2)/, "\n"),
@@ -489,10 +495,10 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     expect(code).toContain("credentialsId: 'github-n-orlov'");
   });
 
-  it("posts on the first parent when the PR build is a merge commit", () => {
+  it("resolves the gate sha through ci/gate-sha.sh, never by taking a merge's first parent blindly", () => {
     const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
-    expect(sha).toContain("HEAD^2");
-    expect(sha).toContain("git rev-parse HEAD^1");
+    expect(sha).toContain("ci/gate-sha.sh");
+    expect(sha).not.toContain("HEAD^1");
   });
 
   it.each(Object.entries(GATE_FIXTURES))("is red for %s", (_name, fixture) => {

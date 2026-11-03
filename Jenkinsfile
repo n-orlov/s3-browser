@@ -63,12 +63,11 @@ def packagingChanged() {
   }
 }
 
-// The PR head sha a status belongs to. A PR build checks out the target merged INTO the PR head;
-// when that merge is not a fast-forward, HEAD is a merge commit whose first parent is the PR head.
+// The sha a status belongs to: the revision Jenkins selected for this build (the PR head for a PR build, the branch
+// revision otherwise). ci/gate-sha.sh resolves it from the PR head ref Jenkins fetched, not from the shape of HEAD:
+// a PR head can itself be a merge commit, and a build may or may not sit on top of a synthetic merge.
 def gateSha() {
-  return sh(returnStdout: true, script: '''
-    if [ -n "$CHANGE_ID" ] && git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi
-  ''').trim()
+  return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()
 }
 
 // Names the stage a failure post reports. Every stage calls it first.
