@@ -176,15 +176,16 @@ pipeline {
         }
       }
     }
-    // A draft that was never published must not outlive a failed or aborted build.
+    // A draft that was never published must not outlive a failed or aborted build. A build that failed in Candidate
+    // (no green master candidate) has no checkout, so the script is not in the workspace: nothing was drafted either.
     failure {
       withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
-        sh 'ci/release-stage.sh cleanup'
+        sh 'test -x ci/release-stage.sh || { echo "no checkout yet, so no draft exists"; exit 0; }; ci/release-stage.sh cleanup'
       }
     }
     aborted {
       withCredentials([usernamePassword(credentialsId: 'github-n-orlov', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
-        sh 'ci/release-stage.sh cleanup'
+        sh 'test -x ci/release-stage.sh || { echo "no checkout yet, so no draft exists"; exit 0; }; ci/release-stage.sh cleanup'
       }
     }
     // The Telegram message, last, with a sound: a release is always worth hearing. Best-effort: a Telegram outage

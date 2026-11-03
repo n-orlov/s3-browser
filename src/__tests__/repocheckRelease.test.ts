@@ -112,7 +112,11 @@ function releaseProblems(files: Files): string[] {
   const always = blockOf(post, /\balways\s*\{/);
   if (!/currentBuild\.description = /.test(always) || !/\baddSummary\(/.test(always)) problems.push("post { always } writes no build-page summary");
   for (const cond of ["failure", "aborted"]) {
-    if (!/sh 'ci\/release-stage\.sh cleanup'/.test(blockOf(post, new RegExp(`\\b${cond}\\s*\\{`)))) problems.push(`post { ${cond} } does not delete the draft (ci/release-stage.sh cleanup)`);
+    const cleanup = blockOf(post, new RegExp(`\\b${cond}\\s*\\{`));
+    if (!/ci\/release-stage\.sh cleanup'/.test(cleanup)) problems.push(`post { ${cond} } does not delete the draft (ci/release-stage.sh cleanup)`);
+    else if (!/sh 'test -x ci\/release-stage\.sh \|\| \{[^']*exit 0; \}; ci\/release-stage\.sh cleanup'/.test(cleanup)) {
+      problems.push(`post { ${cond} } runs the cleanup script unguarded: a build that failed in Candidate has no checkout, and the missing script errors the post condition`);
+    }
   }
   const notify = blockOf(post, /\bcleanup\s*\{/);
   if (!/\btry\s*\{[\s\S]*\bnotifyTelegram\(/.test(notify)) problems.push("post does not call notifyTelegram best-effort (inside try)");
@@ -149,6 +153,10 @@ const FIXTURES: Record<string, Files> = {
   "noSha (candidate without sha)": without("main", ', \\"sha\\": \\"${env.GATE_SHA}\\"', ""),
   "noDraftCleanupOnFailure (no draft deletion in post { failure })": without("release", /\n {4}failure \{[\s\S]*?\n {4}\}\n/, "\n"),
   "noDraftCleanupOnAbort (no draft deletion in post { aborted })": without("release", /\n {4}aborted \{[\s\S]*?\n {4}\}\n/, "\n"),
+  "cleanupUnguarded (post { failure } runs a script that a Candidate failure never checked out)": {
+    ...real,
+    release: real.release.replace(/sh 'test -x ci\/release-stage\.sh \|\| \{[^']*exit 0; \}; ci\/release-stage\.sh cleanup'/, "sh 'ci/release-stage.sh cleanup'"),
+  },
   "noDryRunEnv (Publish without the DRY_RUN parameter)": without("release", /\n {6}environment \{ DRY_RUN = "\$\{params\.DRY_RUN\}" \}/, ""),
   "dryRunAfterPatch (DRY_RUN guard after the publish PATCH)": {
     ...real,
@@ -202,6 +210,7 @@ describe("Jenkinsfile.release and the release candidate (repocheck)", () => {
     expect(f.noSha).toContain("job, build number and sha");
     expect(f.noDraftCleanupOnFailure).toContain("post { failure }");
     expect(f.noDraftCleanupOnAbort).toContain("post { aborted }");
+    expect(f.cleanupUnguarded).toContain("no checkout");
     expect(f.noDryRunEnv).toContain("DRY_RUN");
     expect(f.dryRunAfterPatch).toContain("DRY_RUN guard");
     expect(f.noImmutableCheck).toContain("immutable");
