@@ -1,37 +1,60 @@
 #!/bin/sh
 # Prints the sha the jenkins/gate commit status belongs to: the revision Jenkins selected for this build.
 #   - branch build (no CHANGE_ID): HEAD.
-#   - pull request build: the PR head Jenkins pinned when it scheduled the build, which the Jenkinsfile hands over in
-#     GATE_PINNED_HEAD (the revision of the build's own SCM, `scm.branches[0].name`). It is a fact of this build, so
-#     the answer does not depend on what earlier builds left in this workspace. Jenkins' checkout runs
+#   - pull request build: the PR head Jenkins pinned when it scheduled the build. Its checkout runs
 #     `git checkout -f <pinned head>`, then, with the merge strategy, `git merge <pinned target>`, then
-#     `git checkout -f <result>`; so HEAD is the pinned head itself (a simple commit or any merge commit the PR
+#     `git checkout -f <result>`. So HEAD is the pinned head itself (a simple commit or any merge commit the PR
 #     carries, when the target merge was a no-op), or a commit the target merge produced from it: a synthetic merge,
-#     or the target tip after a fast-forward. In every case the pinned head is HEAD or an ancestor of it.
-# Neither the fetched ref refs/remotes/origin/PR-<id> (mutable: it names whatever the head was at fetch time), nor the
-# shape or subject of HEAD, nor the HEAD reflog is evidence: the reflog of a reused workspace holds the merges and
-# fast-forwards of earlier builds, and git writes no entry at all for a checkout that does not move HEAD, so it cannot
-# tell this build's selection from an earlier one's when both end at the same commit.
-# The pin is verified against the checkout, never trusted blindly: it must be a full object id naming a commit that
-# is HEAD or an ancestor of HEAD, otherwise the script fails rather than post a status on a sha the build did not build.
-# POSIX sh: the arm64 agents run BusyBox and have no bash.
+#     or the target tip after a fast-forward.
+# Neither the fetched ref refs/remotes/origin/PR-<id> (mutable: it names whatever the head was at fetch time) nor the
+# shape or subject of the commit is evidence: a PR head can be a merge commit with any subject, made on a detached
+# HEAD or not, published or since force-pushed away. The evidence is what git recorded in HEAD's reflog while this
+# build made the checkout, and only this build's part of it: the Jenkinsfile starts every gated checkout with
+# beginCheckout, which empties the workspace's HEAD reflog and records in .git/gate-sha-boundary the commit HEAD stood
+# on at that moment. Earlier builds' merges and fast-forwards are therefore gone, and git writes no entry for a
+# checkout that does not move HEAD, so an empty log means "this build's checkout left HEAD where it was": the pinned
+# head is HEAD itself, even when HEAD is the merge or the target tip an earlier build produced. Otherwise, the log is
+# this build's own and, newest first, skipping entries that did not move HEAD (the final re-checkout), the first entry
+# that moved HEAD is:
+#   - `merge ...` (the target merge, a new merge commit or a fast-forward) ending at HEAD: the selected head is the
+#     commit HEAD stood on before it, i.e. the pinned head the checkout put there;
+#   - anything else ending at HEAD (`checkout: moving from ... to <pinned head>`): HEAD is the selected head.
+# The script fails rather than post a status on a guessed sha when the boundary is missing, when the log does not
+# start at the boundary (the history was not reset for this build) or when HEAD moved without a record.
+# POSIX sh and awk: the arm64 agents run BusyBox and have no bash.
 set -eu
 
 head=$(git rev-parse HEAD)
 [ -n "${CHANGE_ID:-}" ] || { echo "$head"; exit 0; }
 
-pin=${GATE_PINNED_HEAD:-}
-[ -n "$pin" ] || { echo "gate-sha: GATE_PINNED_HEAD is not set; cannot tell which PR head Jenkins selected" >&2; exit 1; }
-case "$pin" in
-  *[!0-9a-f]*) pin_ok= ;;
-  *) case ${#pin} in 40|64) pin_ok=1 ;; *) pin_ok= ;; esac ;;
-esac
-[ -n "$pin_ok" ] || { echo "gate-sha: GATE_PINNED_HEAD is not a full commit id: $pin" >&2; exit 1; }
+boundary_file=$(git rev-parse --git-path gate-sha-boundary)
+[ -s "$boundary_file" ] || { echo "gate-sha: no checkout boundary ($boundary_file); the checkout did not start with beginCheckout, so earlier builds' history cannot be told from this build's" >&2; exit 1; }
+boundary=$(cat "$boundary_file")
 
-pinned=$(git rev-parse --verify -q "$pin^{commit}") || { echo "gate-sha: the pinned head $pin is not a commit in this checkout" >&2; exit 1; }
-[ "$pinned" = "$pin" ] || { echo "gate-sha: GATE_PINNED_HEAD $pin does not name a commit" >&2; exit 1; }
-if [ "$pinned" != "$head" ] && ! git merge-base --is-ancestor "$pinned" "$head"; then
-  echo "gate-sha: the pinned head $pinned is not HEAD or an ancestor of HEAD ($head); the checkout is not this build's" >&2
-  exit 1
-fi
-echo "$pinned"
+log=$(git rev-parse --git-path logs/HEAD)
+[ -f "$log" ] || log=/dev/null
+
+# Each line: "<old> <new> <ident> <time> <tz>\t<message>".
+awk -v head="$head" -v boundary="$boundary" '
+  function fail(why) { print "gate-sha: " why "; cannot tell which PR head Jenkins selected" > "/dev/stderr"; exit 1 }
+  {
+    tab = index($0, "\t")
+    split(substr($0, 1, tab - 1), f, " ")
+    old[NR] = f[1]; new[NR] = f[2]; msg[NR] = substr($0, tab + 1)
+  }
+  END {
+    if (NR == 0) {
+      if (head != boundary) fail("HEAD moved from " boundary " to " head " without a reflog record")
+      print head; exit 0
+    }
+    if (old[1] != boundary) fail("the HEAD reflog does not start at the boundary " boundary)
+    if (new[NR] != head) fail("the HEAD reflog does not record how HEAD reached " head)
+    for (i = NR; i > 0; i--) {
+      if (old[i] == new[i]) continue
+      if (new[i] != head) fail("the HEAD reflog does not record how HEAD reached " head)
+      if (msg[i] ~ /^merge /) print old[i]; else print head
+      exit 0
+    }
+    print head
+  }
+' "$log"

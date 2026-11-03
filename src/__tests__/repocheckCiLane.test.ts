@@ -154,10 +154,19 @@ function gateProblems(jenkinsfile: string): string[] {
   const gateSha = blockOf(code, /^def gateSha\(\)\s*\{/m);
   if (!/ci\/gate-sha\.sh/.test(gateSha)) problems.push("gateSha does not resolve the head through ci/gate-sha.sh");
   if (/HEAD\^1/.test(gateSha)) problems.push("gateSha replaces a merge head by its first parent");
-  if (!/GATE_PINNED_HEAD=\$\{pinned\}/.test(gateSha) || !/\bscm\.branches\[0\]\.name/.test(gateSha)) {
-    problems.push("gateSha does not hand the build's own pinned head (scm.branches[0].name) to ci/gate-sha.sh as GATE_PINNED_HEAD");
+  const begin = blockOf(code, /^def beginCheckout\(\)\s*\{/m);
+  if (!/rm -f "\$\(git rev-parse --git-path logs\/HEAD\)"/.test(begin)) problems.push("beginCheckout does not empty the workspace's HEAD reflog before the checkout");
+  if (!/gate-sha-boundary/.test(begin)) problems.push("beginCheckout does not record the checkout boundary");
+  if (!/\bcheckout scm\b/.test(begin)) problems.push("beginCheckout does not check out the SCM");
+  const bare = code.replace(begin, "");
+  if (/^\s*checkout scm\s*$/m.test(blockOf(bare, /^def finishGate\(/m)) || /^\s*checkout scm\s*$/m.test(blockOf(bare, /^def archiveReleaseCandidate\(/m))) {
+    problems.push("a gate sha is resolved after a checkout that did not start with beginCheckout");
   }
-  if (/reflog/.test(gateSha)) problems.push("gateSha reads the workspace reflog instead of the build's pinned head");
+  const quality = blockOf(code, /\bstage\('Quality'\)\s*\{/);
+  if (!/skipDefaultCheckout\(true\)/.test(quality)) problems.push("the Quality stage takes the default checkout, which bypasses beginCheckout");
+  if (quality.indexOf("beginCheckout()") < 0 || quality.indexOf("beginCheckout()") > quality.indexOf("gateSha()")) {
+    problems.push("the Quality stage resolves the gate sha before beginCheckout");
+  }
   return problems;
 }
 
@@ -383,14 +392,11 @@ GATE_FIXTURES["Jenkinsfile.firstParent (gateSha takes HEAD^1 of any merge)"] = w
   `script: 'if git rev-parse -q --verify HEAD^2 >/dev/null; then git rev-parse HEAD^1; else git rev-parse HEAD; fi'`,
 );
 
-GATE_FIXTURES["Jenkinsfile.noPin (gateSha does not pass the build's pinned head)"] = without(
-  /\n {2}withEnv\(\["GATE_PINNED_HEAD=\$\{pinned\}"\]\) \{\n {4}return (sh\(returnStdout: true, script: 'sh ci\/gate-sha\.sh'\)\.trim\(\))\n {2}\}/,
-  "\n  return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()",
-);
-GATE_FIXTURES["Jenkinsfile.reflog (gateSha reads the workspace reflog)"] = without(
-  "script: 'sh ci/gate-sha.sh'",
-  "script: 'git reflog -1 --format=%H'",
-);
+GATE_FIXTURES["Jenkinsfile.defaultCheckout (Quality takes the default checkout)"] = without("; skipDefaultCheckout(true)", "");
+GATE_FIXTURES["Jenkinsfile.noBegin (Quality skips beginCheckout)"] = without("          beginCheckout()\n          env.GATE_SHA = gateSha()", "          env.GATE_SHA = gateSha()");
+GATE_FIXTURES["Jenkinsfile.noReset (beginCheckout keeps earlier builds' reflog)"] = without(/ {4}rm -f "\$\(git rev-parse --git-path logs\/HEAD\)"\n/, "");
+GATE_FIXTURES["Jenkinsfile.noBoundary (beginCheckout records no boundary)"] = without(/ {4}echo "\$boundary" > "\$\(git rev-parse --git-path gate-sha-boundary\)"\n/, "");
+GATE_FIXTURES["Jenkinsfile.bareCheckout (finishGate checks out without beginCheckout)"] = without("      beginCheckout()\n      env.GATE_SHA = gateSha()\n    }\n    postGate", "      checkout scm\n      env.GATE_SHA = gateSha()\n    }\n    postGate");
 
 const E2E_FIXTURES: Record<string, string> = {
   "Jenkinsfile.noLock (shard body without lock)": without(/lock\(resource: "s3b-e2e-\$\{env\.NODE_NAME\}", skipIfLocked: true\) \{/, "if (true) {"),
@@ -483,7 +489,7 @@ describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
   it("is red for a copy with the wrong label, no reset or no stage timeout", () => {
     expect(laneProblems(without("label 'arm64 && docker && s3-browser'", "label 'linux'")).join()).toContain("Quality label");
     expect(laneProblems(without("        sh 'git clean -ffdxq'\n        // ratchet", "        echo skip\n        // ratchet")).join()).toContain("git clean");
-    expect(laneProblems(without("options { timeout(time: 20, unit: 'MINUTES') }\n      steps {\n        script {\n          gateStage('Quality')", "steps {\n        script {\n          gateStage('Quality')")).join()).toContain("stage timeout");
+    expect(laneProblems(without("options { timeout(time: 20, unit: 'MINUTES'); skipDefaultCheckout(true) }\n      steps {\n        script {\n          gateStage('Quality')", "steps {\n        script {\n          gateStage('Quality')")).join()).toContain("stage timeout");
   });
 
   it("keeps Quality's timeout at or below the original 20-minute quality-job bound, with no retry or threshold loosened", () => {
@@ -496,7 +502,7 @@ describe("the Jenkinsfile is the Jenkins CI lane (repocheck)", () => {
   });
 
   it("is red when a stage timeout is raised above its original bound (Quality, Release dry-run, an e2e shard, a longer unit)", () => {
-    const quality = "options { timeout(time: 20, unit: 'MINUTES') }\n      steps {\n        script {\n          gateStage('Quality')";
+    const quality = "options { timeout(time: 20, unit: 'MINUTES'); skipDefaultCheckout(true) }\n      steps {\n        script {\n          gateStage('Quality')";
     expect(real).toContain(quality);
     const raise = (to: string) => laneProblems(without(quality, quality.replace("timeout(time: 20, unit: 'MINUTES')", to))).join("; ");
     expect(raise("timeout(time: 21, unit: 'MINUTES')")).toContain("above the original 20-minute bound");
@@ -553,11 +559,14 @@ describe("the Jenkinsfile posts the jenkins/gate commit status (repocheck)", () 
     expect(sha).not.toContain("HEAD^1");
   });
 
-  it("hands the build's own pinned head to ci/gate-sha.sh, never reading the workspace history", () => {
-    const sha = blockOf(codeOf(real), /^def gateSha\(\)\s*\{/m);
-    expect(sha).toContain("scm.branches[0].name");
-    expect(sha).toContain("GATE_PINNED_HEAD");
-    expect(sha).not.toContain("reflog");
+  it("starts every gated checkout with beginCheckout, so the reflog holds this build's checkout only", () => {
+    const text = codeOf(real);
+    const begin = blockOf(text, /^def beginCheckout\(\)\s*\{/m);
+    expect(begin).toContain('rm -f "$(git rev-parse --git-path logs/HEAD)"');
+    expect(begin).toContain("gate-sha-boundary");
+    expect(blockOf(text, /\bstage\('Quality'\)\s*\{/)).toContain("skipDefaultCheckout(true)");
+    expect(blockOf(text, /^def finishGate\(/m)).toContain("beginCheckout()");
+    expect(blockOf(text, /^def archiveReleaseCandidate\(/m)).toContain("beginCheckout()");
   });
 
   it.each(Object.entries(GATE_FIXTURES))("is red for %s", (_name, fixture) => {

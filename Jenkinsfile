@@ -64,16 +64,29 @@ def packagingChanged() {
 }
 
 // The sha a status belongs to: the revision Jenkins selected for this build (the PR head for a PR build, the branch
-// revision otherwise). The PR head is the one this build's own SCM pinned when the build was scheduled
-// (scm.branches[0].name); ci/gate-sha.sh checks it against the checkout and prints it. It is never read from the
-// workspace history (the HEAD reflog of a reused workspace holds earlier builds' merges), from the fetched PR ref
-// (which moves when the PR is pushed again before the checkout) or from the commit's shape, so a PR head that is itself
-// a merge commit is never replaced by its first parent.
+// revision otherwise). ci/gate-sha.sh resolves it from the HEAD reflog of this build's own checkout (see beginCheckout),
+// never from the fetched PR ref (which moves when the PR is pushed again before the checkout), from the commit's shape
+// or from what earlier builds left in a reused workspace: when the last entry that moved HEAD is Jenkins' target merge it
+// is the commit that merge started from (the pinned head), otherwise HEAD, so a PR head that is itself a merge commit is
+// never replaced by its first parent, and a head equal to an earlier build's merge or fast-forward result is itself.
 def gateSha() {
-  String pinned = env.CHANGE_ID ? scm.branches[0].name : ''
-  withEnv(["GATE_PINNED_HEAD=${pinned}"]) {
-    return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()
-  }
+  return sh(returnStdout: true, script: 'sh ci/gate-sha.sh').trim()
+}
+
+// Starts a gated checkout: the workspace persists between builds, and so does the HEAD reflog with the merges and
+// fast-forwards of earlier builds, which git cannot tell from this build's when both end at the same commit. So the
+// reflog is emptied first and the commit HEAD stands on is recorded in .git/gate-sha-boundary; from here on the reflog
+// holds this build's checkout and nothing else. It is inline shell because the workspace may hold no ci/ yet.
+def beginCheckout() {
+  sh '''
+    set -eu
+    [ -d .git ] || git init -q
+    git config core.logAllRefUpdates true
+    boundary=$(git rev-parse -q --verify HEAD^{commit} || git hash-object -t tree /dev/null | tr 0-9a-f 0)
+    rm -f "$(git rev-parse --git-path logs/HEAD)"
+    echo "$boundary" > "$(git rev-parse --git-path gate-sha-boundary)"
+  '''
+  checkout scm
 }
 
 // Names the stage a failure post reports. Every stage calls it first.
@@ -103,7 +116,7 @@ def postGate(String state, String desc) {
 def finishGate(String state, String desc) {
   node('arm64 && docker && s3-browser') {
     if (!env.GATE_SHA) {
-      checkout scm
+      beginCheckout()
       env.GATE_SHA = gateSha()
     }
     postGate(state, desc)
@@ -116,7 +129,7 @@ def finishGate(String state, String desc) {
 def archiveReleaseCandidate() {
   node('arm64 && docker && s3-browser') {
     if (!env.GATE_SHA) {
-      checkout scm
+      beginCheckout()
       env.GATE_SHA = gateSha()
     }
     writeFile file: 'release-candidate.json',
@@ -251,10 +264,11 @@ pipeline {
     stage('Quality') {
       agent { label 'arm64 && docker && s3-browser' }
       // 20 minutes is the original quality job's bound; it is never raised (repocheckCiLane asserts it).
-      options { timeout(time: 20, unit: 'MINUTES') }
+      options { timeout(time: 20, unit: 'MINUTES'); skipDefaultCheckout(true) }
       steps {
         script {
           gateStage('Quality')
+          beginCheckout()
           env.GATE_SHA = gateSha()
         }
         postGate('pending', 'Build running')
