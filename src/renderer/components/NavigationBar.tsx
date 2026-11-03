@@ -22,6 +22,14 @@ function NavigationBar({
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A pending blur reset must not fire once the component is gone.
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current);
+    };
+  }, []);
 
   // Build display path from current bucket/prefix
   const getDisplayPath = useCallback((): string => {
@@ -54,7 +62,8 @@ function NavigationBar({
 
   const handleInputBlur = useCallback(() => {
     // Delay to allow navigation to complete before resetting
-    setTimeout(() => {
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null;
       setIsEditing(false);
       setError(null);
     }, 150);
