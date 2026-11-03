@@ -21,13 +21,23 @@ function sectionsFourAndFive(spec: string): string {
 const sentencesOfLine = (line: string): string[] =>
   line.split(/(?<=[.;:])\s+(?=[A-Z`*])/).map((s) => s.trim()).filter(Boolean);
 /**
- * Each sentence of `text` with the sentences next to it in its paragraph. A paragraph ends at a blank line, a list
- * item, a heading or a table row; a soft line break inside it does not end it.
+ * The paragraphs of `text`, each as one string: a paragraph is a blank-line block, or a list item with its continuation
+ * lines; a heading or a table row stands alone. The soft line breaks inside a paragraph are joined with a space (a
+ * sentence may wrap over several lines) and a list marker is dropped.
  */
-const sentencesOf = (text: string): { sentence: string; neighbours: string[] }[] =>
-  text.split(/\n\s*\n|\n(?=\s*(?:[-*+]|\d+\.)\s|\s*#|\s*\|)/).flatMap((paragraph) => {
-    const all = paragraph.split("\n").flatMap(sentencesOfLine);
-    return all.map((sentence, i) => ({ sentence, neighbours: [all[i - 1], all[i + 1]].filter((n): n is string => n !== undefined) }));
+const paragraphsOf = (text: string): string[] =>
+  text
+    .split(/\n\s*\n|\n(?=\s*(?:[-*+]|\d+\.)\s|\s*#|\s*\|)/)
+    .map((paragraph) => paragraph.split("\n").map((line) => line.trim()).filter(Boolean).join(" ").replace(/^(?:[-*+]|\d+\.)\s+/, ""))
+    .filter(Boolean);
+/**
+ * Each sentence of `text` with every other sentence of its paragraph. The paragraph is the context unit of a mention
+ * of an absent workflow: how far apart two sentences sit inside it, and how they wrap, make no difference.
+ */
+const sentencesOf = (text: string): { sentence: string; before: string[]; after: string[] }[] =>
+  paragraphsOf(text).flatMap((paragraph) => {
+    const all = sentencesOfLine(paragraph);
+    return all.map((sentence, i) => ({ sentence, before: all.slice(0, i), after: all.slice(i + 1) }));
   });
 
 // A sentence that says a workflow is still around ("still" alone is too common: "the README still links ...").
@@ -59,7 +69,7 @@ const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|conti
 // and does not refer back to the mention ("it", "its schedule", "that workflow", "which"); or another clause that
 // refers back and is not itself one of the shapes, whatever its subject ("Jenkins runs it on version tags" says the
 // workflow runs; "it was deleted in R5" is a departure); or a back-reference with
-// such a word in a clause of a neighbouring sentence of the paragraph that refers back or speaks of GitHub workflows
+// such a word in a clause of any other sentence of the paragraph that refers back or speaks of GitHub workflows
 // ("It still runs weekly.", "GitHub still runs a copy."); or a
 // fragment after the statement with no subject of its own ("... and back", "..., in theory").
 const W = "⟦W⟧";
@@ -97,15 +107,18 @@ const PERSISTS = /\b(?:still|remains?|remaining|stays?|continu\w*|survives?|surv
 // adjective ("the Jenkins nightly lane") is not a recurrence.
 const RECURS = /\bevery\b|\beach\s+(?:run|build|push|commit|tag|release|merge|night|day|week|month|hour|time|cycle|(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?\b|\bper\s+(?:run|build|push|commit|tag|release|night|day|week)\b|\b(?:hourly|daily|nightly|weekly|monthly)\b(?!\s+[a-z])|\bon\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days\b/i;
 const contradicts = (text: string): boolean => NEGATES.test(text) || HYPOTHETICAL.test(text) || PERSISTS.test(text) || RECURS.test(text);
-// A reference back to the mentioned workflow.
-const REFERS_BACK = /\b(?:it|its|they|them|their|theirs|one|ones|which|whose|whereby)\b|\b(?:this|that|these|those|the|same|said|such)\s+(?:same\s+|said\s+|old\s+|former\s+|retired\s+|original\s+|deleted\s+)?(?:GitHub\s+)?(?:Actions\s+)?(?:workflows?|files?|jobs?|pipelines?|schedules?|crons?|triggers?|runs?)\b/i;
+// A reference back to the mentioned workflow: a bare pronoun, or a noun phrase naming it ("that workflow", "the same file").
+const BACK_PRONOUN = String.raw`\b(?:it|its|they|them|their|theirs|one|ones|which|whose|whereby)\b`;
+const BACK_NOUN = String.raw`\b(?:this|that|these|those|the|same|said|such)\s+(?:same\s+|said\s+|old\s+|former\s+|retired\s+|original\s+|deleted\s+)?(?:GitHub\s+)?(?:Actions\s+)?(?:workflows?|files?|jobs?|pipelines?|schedules?|crons?|triggers?|runs?)\b`;
+const REFERS_BACK = new RegExp(`${BACK_PRONOUN}|${BACK_NOUN}`, "i");
+const REFERS_BACK_NOUN = new RegExp(BACK_NOUN, "i");
 // A back-referring clause that only removes the workflow again ("and the file was deleted").
 const REMOVES_AGAIN = /^(?:it|they|the\s+(?:same\s+)?(?:workflow|file)s?|its\s+file)\s+(?:was|were|(?:has|have)\s+been)\s+(?:deleted|retired|removed)(?:\s+from\s+the\s+(?:repository|repo|tree))?$/i;
 
 // How a clause outside the statement must open: with its own subject. A fragment ("and back", "then restored", ", in
 // theory") qualifies the statement itself and is not trusted.
 const OPENS_WITH_SUBJECT = /^(?:(?:the|a|an|this|that|these|those|its|their|it|they|both|all|each|no)\b|`|[A-Z])/;
-// A neighbouring sentence is read when it refers back or speaks of GitHub workflows at all.
+// Another sentence of the paragraph is read when it refers back or speaks of GitHub workflows at all.
 // ("GitHub" as the service, not in a host name such as `n-orlov.github.io`, and not GitHub Pages).
 const SPEAKS_OF_WORKFLOWS = /\b(?:Actions|[Ww]orkflows?)\b|(?<![\w./-])GitHub(?![\w/-]|\.\w)(?!\s+Pages\b)/;
 
@@ -113,11 +126,11 @@ const SPEAKS_OF_WORKFLOWS = /\b(?:Actions|[Ww]orkflows?)\b|(?<![\w./-])GitHub(?!
  * True when a clause outside the departure statement leaves it standing. A clause of the statement's own sentence
  * must open with a subject (`ownSentence`); a clause of another sentence need not.
  */
-function clauseAgrees(clause: string, have: Set<string>, ownSentence = true): boolean {
+function clauseAgrees(clause: string, have: Set<string>, ownSentence = true, refersBack: RegExp = REFERS_BACK): boolean {
   const c = clause.trim().replace(/^(?:and|but|or)\s+/i, "").replace(/[.!]+$/, "");
   if (!c) return true;
   if (ownSentence && !OPENS_WITH_SUBJECT.test(c)) return false;
-  const back = REFERS_BACK.test(c);
+  const back = refersBack.test(c);
   const subject = c.split(/\s+/).slice(0, 5).map((w) => w.replace(/[`'",()]/g, "").toLowerCase());
   const aboutJenkinsOrPresent = subject.some((w) => w.startsWith("jenkins") || have.has(w));
   if (!back) return !contradicts(c) || aboutJenkinsOrPresent;
@@ -138,13 +151,17 @@ function isDeparture(clause: string): boolean {
 
 /**
  * True when `m` lies inside a departure or replacement statement (SHAPES) of `sentence` that nothing else in the
- * sentence, nor a neighbouring sentence of the same paragraph (`neighbours`) that refers back or speaks of GitHub
+ * sentence, nor any other sentence of the same paragraph (`others`) that refers back or speaks of GitHub
  * workflows, contradicts.
  */
-function saysItLeft(sentence: string, m: Mention, absent: Mention[], have: Set<string>, neighbours: string[]): boolean {
+function saysItLeft(sentence: string, m: Mention, absent: Mention[], have: Set<string>, before: string[], after: string[]): boolean {
   if (sentence.includes("?")) return false;
-  const neighbourClauses = neighbours.flatMap((n) => n.split(CLAUSE_SPLIT));
-  if (neighbourClauses.some((c) => (REFERS_BACK.test(c) || SPEAKS_OF_WORKFLOWS.test(c)) && !clauseAgrees(c, have, false))) return false;
+  // Every other sentence of the paragraph is read, wherever it sits. A bare pronoun ("it", "which") can only refer
+  // back to what came before it, so in a sentence ahead of the mention only a noun phrase naming the workflow ("that
+  // workflow", "the same file") or a sentence that speaks of GitHub workflows counts as a back-reference.
+  const clausesOf = (sentences: string[]): string[] => sentences.flatMap((n) => n.split(CLAUSE_SPLIT));
+  if (clausesOf(after).some((c) => (REFERS_BACK.test(c) || SPEAKS_OF_WORKFLOWS.test(c)) && !clauseAgrees(c, have, false))) return false;
+  if (clausesOf(before).some((c) => (REFERS_BACK_NOUN.test(c) || SPEAKS_OF_WORKFLOWS.test(c)) && !clauseAgrees(c, have, false, REFERS_BACK_NOUN))) return false;
   // Each absent mention becomes the token W (with the backticks around a file name); `at` is where m's token starts.
   let norm = "";
   let at = -1;
@@ -212,23 +229,26 @@ function workflowNames(files: Record<string, string>): Set<string> {
  * an absent workflow counts as such a claim ("the GitHub `Mutation` workflow is retained / runs weekly / stays ..."),
  * whatever the verb, unless the mention is inside a departure or replacement statement (saysItLeft).
  */
+/** True when a clause speaks of a GitHub / Actions workflow, in either word order ("GitHub workflow", "the workflow on GitHub"). */
+const speaksOfGitHubWorkflow = (clause: string): boolean => /\bworkflows?\b/i.test(clause) && /(?<![\w./-])(?:GitHub(?![\w/-]|\.\w)(?!\s+Pages\b)|Actions\b)/i.test(clause);
+
 function retainedWorkflowClaims(section: string, workflows: Record<string, string>, otherFiles: Set<string>): string[] {
   const have = workflowNames(workflows);
   const problems: string[] = [];
-  for (const { sentence, neighbours } of sentencesOf(section)) {
+  for (const { sentence, before, after } of sentencesOf(section)) {
     const files = fileMentions(sentence);
     const titles = titleMentions(sentence);
     const absentFiles = files.filter((m) => !have.has(m.name) && !otherFiles.has(m.name));
     const absentTitles = titles.filter((m) => !have.has(m.name));
     const absent = [...absentFiles, ...absentTitles];
     for (const m of absentFiles) {
-      if (!saysItLeft(sentence, m, absent, have, neighbours)) problems.push(`names ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
+      if (!saysItLeft(sentence, m, absent, have, before, after)) problems.push(`names ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
     }
     for (const m of absentTitles) {
-      if (!saysItLeft(sentence, m, absent, have, neighbours)) problems.push(`names workflow ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
+      if (!saysItLeft(sentence, m, absent, have, before, after)) problems.push(`names workflow ${m.name}, which does not exist: ${sentence.slice(0, 80)}`);
     }
     // A retained workflow with no name at all cannot be checked against the tree, so it is rejected outright.
-    if (RETENTION.test(sentence) && files.length === 0 && titles.length === 0 && /\b(GitHub|Actions)\b[^.`]{0,20}\bworkflows?\b/i.test(sentence)) {
+    if (files.length === 0 && titles.length === 0 && sentence.split(CLAUSE_SPLIT).some((c) => RETENTION.test(c) && speaksOfGitHubWorkflow(c))) {
       problems.push(`claims a retained workflow without naming it: ${sentence.slice(0, 80)}`);
     }
   }
@@ -261,6 +281,111 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
 
   it("has none of the retired workflow files in the tree", () => {
     for (const stem of RETIRED) expect(existsSync(path.join(root, ".github/workflows", retiredFile(stem))), stem).toBe(false);
+  });
+
+  // A generated cross product, so that the rule is proved over its dimensions and not over hand-picked sentences: the
+  // four absent workflows x two naming forms x three departure sentences x zero to three unrelated sentences between
+  // the departure and the claim x three layouts of the paragraph x the claim itself. A claim that refers back to the
+  // departed workflow must reject whatever stands between it and the departure statement and however the paragraph
+  // wraps; the same shapes of claim with Jenkins as the subject must accept.
+  const ABSENT = RETIRED.map((stem, i) => ({ stem, title: ["CI", "E2E soak", "Mutation", "Release"][i] }));
+  const NAMING = [
+    { form: "file name", np: (w: { stem: string; title: string }) => `the \`${retiredFile(w.stem)}\` file` },
+    { form: "titled workflow", np: (w: { stem: string; title: string }) => `the GitHub \`${w.title}\` workflow` },
+  ];
+  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+  const DEPARTURES = [
+    (np: string) => `${cap(np)} was replaced by the Jenkins release job.`,
+    (np: string) => `Jenkins has taken over from ${np}.`,
+    (np: string) => `${cap(np)} was deleted from the repository when Jenkins took over.`,
+  ];
+  const UNRELATED = ["The PR gate now uses Jenkins.", "The README shows the Jenkins badges.", "Coverage is measured on every build."];
+  const LAYOUTS: [string, (sentences: string[]) => string][] = [
+    ["one line", (s) => s.join(" ")],
+    ["soft-wrapped lines", (s) => s.join("\n")],
+    ["bullet item with continuation lines", (s) => `- ${s.join("\n  ")}`],
+  ];
+  const PERSISTENCE = [
+    "That workflow still runs on GitHub every Monday.",
+    "It still runs every night.",
+    "The workflow remains enabled on GitHub.",
+    "Its schedule still fires every Monday.",
+    "GitHub still executes it every night.",
+    "This workflow is still active.",
+  ];
+  const JENKINS_CLAIMS = [
+    "The Jenkins mutation stage still runs every Monday.",
+    "Jenkins still runs the nightly lane every night.",
+    "Jenkins still runs the GitHub Actions cache cleanup every Monday.",
+  ];
+  const crossProduct = (claims: string[]): { label: string; paragraph: string }[] =>
+    ABSENT.flatMap((w) => NAMING.flatMap((n) => DEPARTURES.flatMap((departure, d) =>
+      [0, 1, 2, 3].flatMap((between) => LAYOUTS.flatMap(([layout, lay]) => claims.map((claim, c) => ({
+        label: `${w.stem} / ${n.form} / departure ${d} / ${between} between / ${layout} / claim ${c}`,
+        paragraph: lay([departure(n.np(w)), ...UNRELATED.slice(0, between), claim]),
+      })))))));
+
+  it("generates the whole cross product", () => {
+    expect(crossProduct(PERSISTENCE)).toHaveLength(4 * 2 * 3 * 4 * 3 * PERSISTENCE.length);
+    expect(crossProduct(JENKINS_CLAIMS)).toHaveLength(4 * 2 * 3 * 4 * 3 * JENKINS_CLAIMS.length);
+    expect(PERSISTENCE.length).toBeGreaterThanOrEqual(5);
+    expect(JENKINS_CLAIMS.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("accepts every departure sentence on its own, in every layout", () => {
+    const wrong = crossProduct(["The README shows the Jenkins badges."])
+      .filter(({ paragraph }) => retainedWorkflowClaims(`Intro.\n\n${paragraph}\n`, WORKFLOWS, NONE).length > 0);
+    expect(wrong.map((c) => c.label)).toEqual([]);
+  });
+
+  it.each(ABSENT.flatMap((w) => NAMING.map((n) => [`${w.stem} / ${n.form}`, w, n] as const)))(
+    "rejects a persistence claim that refers back, wherever it sits in the paragraph: %s",
+    (_label, w, n) => {
+      const accepted = crossProduct(PERSISTENCE)
+        .filter(({ label }) => label.startsWith(`${w.stem} / ${n.form} /`))
+        .filter(({ paragraph }) => retainedWorkflowClaims(`Intro.\n\n${paragraph}\n`, WORKFLOWS, NONE).length === 0);
+      expect(accepted.map((c) => c.label)).toEqual([]);
+    },
+  );
+
+  it.each(ABSENT.flatMap((w) => NAMING.map((n) => [`${w.stem} / ${n.form}`, w, n] as const)))(
+    "accepts a Jenkins-subject sentence in place of the persistence claim: %s",
+    (_label, w, n) => {
+      const rejected = crossProduct(JENKINS_CLAIMS)
+        .filter(({ label }) => label.startsWith(`${w.stem} / ${n.form} /`))
+        .filter(({ paragraph }) => retainedWorkflowClaims(`Intro.\n\n${paragraph}\n`, WORKFLOWS, NONE).length > 0);
+      expect(rejected.map((c) => c.label)).toEqual([]);
+    },
+  );
+
+  // The eleven probe paragraphs of the independent review, each inserted before section 5 of the real spec and checked
+  // against the real tree: seven are claims that the departed workflow still runs, or sources that do not say it left;
+  // four are genuine departures, a Jenkins stage that runs, and the spec as it stands.
+  const PROBES: [string, string, boolean][] = [
+    ["original auxiliary data transfer", "The telemetry records were transferred from the GitHub `Mutation` workflow to the Jenkins dashboard.", true],
+    ["original adverb data transfer", "The metrics archive is regularly transferred from the GitHub `Mutation` workflow to Jenkins.", true],
+    ["original demonstrative persistence", "The GitHub `Mutation` workflow was migrated to Jenkins, but that workflow still runs on GitHub.", true],
+    ["source clause is not a departure", "Jenkins imports test checks transferred from the GitHub `Mutation` workflow to Jenkins.", true],
+    ["immediate sentence persistence", "The GitHub `Mutation` workflow was replaced by Jenkins. That workflow still runs on GitHub every Monday.", true],
+    ["same paragraph persistence", "The GitHub `Mutation` workflow was replaced by Jenkins. The PR gate now uses Jenkins. That workflow still runs on GitHub every Monday.", true],
+    ["same paragraph soft-wrapped persistence", "The GitHub `Mutation` workflow was replaced by Jenkins.\nThe PR gate now uses Jenkins.\nThat workflow still runs on GitHub every Monday.", true],
+    ["departure control", "The GitHub `Mutation` workflow was deleted from the repository.", false],
+    ["replacement control", "Jenkins has replaced the GitHub `Mutation` workflow.", false],
+    ["independent Jenkins control", "The GitHub `Mutation` workflow was replaced by Jenkins. The Jenkins mutation stage still runs every Monday.", false],
+    ["unmodified SPEC section 5", "", false],
+  ];
+  it.each(PROBES)("probe paragraph in the real spec: %s", (_label, paragraph, rejected) => {
+    const spec = readFileSync(path.join(root, "SPEC.md"), "utf8");
+    expect(spec).toContain("## 5. ");
+    const probed = paragraph ? spec.replace("## 5. ", `${paragraph}\n\n## 5. `) : spec;
+    const problems = retainedWorkflowClaims(sectionsFourAndFive(probed), treeWorkflows(), treeOtherFiles());
+    if (rejected) expect(problems).not.toEqual([]);
+    else expect(problems).toEqual([]);
+  });
+  it("has the eleven probe paragraphs, seven rejected and four accepted", () => {
+    expect(PROBES).toHaveLength(11);
+    expect(PROBES.filter((p) => p[2])).toHaveLength(7);
+    expect(PROBES.filter((p) => !p[2])).toHaveLength(4);
   });
 
   // Red fixtures: the finding's own passage and further cases of the same rule.
