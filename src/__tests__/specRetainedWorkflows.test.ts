@@ -32,7 +32,7 @@ const RETENTION = /\b(stays?|remains?|retain(s|ed)?|preserved?|kept|keeps?|conti
 // `b.yml` were deleted"). A leaving word elsewhere in the sentence ("... alongside the migrated Jenkins checks")
 // says nothing about the named workflow and excuses nothing.
 const FILLER_BEFORE = String.raw`(?:(?:ran|run|lived|was|were|in|on|by|of|the|a|an|its|their|GitHub|Actions|old|former|workflows?|files?)\s+|[\`(,]\s*|[\w.-]+\.ya?ml\b\s*)*`;
-const LEFT_BEFORE = new RegExp(String.raw`\b(?:from|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
+const LEFT_BEFORE = new RegExp(String.raw`\b(?:(?:moved|moves|moving|migrated|migrates|migrating|ported|porting|shifted|transferred|taken|split|cut over|removed|dropped|deleted|retired)(?:\s+(?:over|out|away|off))?\s+(?:from|out of)|formerly|previously|former|retired|deleted|removed|dropped|replaced|replaces|replacing|supersedes|superseded|superseding|instead of|in place of)\s+${FILLER_BEFORE}$`, "i");
 const LEFT_AFTER = /^(?:[\s`(),]|\band\b|\bor\b|[\w.-]+\.ya?ml\b|`[^`]+`|\b(?:files?|workflows?|GitHub|Actions)\b)*(?:(?:was|were|is|are|has|have|had|been|now|since|then|later|all|both|each|fully|also)\s+)*(?:deleted|retired|removed|gone|replaced|superseded|migrated|moved|ported|dropped|no longer exists?)\b/i;
 
 /** A mention of a workflow (by title or file name) at [start, end) of its sentence. */
@@ -53,8 +53,15 @@ function fileMentions(sentence: string): Mention[] {
   return [...sentence.matchAll(/[A-Za-z0-9][\w.-]*\.ya?ml\b/g)].map((m) => ({ name: m[0].toLowerCase(), start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
 }
 
+// A source relationship ("reports come from the `X` workflow", "derived from", "fetched from") is not a departure: a
+// bare "from" excuses nothing, only a departing verb with it ("moved from", "migrated from") does. And a mention that
+// is said to still exist right after it ("`X` workflow, which still runs") is a retention claim whatever else the
+// sentence says about it.
+const PERSISTS_AFTER = /^[\s`)]*,?\s*(?:(?:which|that|and|but|it|they)\s+)*(?:(?:is|are)\s+)?(?:still\b|remains?\b|stays?\b|continues?\b|(?:retained|kept|preserved)\b)/i;
+
 /** True when the sentence says that this mention's workflow left, in words attached to the mention itself. */
 function saysItLeft(sentence: string, m: Mention): boolean {
+  if (PERSISTS_AFTER.test(sentence.slice(m.end))) return false;
   return LEFT_BEFORE.test(sentence.slice(0, m.start)) || LEFT_AFTER.test(sentence.slice(m.end));
 }
 
@@ -146,6 +153,12 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a leaving verb before the mention, about other checks", "Nightly checks moved to Jenkins and the GitHub `E2E soak` workflow repeats the suite."],
     ["a leaving adjective on another job", "The retired Trivy job aside, the GitHub `Release` workflow publishes tagged builds."],
     ["a deleted file beside a retained one", `The deleted \`${retiredFile("ci")}\` aside, \`${retiredFile("release")}\` still publishes tags.`],
+    // The second review's probe: a source relationship ("from") is not a departure; "still runs" is a retention claim.
+    ["the second probe: reports come from the workflow, which still runs", "Mutation reports come from the GitHub `Mutation` workflow, which still runs every Monday."],
+    ["a source relationship with a retired file", `The release notes are generated from \`${retiredFile("release")}\` every tag.`],
+    ["data fetched from a retired workflow", "Coverage is fetched from the GitHub `E2E soak` workflow artifacts."],
+    ["derived from a retired workflow, which stays", "The schedule is derived from the GitHub `Mutation` workflow, which stays in place."],
+    ["a departing verb contradicted by a persistence clause", "Mutation testing moved from the GitHub `Mutation` workflow, which still runs every Monday."],
     ["a past-tense aside that does not say the workflow left", "The `Mutation` workflow, previously weekly, now runs nightly."],
   ])("is rejected: %s", (_label, sentence) => {
     expect(retainedWorkflowClaims(`Intro.\n\n${sentence}\n`, WORKFLOWS, NONE)).not.toEqual([]);
@@ -159,6 +172,8 @@ describe("SPEC sections 4 and 5 against the workflows in the tree", () => {
     ["a non-workflow yml", "Dependabot's `dependabot.yml` stays at weekly."],
     ["a present workflow running, by title", "The `macos-build` workflow is dispatched by the Jenkins release job."],
     ["a retired workflow said to have moved", "Mutation testing moved from the GitHub `Mutation` workflow to the Jenkins nightly lane."],
+    ["a retired workflow migrated away from", "Mutation testing was migrated from the GitHub `Mutation` workflow to the Jenkins nightly lane."],
+    ["a retired workflow said to be moved out of", `Mutation testing moved out of \`${retiredFile("mutation")}\` and into the Jenkins nightly lane.`],
     ["a retired workflow said to be retired", "The GitHub `Mutation` workflow was retired; the Jenkins `Mutation` stage replaces it."],
     ["a retired workflow said to have run there previously", "Mutation testing previously ran in the GitHub `Mutation` workflow and now runs in the Jenkins nightly lane."],
     ["a list of retired files said to be deleted", `The \`${retiredFile("ci")}\`, \`${retiredFile("e2e-soak")}\` and \`${retiredFile("release")}\` files were deleted when Jenkins took over.`],
